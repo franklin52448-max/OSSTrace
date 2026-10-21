@@ -57,8 +57,10 @@ folders, separate agents, same plugin architecture that made this possible in th
 
 - [ ] **Label trust tiers** (ADR 0004): add `reviewStatus` to `Label`, build the Confirmed-tier
       moderation workflow, wire a "confirmed" badge into the web UI
-- [ ] **Private labels**: per-user, unshared, no source requirement (mirrors Arkham's own
-      private-by-default model per ADR 0004)
+- [x] **Private labels**: per-user, unshared, no source requirement (mirrors Arkham's own
+      private-by-default model per ADR 0004) — `packages/features/private-labels/` (API +
+      adversarial cross-user isolation tests) and a private-label panel + log-in/sign-up form in
+      the web UI. "Share as a Community label" is not built.
 
 ## Wave 3 — next features
 

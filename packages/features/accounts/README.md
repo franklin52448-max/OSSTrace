@@ -108,7 +108,8 @@ be mounted inside another server instead of running this one.
 - **No account deletion, email/password change, or "log out everywhere."**
 - **One writer process at a time.** Running several server instances on one accounts file needs
   a database-backed `AccountStore`.
-- **No UI.** The web UI doesn't have login screens yet.
+- **Minimal UI only.** The web UI has a log-in/sign-up form (`packages/web/src/AccountBar.tsx`),
+  but no account settings or admin role management screens.
 - **No OAuth / "Sign in with GitHub."**
 - **Signup reveals whether an email is registered** (409 `email_taken`). Login doesn't.
 

@@ -97,7 +97,7 @@ Storage today is a deliberately simple file-backed JSON store (`JsonFileLabelSto
 
 ## 8. Label Trust Model
 
-**Status: designed and decided (ADR 0004), not yet implemented.**
+**Status: designed and decided (ADR 0004). Private labels implemented; the Community/Confirmed tiers not yet.**
 
 Three tiers are planned, two of which are intended to ship first:
 
@@ -105,9 +105,9 @@ Three tiers are planned, two of which are intended to ship first:
 2. **Confirmed** — a project moderator/admin reviews a Community label and marks it confirmed, with a distinct visual badge. This is a moderation action, tracked as its own field (`reviewStatus`), explicitly separate from the existing `confidence: "verified" | "predicted"` field, which describes something different (how the data was originally sourced, not whether a human later reviewed it).
 3. **Self-attested (deliberately deferred)** — a wallet owner cryptographically proves control of an address via a signed message and labels it themselves. Not being built yet on purpose: it needs focused security design to avoid opening a spoofing/impersonation hole, rather than being bolted on alongside everything else.
 
-**Private labels** (also designed, not yet implemented): any user will be able to label an address for themselves only, never shown to anyone else, with no source requirement since it's not a public claim. This explicitly mirrors Arkham's own private-by-default custom-label model, identified as reasonable prior art worth reusing rather than reinventing differently for no reason. A later "share" action could promote a private label into a public Community submission, which would then need a real source to pass review.
+**Private labels** (implemented in `packages/features/private-labels/`, with a panel in the web UI): any signed-in user can label an address for themselves only, never shown to anyone else, with no source requirement since it's not a public claim. This explicitly mirrors Arkham's own private-by-default custom-label model, identified as reasonable prior art worth reusing rather than reinventing differently for no reason. A later "share" action could promote a private label into a public Community submission, which would then need a real source to pass review.
 
-**Shared prerequisite:** both Confirmed-tier moderation and private labels require a real accounts/auth system. That now exists (`packages/features/accounts/`, ADR 0006): self-hosted email + argon2id passwords, opaque server-side sessions, and `user` < `moderator` < `admin` roles. How moderation is granted is resolved there: the operator promotes the first admin from the command line (never over HTTP), and admins then grant `moderator` to others. The tiers and private labels themselves are still not built.
+**Shared prerequisite:** both Confirmed-tier moderation and private labels require a real accounts/auth system. That now exists (`packages/features/accounts/`, ADR 0006): self-hosted email + argon2id passwords, opaque server-side sessions, and `user` < `moderator` < `admin` roles. How moderation is granted is resolved there: the operator promotes the first admin from the command line (never over HTTP), and admins then grant `moderator` to others. Private labels are now built on it; the Community/Confirmed tiers are not yet.
 
 ## 9. Success Criteria
 

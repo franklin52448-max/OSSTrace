@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { ChainId } from "@opentrace/core";
 import GraphView from "./GraphView.tsx";
+import AccountBar from "./AccountBar.tsx";
+import PrivateLabelPanel from "./PrivateLabelPanel.tsx";
 
 const EXPLORER_URL = import.meta.env["VITE_EXPLORER_URL"] ?? "http://localhost:5300";
 
@@ -53,7 +55,11 @@ interface AddressReport {
   tags: Tag[];
 }
 
-type LookupState = { status: "idle" } | { status: "loading" } | { status: "error"; message: string } | { status: "done"; report: AddressReport };
+type LookupState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "done"; report: AddressReport; chain: ChainId; address: string };
 
 type View = "lookup" | "graph";
 
@@ -77,6 +83,8 @@ export default function App() {
         <p className="mt-1 text-sm text-neutral-400">
           Open-source on-chain lookup — real data, sourced labels. No affiliation with any proprietary platform.
         </p>
+
+        <AccountBar />
 
         <nav className="mt-5 flex gap-1 border-b border-neutral-800 text-sm" aria-label="Views">
           {(
@@ -124,7 +132,7 @@ function Lookup() {
         setState({ status: "error", message: "error" in body ? body.error : `HTTP ${res.status}` });
         return;
       }
-      setState({ status: "done", report: body });
+      setState({ status: "done", report: body, chain, address: trimmed });
     } catch (cause) {
       setState({ status: "error", message: cause instanceof Error ? cause.message : String(cause) });
     }
@@ -160,15 +168,17 @@ function Lookup() {
         <div className="mt-6 rounded-md border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">{state.message}</div>
       )}
 
-      {state.status === "done" && <Report report={state.report} />}
+      {state.status === "done" && <Report report={state.report} chain={state.chain} address={state.address} />}
     </div>
   );
 }
 
-function Report({ report }: { report: AddressReport }) {
+function Report({ report, chain, address }: { report: AddressReport; chain: ChainId; address: string }) {
   const sanctioned = report.tags.some((t) => t.tag === "sanctioned");
   return (
     <div className="mt-6 space-y-4">
+      <PrivateLabelPanel chain={chain} address={address} />
+
       {report.label && (
         <div className="rounded-md border border-neutral-800 bg-neutral-900 px-4 py-3">
           <div className="flex items-center gap-2">

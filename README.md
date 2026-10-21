@@ -46,9 +46,10 @@ harder for the next contributor to understand, it probably isn't. See
 | Caching + a background indexer (real Redis-backed, keeps popular addresses instant) | **Active** |
 | Minimal web UI (paste an address, see what we know) | **Active** |
 | Seed labelset: sanctioned digital-currency addresses (US OFAC SDN + UK Sanctions List) and Safe's official protocol contracts | **Active** |
-| Accounts API (signup/login/sessions, `user`/`moderator`/`admin` roles — [ADR 0006](docs/adr/0006-accounts-and-auth.md)) | **Active** (no login UI, email verification or rate limiting yet) |
+| Accounts API (signup/login/sessions, `user`/`moderator`/`admin` roles — [ADR 0006](docs/adr/0006-accounts-and-auth.md)) + log-in/sign-up form in the web UI | **Active** (no email verification or rate limiting yet) |
+| Private labels — label any address for yourself only, never shown to anyone else, no source needed ([ADR 0004](docs/adr/0004-label-trust-tiers-and-private-labels.md), [`packages/features/private-labels`](packages/features/private-labels/README.md)) | **Active** (no "share as Community label" yet) |
 | Visualizer (`GET /graph/:chain/:address` + interactive graph in the web UI) — **v1 is one hop**: the address and its direct counterparties only, native-token transfers only | **Active** |
-| Label trust tiers (Confirmed) + private labels ([ADR 0004](docs/adr/0004-label-trust-tiers-and-private-labels.md)) | Not built (unblocked by accounts) |
+| Label trust tiers (Confirmed) ([ADR 0004](docs/adr/0004-label-trust-tiers-and-private-labels.md)) | Not built (unblocked by accounts) |
 | Tracer (hop-by-hop fund tracing across chains/bridges) | Not built |
 | Risk scoring | Not built |
 | Case management | Not built |
@@ -94,6 +95,7 @@ npm run dev:explorer   # starts the Explorer API
 npm run dev:visualizer # starts the Visualizer (graph) API, in another terminal
 npm run dev:web        # starts the web UI, in another terminal
 npm run dev:accounts   # optional: the accounts API (see packages/features/accounts/README.md)
+npm run dev:private-labels # optional, with dev:accounts: your own private labels in the web UI
 ```
 
 Without `ETHERSCAN_API_KEY`, the Ethereum adapter still returns a real balance (via public RPC)

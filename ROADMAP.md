@@ -26,11 +26,16 @@ folders, separate agents, same plugin architecture that made this possible in th
         balance-delta for non-native-transfer transactions — see `packages/chains/solana/README.md`)
   - [ ] Document/streamline getting a real `ETHERSCAN_API_KEY` so Ethereum tx history actually
         works out of the box for a new contributor
-- [ ] **Accounts / auth system** (prerequisite for Wave 2's moderation + private labels)
-  - [ ] Design: provider choice, session model, how a "moderator" role is granted (ADR 0004 flags
-        this as explicitly unresolved — resolve it here)
-  - [ ] Implement as its own plugin-shaped package, same pattern as everything else
-  - [ ] Real tests, a README, and an ADR recording the design decision
+- [x] **Accounts / auth system** (prerequisite for Wave 2's moderation + private labels)
+  - [x] Design: provider choice, session model, how a "moderator" role is granted (ADR 0004 flags
+        this as explicitly unresolved — resolved in
+        [ADR 0006](docs/adr/0006-accounts-and-auth.md): self-hosted email + argon2id passwords,
+        opaque hashed bearer sessions, first admin granted by the operator CLI only)
+  - [x] Implement as its own plugin-shaped package, same pattern as everything else
+        (`packages/features/accounts/`)
+  - [x] Real tests, a README, and an ADR recording the design decision
+  - [ ] Before any public deployment: login rate limiting, email verification + password reset
+        (deferred in ADR 0006 — not needed by Wave 2, needed by real users)
 - [ ] **More label sources** (ADR 0005 — grows the actual mission, doesn't block on anything)
   - [x] UK OFSI sanctions list ingestion script (same shape as `scripts/ingest-ofac-sdn.ts`) —
         `scripts/ingest-uk-sanctions.ts`; reads the UK Sanctions List, which replaced OFSI's

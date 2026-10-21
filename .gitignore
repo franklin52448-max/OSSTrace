@@ -18,3 +18,5 @@ dist/
 venv/
 __pycache__/
 .DS_Store
+# Accounts file (password hashes + emails) and any other per-user data -- never commit.
+data/private/

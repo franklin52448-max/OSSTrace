@@ -44,6 +44,8 @@ harder for the next contributor to understand, it probably isn't. See
 | Caching + a background indexer (real Redis-backed, keeps popular addresses instant) | **Active** |
 | Minimal web UI (paste an address, see what we know) | **Active** |
 | Seed labelset: sanctioned digital-currency addresses (US OFAC SDN + UK Sanctions List) and Safe's official protocol contracts | **Active** |
+| Accounts API (signup/login/sessions, `user`/`moderator`/`admin` roles — [ADR 0006](docs/adr/0006-accounts-and-auth.md)) | **Active** (no login UI, email verification or rate limiting yet) |
+| Label trust tiers (Confirmed) + private labels ([ADR 0004](docs/adr/0004-label-trust-tiers-and-private-labels.md)) | Not built (unblocked by accounts) |
 | Visualizer (interactive transaction graph) | Not built |
 | Tracer (hop-by-hop fund tracing across chains/bridges) | Not built |
 | Risk scoring | Not built |
@@ -88,6 +90,7 @@ npm run ingest:safe    # Safe's official deployment list (Ethereum mainnet contr
 npm run check          # typecheck + tests
 npm run dev:explorer   # starts the Explorer API
 npm run dev:web        # starts the web UI, in a second terminal
+npm run dev:accounts   # optional: the accounts API (see packages/features/accounts/README.md)
 ```
 
 Without `ETHERSCAN_API_KEY`, the Ethereum adapter still returns a real balance (via public RPC)

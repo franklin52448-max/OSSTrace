@@ -10,6 +10,10 @@ directly from Explorer's source.
 - [`explorer/`](explorer/README.md) — given a chain + address, returns balance, recent
   transactions, and any label/tags/entity on record. Everything else (Visualizer, Tracer, Risk
   Scoring, Case Management) is meant to build on this same data layer.
+- [`accounts/`](accounts/README.md) — real user accounts: signup/login, server-side sessions,
+  `user`/`moderator`/`admin` roles. A foundation package: other features (Confirmed-tier
+  moderation, private labels, Case Management) depend on its public API (`@opentrace/accounts`)
+  to answer "who is this?" and "may they do this?", rather than each building their own auth.
 
 ## Adding a feature
 

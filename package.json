@@ -20,7 +20,8 @@
     "ingest:safe": "node --experimental-strip-types scripts/ingest-safe-deployments.ts",
     "dev:explorer": "npm run dev --workspace packages/features/explorer",
     "dev:indexer": "npm run indexer --workspace packages/features/explorer",
-    "dev:web": "npm run dev --workspace packages/web"
+    "dev:web": "npm run dev --workspace packages/web",
+    "dev:accounts": "npm run dev --workspace packages/features/accounts"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

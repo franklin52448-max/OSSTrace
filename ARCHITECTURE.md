@@ -17,7 +17,8 @@ open-trace-intelligence/
 │   │   ├── ethereum/      implements ChainAdapter for Ethereum
 │   │   └── solana/        implements ChainAdapter for Solana
 │   ├── features/
-│   │   └── explorer/      the address/entity lookup API — consumes core + chains
+│   │   ├── explorer/      the address/entity lookup API — consumes core + chains
+│   │   └── accounts/      user accounts, sessions, roles (ADR 0006) — other features depend on it
 │   └── web/                minimal React UI — consumes the Explorer API over HTTP
 ├── data/
 │   └── labels/            seed label data, each entry sourced and dated

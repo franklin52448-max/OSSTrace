@@ -41,7 +41,11 @@ export function summarizeTransaction(
   }
   const summary = summarizeNative(sigInfo.signature, timestamp, tx, address);
   const tokenTransfers = decodeSplTransfers(tx, address);
-  return tokenTransfers.length > 0 ? { ...summary, tokenTransfers } : summary;
+  // tx.meta.err is non-null for any transaction that reverted — whatever the native/token decode
+  // above found is what it *attempted*, not what actually moved (a failed tx still touches
+  // accounts and can "decode" as a transfer instruction that never took effect).
+  const status: TransactionSummary["status"] = tx.meta.err === null ? "success" : "failed";
+  return { ...summary, ...(tokenTransfers.length > 0 ? { tokenTransfers } : {}), status };
 }
 
 function summarizeNative(signature: string, timestamp: string, tx: ParsedTransactionWithMeta, address: string): TransactionSummary {

@@ -193,6 +193,36 @@ test("deriveGraph: self-transfers, contract creations, and unresolved counterpar
   );
 });
 
+test("deriveGraph: a failed transaction is omitted with reason 'failed', skipping resolution entirely", () => {
+  // Same shape as a real decodable transfer — status: "failed" must win regardless, before
+  // either the native or token resolution attempt even runs.
+  const native: TransactionSummary = { ...ethTx("0xfailed-native", CENTER, BOB, "5", "out"), status: "failed" };
+  const withToken: TransactionSummary = {
+    ...ethTx("0xfailed-token", CENTER, BOB, "0", "self"),
+    tokenTransfers: [tokenTransfer("out", BOB, "100")],
+    status: "failed",
+  };
+  const okTx = { ...ethTx("0xok", CENTER, BOB, "1", "out"), status: "success" as const };
+
+  const g = deriveGraph({ chain: "ethereum", value: CENTER }, [native, withToken, okTx]);
+
+  assert.deepEqual(g.counterpartyIds, [BOB]);
+  assert.deepEqual(g.edges.map((e) => e.hash), ["0xok"]);
+  assert.deepEqual(
+    g.omitted.map((o) => [o.hash, o.reason]),
+    [
+      ["0xfailed-native", "failed"],
+      ["0xfailed-token", "failed"],
+    ],
+  );
+});
+
+test("deriveGraph: a transaction with no status field is resolved as before (absent is not a failure)", () => {
+  const g = deriveGraph({ chain: "ethereum", value: CENTER }, [ethTx("0xh1", ALICE, CENTER, "1", "in")]);
+  assert.deepEqual(g.edges.map((e) => e.hash), ["0xh1"]);
+  assert.deepEqual(g.omitted, []);
+});
+
 test("deriveGraph: the Solana adapter's honest 'unresolved' fallbacks never become nodes", () => {
   const center = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
   const counterparty = "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1";

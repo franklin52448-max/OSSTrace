@@ -59,3 +59,13 @@
   live user report caught it. A clean merge only proves the *types* line up, not that one feature
   actually consumes what another one now produces — that needs an explicit integration check (or a
   real end-to-end try against live data) after merging parallel work, not just `npm run check`.
+- **"Counterparty unresolved" was quietly conflating two different situations.** A live report of
+  an address showing 0 drawable edges led to pulling its transactions directly via
+  `getParsedTransaction` rather than trusting the graph's own "unresolved" label. All 10 were the
+  same reverted Jupiter-aggregator swap attempt (`meta.err: {"InstructionError":[0,{"Custom":7}]}`,
+  confirmed via identical error + zero balance change across every sampled hash) — not a decoding
+  gap. The adapters already captured this (Etherscan's `isError`, Solana's `tx.meta.err`) but
+  nothing read it. Added `TransactionSummary.status` and a dedicated `"failed"` omission reason so
+  a reverted transaction is never resolved as if it succeeded, and never shown next to genuine
+  decode gaps under the same vague label. Rule: when "we don't know" and "we know it didn't
+  happen" get the same label, a real investigation is needed before trusting either.

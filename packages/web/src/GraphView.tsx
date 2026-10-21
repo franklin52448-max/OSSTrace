@@ -53,7 +53,7 @@ interface OmittedTransaction {
   timestamp: string;
   direction: "in" | "out" | "self";
   valueNative: string;
-  reason: "self-transfer" | "no-counterparty" | "counterparty-unresolved";
+  reason: "self-transfer" | "no-counterparty" | "counterparty-unresolved" | "failed";
 }
 interface GraphReport {
   center: { chain: ChainId; value: string };
@@ -75,6 +75,7 @@ const OMISSION_TEXT: Record<OmittedTransaction["reason"], string> = {
   "self-transfer": "self-transfer (sent to itself)",
   "no-counterparty": "no counterparty (e.g. contract creation, or a net outflow the adapter couldn't attribute)",
   "counterparty-unresolved": "counterparty not resolved by the chain adapter (not a plain native transfer)",
+  failed: "failed transaction (reverted on-chain — nothing actually moved)",
 };
 
 function short(address: string): string {

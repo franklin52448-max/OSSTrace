@@ -50,7 +50,7 @@ export interface GraphEdge {
   timestamp: string;
 }
 
-export type OmissionReason = "self-transfer" | "no-counterparty" | "counterparty-unresolved";
+export type OmissionReason = "self-transfer" | "no-counterparty" | "counterparty-unresolved" | "failed";
 
 /**
  * A real transaction that was fetched but can't be drawn as an edge between two distinct real
@@ -175,6 +175,11 @@ function drawTokenEdges(
  *   resolvable native leg at all.
  * A transaction that produces neither is listed in `omitted` (the native leg's reason), never
  * silently dropped and never turned into an invented edge.
+ *
+ * A transaction the chain adapter reports as `status: "failed"` (reverted on-chain) is never
+ * resolved at all — skipped straight to `omitted` with reason `"failed"`, before either attempt.
+ * Whatever `tx.to`/`tx.tokenTransfers` describe is what it *attempted*; nothing actually moved,
+ * so drawing an edge for it would show a transfer that never happened.
  */
 export function deriveGraph(center: Address, transactions: readonly TransactionSummary[]): DerivedGraph {
   const chain = center.chain;
@@ -185,6 +190,11 @@ export function deriveGraph(center: Address, transactions: readonly TransactionS
   const seenHashes = new Map<string, number>();
 
   for (const tx of transactions) {
+    if (tx.status === "failed") {
+      omitted.push(omit(tx, "failed"));
+      continue;
+    }
+
     const drawnThisTx: Omit<GraphEdge, "id">[] = [];
     const push = (edge: Omit<GraphEdge, "id">): void => void drawnThisTx.push(edge);
 

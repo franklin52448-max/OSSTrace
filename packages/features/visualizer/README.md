@@ -123,6 +123,12 @@ signature: a system transfer of 1000 lamports from `FKtPu64v…` to the queried 
   - `counterparty-unresolved`: the adapter couldn't name the counterparty. Examples are the
     Solana adapter's `"unresolved (non-transfer instruction)"` / `"unknown"` fallbacks for
     token transfers, program calls and similar.
+  - `failed`: the chain adapter reports `status: "failed"` — the transaction reverted on-chain.
+    Checked first, before either resolution attempt, so a failed transaction is never drawn as an
+    edge even if its instructions would otherwise decode as a transfer: a real example is a failed
+    Jupiter-aggregator swap on Solana, where the instruction data describes a transfer that never
+    actually happened. `valueNative`/`tokenTransfers` on the underlying tx describe the attempt,
+    not a real movement.
 - `transactions`: `{ "available": false, "reason": "..." }` when the chain adapter couldn't fetch
   history, for example when no `ETHERSCAN_API_KEY` is set. In that case `nodes` is just the
   center, and `edges` and `omitted` are empty.
@@ -157,7 +163,9 @@ selector (5 / 10 / 25 / 50) for this reason.
   `omitted` when the chain adapter couldn't decode a native transfer *or* any token transfer from
   it — e.g. a DeFi/program interaction neither decoder recognizes yet. Not every "unresolved"
   address is doing something suspicious; a lot of real on-chain activity (swaps, staking, PDAs)
-  just isn't a plain transfer of anything.
+  just isn't a plain transfer of anything. A transaction that reverted on-chain is its own
+  `omitted` reason (`"failed"`, see above) — it's never lumped in with "unresolved", since a
+  failed transaction didn't fail to *decode*, it failed to *happen*.
 - **No caching.** Explorer caches lookups and Visualizer doesn't yet. Each request reaches the
   chain adapter.
 - **No pagination or time window.** You get only "the most recent `limit` transactions".

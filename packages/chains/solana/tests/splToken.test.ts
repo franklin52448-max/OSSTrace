@@ -120,6 +120,21 @@ test("a transaction with no SPL transfer for the address has no tokenTransfers k
   assert.equal("tokenTransfers" in summary, false);
 });
 
+test("summarizeTransaction reports status from tx.meta.err: null is success, anything else is failed", async () => {
+  const okTx = await loadTx(RAYDIUM_SWAP);
+  assert.equal(okTx.meta?.err, null); // sanity: this fixture is a real, successful swap
+  const ok = summarizeTransaction({ signature: okTx.signature, blockTime: okTx.blockTime ?? null }, okTx, RAYDIUM_SWAPPER);
+  assert.equal(ok.status, "success");
+
+  // Same real tx, with meta.err set as a failed Jupiter-aggregator swap's would be — the
+  // instructions still "decode" as transfers (nothing about the data changes), but status must
+  // say failed so the Visualizer skips drawing them.
+  const failedTx = { ...okTx, meta: { ...okTx.meta!, err: { InstructionError: [0, { Custom: 7 }] } } };
+  const failed = summarizeTransaction({ signature: failedTx.signature, blockTime: failedTx.blockTime ?? null }, failedTx, RAYDIUM_SWAPPER);
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.tokenTransfers?.length, 2); // still decoded — status is what tells callers it didn't happen
+});
+
 // --- live: the same transactions, fetched from the real chain right now ---
 
 for (const name of [RAYDIUM_SWAP, JUPITER_ROUTE]) {

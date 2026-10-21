@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { decodeTokenTransfer, mergeHistory, type EtherscanTokenTx, type EtherscanTx } from "../src/etherscan.ts";
+import { decodeTokenTransfer, mergeHistory, summarizeNativeTx, type EtherscanTokenTx, type EtherscanTx } from "../src/etherscan.ts";
 
 // Unit tests for the pure txlist/tokentx decoding, run against recorded real mainnet data (see
 // each fixture's `_provenance`, and tokentx.live.test.ts, which re-checks the token rows
@@ -47,6 +47,21 @@ test("a token whose decimals Etherscan doesn't report gets amount: null, never a
   assert.equal(transfer.decimals, null);
   assert.equal(transfer.amount, null);
   assert.equal(transfer.rawAmount, "5901522149285533025181");
+});
+
+test("summarizeNativeTx reports status from Etherscan's isError: \"1\" is failed, anything else is success", async () => {
+  const fx = await loadFixture("mkr-redeem-0xe8c2.json");
+  const row = fx.txlist[0]!;
+  assert.equal(summarizeNativeTx(row, fx.address).status, "success");
+  assert.equal(summarizeNativeTx({ ...row, isError: "1" }, fx.address).status, "failed");
+  assert.equal(summarizeNativeTx({ ...row, isError: "0" }, fx.address).status, "success");
+});
+
+test("mergeHistory carries a failed native tx's status through, even with an attached token transfer", async () => {
+  const fx = await loadFixture("mkr-redeem-0xe8c2.json");
+  const merged = mergeHistory([{ ...fx.txlist[0]!, isError: "1" }], fx.tokentx, fx.address, 25);
+  assert.equal(merged[0]!.status, "failed");
+  assert.equal(merged[0]!.tokenTransfers?.length, 1); // still decoded — status says it didn't happen
 });
 
 test("a hash in both txlist and tokentx becomes one transaction: native view + its token transfers", async () => {

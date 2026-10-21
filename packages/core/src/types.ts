@@ -175,6 +175,13 @@ export interface TransactionSummary {
    * its top-level `from`/`to`/`valueNative` relate to these.
    */
   tokenTransfers?: TokenTransfer[];
+  /**
+   * Whether the transaction actually executed. `"failed"` means it reverted on-chain — nothing
+   * moved, despite whatever `valueNative`/`tokenTransfers` describe what it *attempted*. Absent
+   * when the adapter hasn't checked, so existing consumers see exactly the shape they always did
+   * (absent is NOT a claim of success — check the chain's README for what that adapter reports).
+   */
+  status?: "success" | "failed";
 }
 
 /**

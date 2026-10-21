@@ -66,6 +66,8 @@ export function summarizeNativeTx(tx: EtherscanTx, address: string): Transaction
     to: tx.to || null,
     valueNative: formatUnits(BigInt(tx.value), 18),
     direction: directionFor(tx.from, tx.to || null, lower),
+    // Etherscan's own `isError`: "1" means the transaction reverted. Anything else means it didn't.
+    status: tx.isError === "1" ? "failed" : "success",
   };
 }
 
@@ -157,6 +159,8 @@ export function mergeHistory(
         valueNative: "0",
         direction: transfer.direction,
         tokenTransfers: [transfer],
+        // tokentx rows come from real Transfer events, which only ever fire on a successful tx.
+        status: "success",
       },
     });
   }

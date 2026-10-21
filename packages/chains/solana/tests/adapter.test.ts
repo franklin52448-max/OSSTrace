@@ -1,25 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Connection } from "@solana/web3.js";
 import { SolanaAdapter } from "../src/adapter.ts";
+import { liveHistoryOrSkip, RPC_URL, rpcReachable } from "./liveRpc.ts";
 
-// Real network test against a public RPC — no mocking. Skips (not fails) if unreachable, same
-// pattern as this workspace's Postgres conformance suites.
-const RPC_URL = process.env["SOLANA_RPC_URL"] ?? "https://api.mainnet-beta.solana.com";
+// Real network test against a public RPC — no mocking. Skips (not fails) if unreachable or
+// rate-limited, same pattern as this workspace's Postgres conformance suites.
 // The native System Program's own address — guaranteed to exist with a real balance and a huge
 // real transaction history on any live cluster, so this test never depends on one specific
 // wallet still being active.
 const KNOWN_ADDRESS = "11111111111111111111111111111111";
-
-async function rpcReachable(): Promise<boolean> {
-  try {
-    const conn = new Connection(RPC_URL, "confirmed");
-    await conn.getVersion();
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 test("getBalance returns a well-formed, real balance from a public RPC", async (t) => {
   if (!(await rpcReachable())) {
@@ -41,7 +30,8 @@ test("getRecentTransactions returns real, well-formed transactions with no API k
     return;
   }
   const adapter = new SolanaAdapter({ rpcUrl: RPC_URL });
-  const result = await adapter.getRecentTransactions(KNOWN_ADDRESS, 2);
+  const result = await liveHistoryOrSkip(t, () => adapter.getRecentTransactions(KNOWN_ADDRESS, 2));
+  if (!result) return;
   assert.equal(result.available, true);
   if (result.available) {
     assert.ok(result.transactions.length > 0, "expected at least one real transaction");
@@ -52,5 +42,16 @@ test("getRecentTransactions returns real, well-formed transactions with no API k
       assert.match(tx.valueNative, /^\d+(\.\d+)?$/);
       assert.ok(["in", "out", "self"].includes(tx.direction));
     }
+  }
+});
+
+test("getRecentTransactions reports an RPC it can't reach as unavailable, with a reason, instead of throwing", async () => {
+  // A real connection attempt to a local port nothing listens on (the discard port) — refused
+  // immediately by the OS, no network or mocking involved.
+  const adapter = new SolanaAdapter({ rpcUrl: "http://127.0.0.1:9" });
+  const result = await adapter.getRecentTransactions(KNOWN_ADDRESS, 2);
+  assert.equal(result.available, false);
+  if (!result.available) {
+    assert.match(result.reason, /^Solana RPC: /);
   }
 });

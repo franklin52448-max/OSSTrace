@@ -1,5 +1,6 @@
 import { Connection, PublicKey, type ConfirmedSignatureInfo, type ParsedInstruction, type ParsedTransactionWithMeta } from "@solana/web3.js";
 import type { Balance, ChainAdapter, TransactionSummary, TransactionsResult } from "@opentrace/core";
+import { decodeSplTransfers } from "./splToken.ts";
 import { lamportsToSol } from "./units.ts";
 
 export interface SolanaAdapterConfig {
@@ -24,9 +25,13 @@ function isSystemTransfer(
  * Pulled out of getRecentTransactions so the batch-fetch path (one RPC round trip for every
  * signature, see below) and any future retry/backfill logic can share the exact same per-tx
  * decoding — this is pure and has no RPC calls of its own.
+ *
+ * The top-level fields are always the native-SOL view (a decoded system transfer, else this
+ * address's own lamport balance delta). Decoded SPL Token transfers involving the address are
+ * attached separately as `tokenTransfers` — absent when there are none.
  */
-function summarizeTransaction(
-  sigInfo: ConfirmedSignatureInfo,
+export function summarizeTransaction(
+  sigInfo: Pick<ConfirmedSignatureInfo, "signature" | "blockTime">,
   tx: ParsedTransactionWithMeta | null,
   address: string,
 ): TransactionSummary {
@@ -34,12 +39,17 @@ function summarizeTransaction(
   if (!tx || !tx.meta) {
     return { chain: "solana", hash: sigInfo.signature, timestamp, from: "unknown", to: null, valueNative: "0", direction: "self" };
   }
+  const summary = summarizeNative(sigInfo.signature, timestamp, tx, address);
+  const tokenTransfers = decodeSplTransfers(tx, address);
+  return tokenTransfers.length > 0 ? { ...summary, tokenTransfers } : summary;
+}
 
+function summarizeNative(signature: string, timestamp: string, tx: ParsedTransactionWithMeta, address: string): TransactionSummary {
   // Primary path: directly decode a native SOL transfer instruction (top-level or inner)
   // involving this address — gives a real, specific counterparty, not just a balance delta.
   const allInstructions = [
     ...tx.transaction.message.instructions,
-    ...(tx.meta.innerInstructions?.flatMap((group) => group.instructions) ?? []),
+    ...(tx.meta?.innerInstructions?.flatMap((group) => group.instructions) ?? []),
   ];
   const transfer = allInstructions.find(
     (ix) => isSystemTransfer(ix) && (ix.parsed.info.source === address || ix.parsed.info.destination === address),
@@ -48,7 +58,7 @@ function summarizeTransaction(
     const { source, destination, lamports } = transfer.parsed.info;
     return {
       chain: "solana",
-      hash: sigInfo.signature,
+      hash: signature,
       timestamp,
       from: source,
       to: destination,
@@ -57,16 +67,19 @@ function summarizeTransaction(
     };
   }
 
-  // Fallback: not a plain native transfer we can decode (token transfer, program interaction,
-  // etc.) — report this address's own net balance change honestly, without inventing a
-  // counterparty we didn't actually resolve.
-  const accountIndex = tx.transaction.message.accountKeys.findIndex((key) => key.pubkey.toBase58() === address);
-  const pre = accountIndex >= 0 ? (tx.meta.preBalances[accountIndex] ?? 0) : 0;
-  const post = accountIndex >= 0 ? (tx.meta.postBalances[accountIndex] ?? 0) : 0;
+  // Fallback: not a plain native transfer we can decode (a token transfer, a program interaction,
+  // etc.) — report this address's own net native balance change honestly, without inventing a
+  // counterparty we didn't actually resolve. Any SPL transfers are reported in tokenTransfers.
+  // (`toString()`, not `toBase58()`: identical for a web3.js PublicKey, and also works on the raw
+  // JSON-RPC shape, where pubkey is already a base58 string.)
+  const accountIndex = tx.transaction.message.accountKeys.findIndex((key) => key.pubkey.toString() === address);
+  const meta = tx.meta;
+  const pre = accountIndex >= 0 && meta ? (meta.preBalances[accountIndex] ?? 0) : 0;
+  const post = accountIndex >= 0 && meta ? (meta.postBalances[accountIndex] ?? 0) : 0;
   const delta = post - pre;
   return {
     chain: "solana",
-    hash: sigInfo.signature,
+    hash: signature,
     timestamp,
     from: delta < 0 ? address : "unresolved (non-transfer instruction)",
     to: delta > 0 ? address : delta < 0 ? null : address,
@@ -114,23 +127,32 @@ export class SolanaAdapter implements ChainAdapter {
 
   async getRecentTransactions(address: string, limit: number): Promise<TransactionsResult> {
     const pubkey = new PublicKey(address);
-    const signatures = await this.#connection.getSignaturesForAddress(pubkey, { limit });
-    if (signatures.length === 0) {
-      return { available: true, transactions: [] };
-    }
+    let signatures: ConfirmedSignatureInfo[];
+    let parsedTxs: (ParsedTransactionWithMeta | null)[];
+    try {
+      signatures = await this.#connection.getSignaturesForAddress(pubkey, { limit });
+      if (signatures.length === 0) {
+        return { available: true, transactions: [] };
+      }
 
-    // Batched: one JSON-RPC batch request for every signature, instead of the N sequential
-    // getParsedTransaction round trips this used to make (web3.js's getParsedTransactions
-    // builds a single _rpcBatchRequest under the hood — confirmed by reading its source before
-    // relying on it). This is the fix for the N+1 pattern documented in SCALING-AND-COSTS.md.
-    const parsedTxs = await this.#connection.getParsedTransactions(
-      signatures.map((s) => s.signature),
-      // Generously high on purpose: Solana's versioned-transaction scheme keeps adding new
-      // version numbers over time, and getParsedTransactions throws for the *entire batch* if
-      // any single transaction exceeds this — a live test caught a real version-1 transaction
-      // that `maxSupportedTransactionVersion: 0` rejected outright.
-      { maxSupportedTransactionVersion: 255 },
-    );
+      // Batched: one JSON-RPC batch request for every signature, instead of the N sequential
+      // getParsedTransaction round trips this used to make (web3.js's getParsedTransactions
+      // builds a single _rpcBatchRequest under the hood — confirmed by reading its source before
+      // relying on it). This is the fix for the N+1 pattern documented in SCALING-AND-COSTS.md.
+      parsedTxs = await this.#connection.getParsedTransactions(
+        signatures.map((s) => s.signature),
+        // Generously high on purpose: Solana's versioned-transaction scheme keeps adding new
+        // version numbers over time, and getParsedTransactions throws for the *entire batch* if
+        // any single transaction exceeds this — a live test caught a real version-1 transaction
+        // that `maxSupportedTransactionVersion: 0` rejected outright.
+        { maxSupportedTransactionVersion: 255 },
+      );
+    } catch (cause) {
+      // The ChainAdapter contract: "couldn't fetch" is a typed result, not a throw. In practice
+      // this is mostly the public RPC rate-limiting the batch (HTTP 429, after web3.js's own
+      // retries), or rejecting its size — not something a caller should see as a crash.
+      return { available: false, reason: `Solana RPC: ${cause instanceof Error ? cause.message : String(cause)}` };
+    }
 
     const matched = matchTransactionsToSignatures(
       signatures.map((s) => s.signature),

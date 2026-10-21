@@ -106,5 +106,6 @@ to build. Contributions welcome once this has a public home.
 ## More context
 
 [`PRD.md`](PRD.md) — the full product requirements doc (goals, scope, feature inventory, open
-questions). [`LORE.md`](LORE.md) — the positioning/narrative doc: why this exists, what it
+questions). [`ROADMAP.md`](ROADMAP.md) — the set, phased task list for what gets built next.
+[`LORE.md`](LORE.md) — the positioning/narrative doc: why this exists, what it
 deliberately isn't, and what it's trying to become.

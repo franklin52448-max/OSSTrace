@@ -43,7 +43,7 @@ harder for the next contributor to understand, it probably isn't. See
 | Explorer API (`GET /address/:chain/:address` — balance, recent txs, label, tags) | **Active** |
 | Caching + a background indexer (real Redis-backed, keeps popular addresses instant) | **Active** |
 | Minimal web UI (paste an address, see what we know) | **Active** |
-| Seed labelset: OFAC SDN sanctioned digital-currency addresses | **Active** |
+| Seed labelset: sanctioned digital-currency addresses (US OFAC SDN + UK Sanctions List) and Safe's official protocol contracts | **Active** |
 | Visualizer (interactive transaction graph) | Not built |
 | Tracer (hop-by-hop fund tracing across chains/bridges) | Not built |
 | Risk scoring | Not built |
@@ -83,6 +83,8 @@ Node 24+.
 npm install
 cp .env.example .env   # add ETHERSCAN_API_KEY (free, from etherscan.io/apis) for Ethereum tx history
 npm run ingest:ofac    # pulls the real OFAC SDN list and builds the seed labelset
+npm run ingest:uk      # same for the UK Sanctions List
+npm run ingest:safe    # Safe's official deployment list (Ethereum mainnet contracts)
 npm run check          # typecheck + tests
 npm run dev:explorer   # starts the Explorer API
 npm run dev:web        # starts the web UI, in a second terminal

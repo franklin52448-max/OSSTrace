@@ -90,3 +90,56 @@ export class JsonFileLabelStore implements LabelStore {
     await this.#save();
   }
 }
+
+/**
+ * Read-through over several label datasets (one JSON file per source under data/labels/), so each
+ * ingestion script can own and regenerate its own file without touching the others. Order is
+ * priority: getLabel/getEntity return the first store's match (the store holds at most one Label
+ * per address); getTags returns every store's tags, so an address listed by two sources keeps both
+ * citations. Writes go to the first store.
+ */
+export class CompositeLabelStore implements LabelStore {
+  readonly #stores: LabelStore[];
+
+  constructor(stores: LabelStore[]) {
+    if (stores.length === 0) throw new Error("CompositeLabelStore needs at least one store");
+    this.#stores = stores;
+  }
+
+  get #primary(): LabelStore {
+    return this.#stores[0] as LabelStore;
+  }
+
+  async getLabel(address: Address): Promise<Label | null> {
+    for (const store of this.#stores) {
+      const label = await store.getLabel(address);
+      if (label) return label;
+    }
+    return null;
+  }
+
+  async getTags(address: Address): Promise<Tag[]> {
+    const all = await Promise.all(this.#stores.map((s) => s.getTags(address)));
+    return all.flat();
+  }
+
+  async getEntity(address: Address): Promise<Entity | null> {
+    for (const store of this.#stores) {
+      const entity = await store.getEntity(address);
+      if (entity) return entity;
+    }
+    return null;
+  }
+
+  addLabel(label: Label): Promise<void> {
+    return this.#primary.addLabel(label);
+  }
+
+  addTag(tag: Tag): Promise<void> {
+    return this.#primary.addTag(tag);
+  }
+
+  addEntity(entity: Entity): Promise<void> {
+    return this.#primary.addEntity(entity);
+  }
+}

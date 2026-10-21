@@ -22,7 +22,9 @@ open-trace-intelligence/
 ├── data/
 │   └── labels/            seed label data, each entry sourced and dated
 ├── scripts/
-│   └── ingest-ofac-sdn.ts fetches the real OFAC SDN list, writes data/labels/ofac-sdn.json
+│   ├── ingest-ofac-sdn.ts fetches the real OFAC SDN list, writes data/labels/ofac-sdn.json
+│   ├── ingest-uk-sanctions.ts          UK Sanctions List → data/labels/uk-sanctions-list.json
+│   └── ingest-safe-deployments.ts      Safe's official deployments → data/labels/safe-deployments.json
 └── docs/adr/               durable architecture decisions and why they were made
 ```
 

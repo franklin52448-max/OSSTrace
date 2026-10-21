@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { InMemoryCache, JsonFileLabelStore, type Cache, type LabelStore } from "@opentrace/core";
+import { CompositeLabelStore, InMemoryCache, JsonFileLabelStore, type Cache, type LabelStore } from "@opentrace/core";
 import { buildRegistry, type RegistryConfig } from "./registry.ts";
 import { RedisCache } from "./redisCache.ts";
 
@@ -26,9 +26,17 @@ export function buildRegistryFromEnv(): ReturnType<typeof buildRegistry> {
   return buildRegistry(config);
 }
 
+/**
+ * Every label dataset under data/labels/, one file per source (see data/labels/README.md). Order
+ * is priority when two sources label the same address: sanctions lists first, so a sanctioned
+ * address is never shown under a softer label; tags from every source are always all shown.
+ */
+const LABEL_DATASETS = ["ofac-sdn.json", "uk-sanctions-list.json", "safe-deployments.json"];
+
 export function buildLabelStore(): LabelStore {
-  const labelsPath = fileURLToPath(new URL("../../../../data/labels/ofac-sdn.json", import.meta.url));
-  return new JsonFileLabelStore(labelsPath);
+  return new CompositeLabelStore(
+    LABEL_DATASETS.map((file) => new JsonFileLabelStore(fileURLToPath(new URL(`../../../../data/labels/${file}`, import.meta.url)))),
+  );
 }
 
 /** RedisCache when REDIS_URL is set (so multiple processes share one cache/ranking), InMemoryCache otherwise. */

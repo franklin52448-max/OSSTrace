@@ -32,3 +32,13 @@
   Confirmed by downloading and grepping the real file before writing the regex parser, not
   assumed from any documentation page (OFAC's own docs pages for this didn't actually show the
   format directly either).
+- **A sanctions-list URL that still returns 200 can be a dead list** — the well-known OFSI
+  `ConList.csv` URL still downloads fine, but OFSI's Consolidated List closed on 28 January 2026
+  and that file is frozen. Only the gov.uk publication page said so. Before ingesting any official
+  list, read the publisher's own page for "closed"/"replaced" notices and check the file's own
+  date line, not just the HTTP status. (UK data now comes from the FCDO's UK Sanctions List.)
+- **The UK Sanctions List's crypto addresses are messier than OFAC's** — free text in
+  "Other Information" in at least four shapes, including two addresses run together with no
+  separator and an address with the next word glued on (`...Bc181Byex`, where `B` is valid hex).
+  Matching `0x` + 40 hex naively would silently invent a truncated address; split runs on `0x`
+  and drop any piece that isn't exactly 40 hex digits instead.

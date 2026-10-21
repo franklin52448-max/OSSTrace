@@ -1,7 +1,9 @@
 import type { Balance, ChainAdapter, TransactionsResult } from "@opentrace/core";
+import { mergeHistory, type EtherscanTokenTx, type EtherscanTx } from "./etherscan.ts";
 import { formatUnits } from "./units.ts";
 
 const ETH_MAINNET_CHAIN_ID = 1;
+const ETHERSCAN_V2_URL = "https://api.etherscan.io/v2/api";
 
 export interface EthereumAdapterConfig {
   /** A standard Ethereum JSON-RPC endpoint. No API key required for balances. */
@@ -14,14 +16,7 @@ export interface EthereumAdapterConfig {
   etherscanApiKey?: string | undefined;
 }
 
-interface EtherscanTx {
-  hash: string;
-  timeStamp: string;
-  from: string;
-  to: string;
-  value: string;
-  isError: string;
-}
+type EtherscanPage<Row> = { ok: true; rows: Row[] } | { ok: false; reason: string };
 
 export class EthereumAdapter implements ChainAdapter {
   readonly chain = "ethereum" as const;
@@ -64,55 +59,71 @@ export class EthereumAdapter implements ChainAdapter {
     };
   }
 
+  /**
+   * Native ETH transactions (`txlist`) and ERC-20 transfers (`tokentx`), fetched in parallel —
+   * two Etherscan calls per lookup — and merged one-entry-per-hash by `mergeHistory` (see
+   * `etherscan.ts` and this package's README for the exact merge rules). If either call fails,
+   * the whole result is `available: false`: returning native history with the token side
+   * silently missing would look complete when it isn't.
+   */
   async getRecentTransactions(address: string, limit: number): Promise<TransactionsResult> {
-    if (!this.#etherscanApiKey) {
+    const apiKey = this.#etherscanApiKey;
+    if (!apiKey) {
       return {
         available: false,
         reason: "ETHERSCAN_API_KEY not configured — transaction history needs a free key from etherscan.io/apis",
       };
     }
-    const url = new URL("https://api.etherscan.io/v2/api");
+    const [native, tokens] = await Promise.all([
+      this.#fetchAccountPage<EtherscanTx>("txlist", address, limit, apiKey),
+      this.#fetchAccountPage<EtherscanTokenTx>("tokentx", address, limit, apiKey),
+    ]);
+    if (!native.ok) return { available: false, reason: native.reason };
+    if (!tokens.ok) return { available: false, reason: tokens.reason };
+    return { available: true, transactions: mergeHistory(native.rows, tokens.rows, address, limit) };
+  }
+
+  async #fetchAccountPage<Row>(
+    action: "txlist" | "tokentx",
+    address: string,
+    limit: number,
+    apiKey: string,
+  ): Promise<EtherscanPage<Row>> {
+    const url = new URL(ETHERSCAN_V2_URL);
     url.searchParams.set("chainid", String(ETH_MAINNET_CHAIN_ID));
     url.searchParams.set("module", "account");
-    url.searchParams.set("action", "txlist");
+    url.searchParams.set("action", action);
     url.searchParams.set("address", address);
     url.searchParams.set("startblock", "0");
     url.searchParams.set("endblock", "99999999");
     url.searchParams.set("page", "1");
     url.searchParams.set("offset", String(limit));
     url.searchParams.set("sort", "desc");
-    url.searchParams.set("apikey", this.#etherscanApiKey);
+    url.searchParams.set("apikey", apiKey);
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      return { available: false, reason: `Etherscan API HTTP ${response.status}` };
+    let response: Response;
+    try {
+      response = await fetch(url);
+    } catch (cause) {
+      return { ok: false, reason: `Etherscan ${action}: ${cause instanceof Error ? cause.message : String(cause)}` };
     }
-    const body = (await response.json()) as { status: string; message: string; result: EtherscanTx[] | string };
+    if (!response.ok) {
+      return { ok: false, reason: `Etherscan ${action}: HTTP ${response.status}` };
+    }
+    const body = (await response.json()) as { status: string; message: string; result: Row[] | string };
     if (body.status !== "1") {
       // Etherscan returns status "0" with message "No transactions found" for a real, empty history.
       if (body.message === "No transactions found") {
-        return { available: true, transactions: [] };
+        return { ok: true, rows: [] };
       }
-      return { available: false, reason: `Etherscan API: ${body.message}` };
+      // On a real error Etherscan puts the cause in `result` (e.g. "Missing/Invalid API Key"),
+      // with only a generic "NOTOK" in `message` — surface the useful one.
+      const detail = typeof body.result === "string" && body.result ? body.result : body.message;
+      return { ok: false, reason: `Etherscan ${action}: ${detail}` };
     }
-    const txs = body.result as EtherscanTx[];
-    const lower = address.toLowerCase();
-    return {
-      available: true,
-      transactions: txs.map((tx) => ({
-        chain: "ethereum",
-        hash: tx.hash,
-        timestamp: new Date(Number(tx.timeStamp) * 1000).toISOString(),
-        from: tx.from,
-        to: tx.to || null,
-        valueNative: formatUnits(BigInt(tx.value), 18),
-        direction:
-          tx.from.toLowerCase() === lower && tx.to.toLowerCase() === lower
-            ? "self"
-            : tx.from.toLowerCase() === lower
-              ? "out"
-              : "in",
-      })),
-    };
+    if (!Array.isArray(body.result)) {
+      return { ok: false, reason: `Etherscan ${action}: unexpected response shape` };
+    }
+    return { ok: true, rows: body.result };
   }
 }

@@ -1,0 +1,118 @@
+{
+  "_provenance": "Every row is real Ethereum mainnet data for this address over the scanned blocks, read from a public JSON-RPC node (eth_getBlockByNumber, eth_getTransactionReceipt, eth_getLogs for ERC-20 Transfer events, eth_call decimals()/symbol()/name()) and laid out in the field shape Etherscan v2 documents for txlist and tokentx (docs.etherscan.io/api-reference/endpoint/txlist and /tokentx), restricted to the fields the adapter reads. tests/tokentx.live.test.ts re-checks the token rows against the chain.",
+  "address": "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+  "scannedBlocks": [
+    26243521,
+    26243522
+  ],
+  "txlist": [
+    {
+      "blockNumber": "26243522",
+      "timeStamp": "1792616327",
+      "hash": "0x2923294476de618fe8590ebca42260c23afeaf6803cfeed11015b719198549df",
+      "transactionIndex": "284",
+      "from": "0x167430787448fade2a837a94e41bd93d6b3066e3",
+      "to": "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+      "value": "154165605000000000",
+      "isError": "0"
+    },
+    {
+      "blockNumber": "26243522",
+      "timeStamp": "1792616327",
+      "hash": "0xc2681a1b96571674fc82dbbeefddba84102147555896b97aeade88ab61e82b7c",
+      "transactionIndex": "262",
+      "from": "0x41759f7e5ce083c2b067e5408f7ad2d47648ecb2",
+      "to": "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+      "value": "0",
+      "isError": "0"
+    },
+    {
+      "blockNumber": "26243522",
+      "timeStamp": "1792616327",
+      "hash": "0x9d5e57e461b269aa1dad904a1fa88b56940ae6c78d07d4191f708faff2840739",
+      "transactionIndex": "242",
+      "from": "0xb4f27cad77c3bee1883058db705b53bb1de59e7a",
+      "to": "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+      "value": "20000000000000000",
+      "isError": "0"
+    },
+    {
+      "blockNumber": "26243521",
+      "timeStamp": "1792616315",
+      "hash": "0xbfe38edba88b425929f4b1bcb9e568f17197181b5e2ef82d97d604afdffd004a",
+      "transactionIndex": "198",
+      "from": "0x4cc53e9905b618e080dedd8f3a7361ac335c2bef",
+      "to": "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+      "value": "0",
+      "isError": "0"
+    },
+    {
+      "blockNumber": "26243521",
+      "timeStamp": "1792616315",
+      "hash": "0x097ab4ed319ed9159a72eff3fe0f6512692111bca70668a4592d574d7106d2a8",
+      "transactionIndex": "110",
+      "from": "0x360204b9c6c05e699c47e04b66acb77bacda7f34",
+      "to": "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+      "value": "0",
+      "isError": "0"
+    },
+    {
+      "blockNumber": "26243521",
+      "timeStamp": "1792616315",
+      "hash": "0x5feeea981b948c90d173a9b510190ea45b58acdc3574575351d6b5c70c29282a",
+      "transactionIndex": "74",
+      "from": "0xe77f1d813a16318df533cb3793381fe6026efd14",
+      "to": "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+      "value": "0",
+      "isError": "0"
+    },
+    {
+      "blockNumber": "26243521",
+      "timeStamp": "1792616315",
+      "hash": "0x12670e0355b7f1772fe783f93a9b5e7e18711ee893fba108c73e69cb45c34854",
+      "transactionIndex": "72",
+      "from": "0xf54f031af0e242c7a682263f063e18c695f7c244",
+      "to": "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+      "value": "0",
+      "isError": "0"
+    },
+    {
+      "blockNumber": "26243521",
+      "timeStamp": "1792616315",
+      "hash": "0x9b1d2727cfa984096c6773a29b6ac65b70f492790d8e43bfce70174d1a44867b",
+      "transactionIndex": "44",
+      "from": "0x1e9bd2995afb2316f3895445a8e4980d5fcfbc40",
+      "to": "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+      "value": "60000000000000000",
+      "isError": "0"
+    }
+  ],
+  "tokentx": [
+    {
+      "blockNumber": "26243521",
+      "timeStamp": "1792616315",
+      "hash": "0x9fbf8274988fe55ecea679b8a86adf09cfc4a7ac3e812ca4e4ff16847447511d",
+      "transactionIndex": "63",
+      "from": "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+      "to": "0x000000000004444c5dc75cb358380d2e3de08a90",
+      "contractAddress": "0x88909d489678dd17aa6d9609f89b0419bf78fd9a",
+      "value": "3710311367700367088216",
+      "tokenDecimal": "18",
+      "tokenSymbol": "L3",
+      "tokenName": "Layer3"
+    },
+    {
+      "blockNumber": "26243521",
+      "timeStamp": "1792616315",
+      "hash": "0x9fbf8274988fe55ecea679b8a86adf09cfc4a7ac3e812ca4e4ff16847447511d",
+      "transactionIndex": "63",
+      "from": "0x40cde7747d967e0df140e69037e69e5bab588009",
+      "to": "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+      "contractAddress": "0x88909d489678dd17aa6d9609f89b0419bf78fd9a",
+      "value": "3710311367700367088216",
+      "tokenDecimal": "18",
+      "tokenSymbol": "L3",
+      "tokenName": "Layer3"
+    }
+  ]
+}

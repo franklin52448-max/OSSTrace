@@ -70,6 +70,35 @@ export interface Balance {
   asOf: string;
 }
 
+export type TransferDirection = "in" | "out" | "self";
+
+/**
+ * One fungible-token movement inside a transaction (an ERC-20 `Transfer` on Ethereum, an SPL
+ * Token `transfer`/`transferChecked` on Solana), decoded from real chain data. Every field that
+ * couldn't actually be resolved from the data source is `null` — never guessed.
+ */
+export interface TokenTransfer {
+  /** The token's on-chain identity: ERC-20 contract address, or SPL mint. `null` if unresolved. */
+  token: string | null;
+  /** As reported by the data source (Etherscan for ERC-20). `null` when the source doesn't say. */
+  symbol: string | null;
+  name: string | null;
+  /** The token's real decimals, from the data source — `null` if it couldn't be resolved. */
+  decimals: number | null;
+  /** Integer string in the token's smallest unit — always present, exactly as decoded. */
+  rawAmount: string;
+  /** Decimal string (`rawAmount` scaled by `decimals`), or `null` when `decimals` is unknown. */
+  amount: string | null;
+  /** The holder the tokens left / arrived at (Solana: the token account's owner). `null` if unresolved. */
+  from: string | null;
+  to: string | null;
+  /** Solana only: the SPL token accounts actually debited/credited (always known when decoded). */
+  fromTokenAccount?: string;
+  toTokenAccount?: string;
+  /** Relative to the queried address. */
+  direction: TransferDirection;
+}
+
 export interface TransactionSummary {
   chain: ChainId;
   hash: string;
@@ -78,7 +107,14 @@ export interface TransactionSummary {
   to: string | null;
   /** Decimal string, native-token units. */
   valueNative: string;
-  direction: "in" | "out" | "self";
+  direction: TransferDirection;
+  /**
+   * Token movements in this transaction that involve the queried address, when the adapter
+   * decodes them. Absent (not an empty array) when the adapter decoded none, so existing
+   * native-only consumers see exactly the shape they always did. See each chain's README for how
+   * its top-level `from`/`to`/`valueNative` relate to these.
+   */
+  tokenTransfers?: TokenTransfer[];
 }
 
 /**

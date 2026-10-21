@@ -21,6 +21,10 @@ interface ChainAdapter {
 - Don't invent fields. If a chain's data source can't give you a `from`/`to` for some transaction
   shape (e.g. a Solana instruction this adapter doesn't decode), say so in the adapter's own
   README rather than guessing.
+- Token movements go in the optional `TransactionSummary.tokenTransfers` (`TokenTransfer` in
+  `@opentrace/core`), never in `valueNative`, which is always the chain's native currency. Omit
+  the key entirely when you decoded none. Any `TokenTransfer` field you couldn't resolve from real
+  data (decimals, symbol, owner, ...) is `null` — and `amount` is `null` when decimals are unknown.
 
 ## Adding a new chain
 
@@ -38,7 +42,7 @@ interface ChainAdapter {
 
 ## Currently implemented
 
-- [`ethereum/`](ethereum/README.md) — balance via public JSON-RPC; transaction history via the
-  Etherscan v2 API (needs a free API key).
-- [`solana/`](solana/README.md) — balance and transaction history via public RPC, no API key
-  needed.
+- [`ethereum/`](ethereum/README.md) — balance via public JSON-RPC; transaction history (native
+  ETH + ERC-20 transfers) via the Etherscan v2 API (needs a free API key).
+- [`solana/`](solana/README.md) — balance and transaction history (native SOL + decoded SPL token
+  transfers) via public RPC, no API key needed.

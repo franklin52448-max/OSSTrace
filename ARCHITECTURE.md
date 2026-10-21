@@ -20,6 +20,7 @@ open-trace-intelligence/
 │   │   ├── explorer/      the address/entity lookup API — consumes core + chains
 │   │   ├── accounts/      user accounts, sessions, roles (ADR 0006) — other features depend on it
 │   │   ├── private-labels/ per-user labels only their owner sees (ADR 0004) — consumes accounts
+│   │   ├── community-labels/  sourced label submissions + moderator review (ADR 0007)
 │   │   └── visualizer/    one-hop transaction graph API — consumes core + chains
 │   └── web/                minimal React UI — consumes the Explorer + Visualizer APIs over HTTP
 ├── data/
@@ -41,7 +42,10 @@ this came from):
 - **Address** — `{ chain, value }`. The base unit; always scoped to a specific chain.
 - **Entity** — a real-world actor, holding a set of `Address`es that can span multiple chains.
 - **Label** — at most one per address: a human-readable identity (`"Binance 14"`). Always carries
-  a `Source`.
+  a `Source`. Either an `IngestedLabel`, produced by an ingestion script from an official source,
+  with no `reviewStatus`, or a person-submitted `CommunityLabel` / `ConfirmedLabel`, with
+  `reviewStatus: "community" | "confirmed"` and the submitter's and confirmer's account ids. See
+  [ADR 0007](docs/adr/0007-community-label-submissions-and-review.md).
 - **Tag** — independent of labeling; a behavior/category marker (`"sanctioned"`, `"exchange"`,
   `"mixer"`). An address can be tagged without being labeled. Always carries a `Source`.
 - **Source** — `{ description, url, addedAt }`. Required on every Label and Tag. This is the

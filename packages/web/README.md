@@ -18,14 +18,31 @@ npm run dev:web
 
 Opens on port 5301 (this project's port block is 5300–5399; the Explorer API itself is on 5300).
 Talks to the Explorer API at `VITE_EXPLORER_URL` (defaults to `http://localhost:5300`) and the
-Visualizer API at `VITE_VISUALIZER_URL` (defaults to `http://localhost:5302`).
+Visualizer API at `VITE_VISUALIZER_URL` (defaults to `http://localhost:5302`). Logging in and
+label submission/moderation also need the accounts API (`npm run dev:accounts`,
+`VITE_ACCOUNTS_URL`, default `http://localhost:5310`) and the community labels API
+(`npm run dev:community-labels`, `VITE_COMMUNITY_LABELS_URL`, default `http://localhost:5311`).
+Lookups and the graph work without either of them.
 
 ## What's here
 
-One page (`src/App.tsx`) with two tabs, switched by the URL hash (`#graph`) — no router library:
+One page (`src/App.tsx`) with tabs, switched by the URL hash (`#graph`, `#moderation`). There's no
+router library.
 
+- **Account** (`src/AccountPanel.tsx`, `src/session.ts`): an email + password log in / sign up form
+  backed by the real accounts API. The session token is kept in `localStorage`
+  (`opentrace.session`) and sent as a bearer header. On load the page asks `/accounts/me` who the
+  token belongs to, because a role is never trusted from storage. Log out revokes the session
+  server-side.
 - **Lookup**: a chain selector, an address input, and a results panel (balance, transactions,
-  label/tags, with a "SANCTIONED" badge when the `sanctioned` tag is present).
+  label/tags, with a "SANCTIONED" badge when the `sanctioned` tag is present). A community label
+  gets a **✓ CONFIRMED** badge (sky blue) once a moderator confirms it, or a **COMMUNITY ·
+  UNREVIEWED** badge before that (`src/LabelReview.tsx`). Ingested labels from official sources get
+  neither. Logged-in users see **Suggest a label for this address**, a form that requires a source
+  URL + description and posts to the community labels API.
+- **Moderation** (`src/ModerationView.tsx`, tab shown only to moderators/admins): the queue of
+  pending community submissions with their sources. **Confirm** or **Reject…** (with a reason). A
+  moderator's own submissions can't be reviewed by them, and the server enforces both rules.
 - **Graph** (`src/GraphView.tsx`): the Visualizer's one-hop graph drawn as SVG. Drag the
   background to pan, scroll (or the +/− buttons) to zoom, drag a node to move it, click a node to
   see its address, label + source, tags, totals and the transfers behind each edge (linked to
@@ -76,3 +93,9 @@ These are optional, and both need APIs running: `npm run dev:accounts` (port 531
   design decision to defend.
 - No build/deploy pipeline — `npm run build` produces a static `dist/`, but nothing wires that up
   to hosting yet.
+- Account features are minimal: there's no "my submissions" page (the API has
+  `GET /labels/submissions/mine`), no password reset, and no role management UI.
+- No component tests for the login, submission and moderation views. They were verified by
+  driving the real UI against the real APIs in headless Chromium during development, not by an
+  automated suite in this repo. The API behaviour behind them is covered by
+  `packages/features/community-labels/tests/`.

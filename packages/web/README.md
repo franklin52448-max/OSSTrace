@@ -38,6 +38,12 @@ The layout (`src/layout.ts`) is a small hand-rolled, deterministic force-directe
 graph library dependency. A one-hop graph is a star of at most ~100 nodes, which doesn't need
 one; `tests/layout.test.ts` covers it.
 
+Each transaction row shows its native value, plus one line per decoded token transfer
+(`tokenTransfers` from the API: ERC-20 on Ethereum, SPL on Solana). A token shows its symbol when
+the data source reported one, otherwise its shortened contract/mint address — Solana mints never
+have a symbol here, since the adapter doesn't fetch token metadata. If a token's decimals are
+unknown, the exact raw integer amount is shown and labelled as raw units.
+
 ## What's not built here yet
 
 - The Graph tab is one hop at a time (see `packages/features/visualizer/README.md`); expanding a

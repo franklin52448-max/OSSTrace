@@ -1,6 +1,6 @@
 import type { Address, ChainId } from "@opentrace/core";
 import { buildCache, buildLabelStore, buildRegistryFromEnv, loadRootEnv } from "./bootstrap.ts";
-import { LOOKUP_POPULARITY_TOPIC } from "./cachedLookup.ts";
+import { DEFAULT_TX_LIMIT, LOOKUP_POPULARITY_TOPIC, reportCacheKey } from "./cachedLookup.ts";
 import { lookupAddress } from "./lookup.ts";
 
 loadRootEnv();
@@ -38,8 +38,10 @@ async function main(): Promise<void> {
       const adapter = registry.get(address.chain);
       if (!adapter) continue;
       try {
-        const report = await lookupAddress(address, adapter, store);
-        await cache.set(key, JSON.stringify(report), REFRESH_TTL_SECONDS);
+        // Popularity is ranked per address; the warmed report is the default-limit one, written
+        // under the same limit-aware key the API server reads for a plain (no `?limit=`) lookup.
+        const report = await lookupAddress(address, adapter, store, DEFAULT_TX_LIMIT);
+        await cache.set(reportCacheKey(address, DEFAULT_TX_LIMIT), JSON.stringify(report), REFRESH_TTL_SECONDS);
         console.log(`refreshed ${key}`);
       } catch (cause) {
         console.error(`failed to refresh ${key}:`, cause instanceof Error ? cause.message : cause);

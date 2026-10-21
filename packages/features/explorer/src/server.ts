@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import type { Address, ChainId } from "@opentrace/core";
 import { buildCache, buildLabelStore, buildRegistryFromEnv, loadRootEnv } from "./bootstrap.ts";
-import { cachedLookupAddress } from "./cachedLookup.ts";
+import { cachedLookupAddress, DEFAULT_TX_LIMIT } from "./cachedLookup.ts";
 
 loadRootEnv();
 
@@ -56,8 +56,8 @@ const server = createServer(async (req, res) => {
     const address: Address = { chain: chainRaw, value: addressValue };
     try {
       const limitParam = url.searchParams.get("limit");
-      const limit = limitParam ? Number(limitParam) : 25;
-      const report = await cachedLookupAddress(address, adapter, store, cache, Number.isFinite(limit) ? limit : 25);
+      const limit = limitParam ? Number(limitParam) : DEFAULT_TX_LIMIT;
+      const report = await cachedLookupAddress(address, adapter, store, cache, Number.isFinite(limit) ? limit : DEFAULT_TX_LIMIT);
       sendJson(res, 200, report);
     } catch (cause) {
       sendJson(res, 502, { error: cause instanceof Error ? cause.message : String(cause) });

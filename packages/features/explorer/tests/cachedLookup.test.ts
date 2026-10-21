@@ -11,21 +11,24 @@ import {
   type ChainAdapter,
   type TransactionsResult,
 } from "@opentrace/core";
-import { cachedLookupAddress, LOOKUP_POPULARITY_TOPIC } from "../src/cachedLookup.ts";
+import { cachedLookupAddress, DEFAULT_TX_LIMIT, LOOKUP_POPULARITY_TOPIC, reportCacheKey } from "../src/cachedLookup.ts";
 
 /** Counts how many times getBalance/getRecentTransactions are actually called, to prove caching works. */
 class CountingAdapter implements ChainAdapter {
   readonly chain = "ethereum" as const;
   balanceCalls = 0;
   txCalls = 0;
+  /** Every `limit` the adapter was actually asked for, in call order. */
+  txLimits: number[] = [];
 
   async getBalance(address: string): Promise<Balance> {
     this.balanceCalls++;
     return { chain: "ethereum", address, native: { symbol: "ETH", amount: "1", decimals: 18 }, asOf: "2026-10-21T00:00:00Z" };
   }
 
-  async getRecentTransactions(): Promise<TransactionsResult> {
+  async getRecentTransactions(_address: string, limit: number): Promise<TransactionsResult> {
     this.txCalls++;
+    this.txLimits.push(limit);
     return { available: true, transactions: [] };
   }
 }
@@ -79,5 +82,57 @@ test("every lookup, hit or miss, records a popularity hit", async () => {
 
     const top = await cache.topHits(LOOKUP_POPULARITY_TOPIC, 5);
     assert.deepEqual(top, ["ethereum:0xabc"]);
+  });
+});
+
+test("different transaction limits on the same address get separate cache entries", async () => {
+  await withTempStore(async (storePath) => {
+    const store = new JsonFileLabelStore(storePath);
+    const cache = new InMemoryCache();
+    const adapter = new CountingAdapter();
+    const address: Address = { chain: "ethereum", value: "0xabc" };
+
+    await cachedLookupAddress(address, adapter, store, cache, 5);
+    await cachedLookupAddress(address, adapter, store, cache, 50);
+    assert.deepEqual(adapter.txLimits, [5, 50], "a limit=50 lookup must not be served the cached limit=5 report");
+
+    // Each limit is still cached on its own: repeating either one doesn't reach the adapter again.
+    await cachedLookupAddress(address, adapter, store, cache, 5);
+    await cachedLookupAddress(address, adapter, store, cache, 50);
+    assert.deepEqual(adapter.txLimits, [5, 50]);
+    assert.ok(await cache.get(reportCacheKey(address, 5)));
+    assert.ok(await cache.get(reportCacheKey(address, 50)));
+  });
+});
+
+test("popularity is ranked per address, regardless of which limits were requested", async () => {
+  await withTempStore(async (storePath) => {
+    const store = new JsonFileLabelStore(storePath);
+    const cache = new InMemoryCache();
+    const adapter = new CountingAdapter();
+    const address: Address = { chain: "ethereum", value: "0xabc" };
+
+    await cachedLookupAddress(address, adapter, store, cache, 5);
+    await cachedLookupAddress(address, adapter, store, cache, 50);
+
+    // The indexer parses these back into addresses — a limit suffix here would break it.
+    assert.deepEqual(await cache.topHits(LOOKUP_POPULARITY_TOPIC, 5), ["ethereum:0xabc"]);
+  });
+});
+
+test("a default-limit lookup uses the same cache key the background indexer refreshes", async () => {
+  await withTempStore(async (storePath) => {
+    const store = new JsonFileLabelStore(storePath);
+    const cache = new InMemoryCache();
+    const adapter = new CountingAdapter();
+    const address: Address = { chain: "ethereum", value: "0xabc" };
+
+    await cachedLookupAddress(address, adapter, store, cache);
+    assert.deepEqual(adapter.txLimits, [DEFAULT_TX_LIMIT]);
+    assert.ok(await cache.get(reportCacheKey(address, DEFAULT_TX_LIMIT)));
+
+    // An explicit limit equal to the default is the same entry, not a second fetch.
+    await cachedLookupAddress(address, adapter, store, cache, DEFAULT_TX_LIMIT);
+    assert.equal(adapter.txCalls, 1);
   });
 });

@@ -18,12 +18,14 @@ folders, separate agents, same plugin architecture that made this possible in th
 ## Wave 1 — in progress
 
 - [ ] **Harden what's already built**
-  - [ ] Fix the Explorer cache key not including `?limit=` (two different limits on the same
-        address currently share one cache entry — see `packages/features/explorer/README.md`)
-  - [ ] Decode ERC-20 token transfers in the Ethereum adapter (currently only native ETH transfers
-        are reported — see `packages/chains/ethereum/README.md`)
-  - [ ] Decode SPL token transfers in the Solana adapter (currently falls back to a native-SOL
-        balance-delta for non-native-transfer transactions — see `packages/chains/solana/README.md`)
+  - [x] Fix the Explorer cache key not including `?limit=` (reports are now keyed per address +
+        limit — see `packages/features/explorer/README.md`)
+  - [x] Decode ERC-20 token transfers in the Ethereum adapter (Etherscan `tokentx`, merged into
+        `tokenTransfers` — see `packages/chains/ethereum/README.md`; the keyed live Etherscan test
+        skips until someone runs it with a real `ETHERSCAN_API_KEY`)
+  - [x] Decode SPL token transfers in the Solana adapter (`transfer`/`transferChecked` into
+        `tokenTransfers`, balance-delta fallback kept for the native side — see
+        `packages/chains/solana/README.md`)
   - [ ] Document/streamline getting a real `ETHERSCAN_API_KEY` so Ethereum tx history actually
         works out of the box for a new contributor
 - [x] **Accounts / auth system** (prerequisite for Wave 2's moderation + private labels)

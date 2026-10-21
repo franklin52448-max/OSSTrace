@@ -39,8 +39,10 @@ harder for the next contributor to understand, it probably isn't. See
 | Core data model (Address / Entity / Label / Tag / Source) | **Active** |
 | `ChainAdapter` plugin interface | **Active** |
 | Ethereum chain adapter (balance via public RPC; tx history needs a free Etherscan API key) | **Active** |
+| Ethereum ERC-20 token transfer decoding (Etherscan `tokentx`, real decimals, merged per tx) | **Active** |
 | Solana chain adapter (balance + tx history via public RPC, no key needed) | **Active** |
-| Explorer API (`GET /address/:chain/:address` — balance, recent txs, label, tags) | **Active** |
+| Solana SPL token transfer decoding (`transfer`/`transferChecked`, incl. Token-2022) | **Active** |
+| Explorer API (`GET /address/:chain/:address` — balance, recent txs, label, tags; cached per address + `?limit=`) | **Active** |
 | Caching + a background indexer (real Redis-backed, keeps popular addresses instant) | **Active** |
 | Minimal web UI (paste an address, see what we know) | **Active** |
 | Seed labelset: sanctioned digital-currency addresses (US OFAC SDN + UK Sanctions List) and Safe's official protocol contracts | **Active** |

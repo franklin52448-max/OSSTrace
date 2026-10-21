@@ -23,6 +23,14 @@ touches the chain adapter at all, and every lookup (hit or miss) records a popul
 numbers, verified against a real local Redis instance: a cold Ethereum lookup takes ~160ms, a
 cached one ~15–20ms.
 
+Reports are cached per address **and** per transaction limit (`reportCacheKey(address, limit)` →
+`ethereum:0xabc|limit=25`), so `?limit=5` and `?limit=50` on the same address are two separate
+entries and never served for each other. Popularity hits stay per address only (plain
+`ethereum:0xabc`) — demand is a property of the address, not of the limit. The indexer refreshes
+each hot address at `DEFAULT_TX_LIMIT` (25, the API's default when no `?limit=` is given), under
+that same limit-aware key. A lookup with a non-default limit is cached normally for its TTL but
+isn't kept warm by the indexer.
+
 Without `REDIS_URL` set, this uses `InMemoryCache` — fine for one process, but **not shared**
 across processes. The background indexer (`src/indexer.ts`) is a separate process that keeps the
 most-looked-up addresses warm on a schedule, which only does anything useful once it shares a
@@ -70,10 +78,6 @@ underlying chain adapter couldn't fetch history (e.g. no `ETHERSCAN_API_KEY`) �
 ## What's not built here yet
 
 - No pagination beyond a `?limit=` query param on transactions.
-- The cache key doesn't include `limit` — two requests for the same address with different
-  `?limit=` values share one cache entry (whichever was fetched first "wins" until the TTL
-  expires). Fine for today's scale; worth fixing (fold `limit` into the cache key) before this
-  matters for real.
 - CORS is wide open (`*`) — correct for a local dev tool talking to a local web UI, wrong for any
   public deployment. Flagging this explicitly so it isn't carried forward by accident.
 - No deployment story for the indexer as a long-running process (systemd/pm2/a Fly machine) —

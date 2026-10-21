@@ -6,8 +6,10 @@ imports from nothing chain- or feature-specific.
 ## What's in here
 
 - **`src/types.ts`** — `Address`, `Label`, `Tag`, `Entity`, `Source`, `Balance`,
-  `TransactionSummary`. See the file's own doc comments; the shapes are explained there, not
-  duplicated here.
+  `TransactionSummary`, `TokenTransfer`. See the file's own doc comments; the shapes are explained
+  there, not duplicated here. `TransactionSummary.tokenTransfers` is an optional, additive field
+  added for ERC-20/SPL decoding. It's backward compatible: it's absent whenever a chain decoded
+  no token movement, and no existing field changed meaning (`valueNative` is still native-only).
 - **`src/chainAdapter.ts`** — the `ChainAdapter` interface every chain package implements.
 - **`src/store.ts`** — `LabelStore` interface + `JsonFileLabelStore`, a file-backed implementation.
   See the file's docstring for why JSON-file rather than a database for v1.

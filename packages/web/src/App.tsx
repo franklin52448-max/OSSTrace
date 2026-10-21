@@ -8,13 +8,33 @@ interface Balance {
   native: { symbol: string; amount: string; decimals: number };
   asOf: string;
 }
+type Direction = "in" | "out" | "self";
+interface TokenTransfer {
+  token: string | null;
+  symbol: string | null;
+  decimals: number | null;
+  rawAmount: string;
+  amount: string | null;
+  direction: Direction;
+}
 interface TransactionSummary {
   hash: string;
   timestamp: string;
   from: string;
   to: string | null;
   valueNative: string;
-  direction: "in" | "out" | "self";
+  direction: Direction;
+  tokenTransfers?: TokenTransfer[];
+}
+
+const directionClass = (d: Direction): string => (d === "in" ? "text-emerald-400" : d === "out" ? "text-orange-400" : "text-neutral-400");
+const directionSign = (d: Direction): string => (d === "in" ? "+" : d === "out" ? "-" : "");
+const shortId = (id: string): string => (id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id);
+
+/** Symbol when the data source gave one, else the token's own address/mint, shortened — never a guessed name. */
+function tokenLabel(t: TokenTransfer): string {
+  const unit = t.symbol ?? (t.token ? shortId(t.token) : "unknown token");
+  return t.amount !== null ? `${t.amount} ${unit}` : `${t.rawAmount} raw units of ${unit}`;
 }
 type TransactionsResult = { available: true; transactions: TransactionSummary[] } | { available: false; reason: string };
 interface Label {
@@ -185,10 +205,16 @@ function Report({ report }: { report: AddressReport }) {
                   <div className="text-xs text-neutral-500">{new Date(tx.timestamp).toLocaleString()}</div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className={tx.direction === "in" ? "text-emerald-400" : tx.direction === "out" ? "text-orange-400" : "text-neutral-400"}>
-                    {tx.direction === "in" ? "+" : tx.direction === "out" ? "-" : ""}
-                    {tx.valueNative}
+                  <div className={directionClass(tx.direction)}>
+                    {directionSign(tx.direction)}
+                    {tx.valueNative} {report.balance.native.symbol}
                   </div>
+                  {tx.tokenTransfers?.map((t, i) => (
+                    <div key={i} className={`text-xs ${directionClass(t.direction)}`}>
+                      {directionSign(t.direction)}
+                      {tokenLabel(t)}
+                    </div>
+                  ))}
                 </div>
               </li>
             ))}

@@ -1,6 +1,7 @@
 # ADR 0004 — Label trust tiers, private labels, and where we won't source data from
 
-Status: Decided 2026-10-21 (design locked, implementation not started)
+Status: Decided 2026-10-21 (design locked). Private labels implemented in
+`packages/features/private-labels/`; the Community/Confirmed tiers not yet.
 
 ## Context
 

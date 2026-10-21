@@ -14,6 +14,9 @@ directly from Explorer's source.
   `user`/`moderator`/`admin` roles. A foundation package: other features (Confirmed-tier
   moderation, private labels, Case Management) depend on its public API (`@opentrace/accounts`)
   to answer "who is this?" and "may they do this?", rather than each building their own auth.
+- [`private-labels/`](private-labels/README.md) — a signed-in user's own free-text labels on
+  addresses (ADR 0004). They're visible only to that user, need no source, and are never merged
+  into the public label dataset. Built on `@opentrace/accounts`' `authenticate()`.
 - [`visualizer/`](visualizer/README.md) — given a chain + address, returns a one-hop transaction
   graph (center node, one node per direct counterparty, one edge per real transfer, labels/tags on
   every node). Drawn interactively by the web UI's Graph tab.

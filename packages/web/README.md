@@ -44,7 +44,29 @@ the data source reported one, otherwise its shortened contract/mint address — 
 have a symbol here, since the adapter doesn't fetch token metadata. If a token's decimals are
 unknown, the exact raw integer amount is shown and labelled as raw units.
 
+## Accounts and private labels
+
+These are optional, and both need APIs running: `npm run dev:accounts` (port 5310,
+`VITE_ACCOUNTS_URL`) and `npm run dev:private-labels` (port 5311, `VITE_PRIVATE_LABELS_URL`).
+
+- **`src/AccountBar.tsx`**: a log-in/sign-up form against the real accounts API. When you're signed
+  in, it shows your email, a "My private labels" list and "Log out", which revokes the session
+  server-side.
+- **`src/PrivateLabelPanel.tsx`**: on every Lookup result, shows your own private label for that
+  address and lets you add, edit or remove it. Logged out, it shows a one-line hint instead. Its
+  styling is meant to be impossible to confuse with public labels: violet, a dashed border, a lock
+  icon, "only visible to you", and no source, confidence or SANCTIONED-style badge.
+- **`src/session.ts`**: the shared session. The bearer token is kept in `localStorage` so a reload
+  keeps you signed in. Any `401` signs you out locally. Fetched label state is tagged with the
+  session it was fetched for, so switching accounts in one browser never shows the previous
+  user's label, not even for one frame.
+
 ## What's not built here yet
+
+- The session token lives in `localStorage`, so any script on this origin could read it. That's
+  fine for a local tool with no third-party scripts. Revisit it (an httpOnly cookie plus CSRF
+  protection) before a public deployment.
+- Private labels show on the Lookup view only, not on Graph nodes.
 
 - The Graph tab is one hop at a time (see `packages/features/visualizer/README.md`); expanding a
   node in place is not built.

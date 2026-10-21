@@ -19,6 +19,7 @@ open-trace-intelligence/
 │   ├── features/
 │   │   ├── explorer/      the address/entity lookup API — consumes core + chains
 │   │   ├── accounts/      user accounts, sessions, roles (ADR 0006) — other features depend on it
+│   │   ├── private-labels/ per-user labels only their owner sees (ADR 0004) — consumes accounts
 │   │   └── visualizer/    one-hop transaction graph API — consumes core + chains
 │   └── web/                minimal React UI — consumes the Explorer + Visualizer APIs over HTTP
 ├── data/

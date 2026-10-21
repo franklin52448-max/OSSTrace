@@ -6,12 +6,14 @@
   "main": "./src/server.ts",
   "scripts": {
     "dev": "node --experimental-strip-types src/server.ts",
+    "indexer": "node --experimental-strip-types src/indexer.ts",
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
     "@opentrace/core": "*",
     "@opentrace/chain-ethereum": "*",
-    "@opentrace/chain-solana": "*"
+    "@opentrace/chain-solana": "*",
+    "ioredis": "^6.0.0"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

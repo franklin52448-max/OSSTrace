@@ -1,28 +1,15 @@
 import { createServer } from "node:http";
-import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { JsonFileLabelStore, type Address, type ChainId } from "@opentrace/core";
-import { buildRegistry } from "./registry.ts";
-import { lookupAddress } from "./lookup.ts";
+import type { Address, ChainId } from "@opentrace/core";
+import { buildCache, buildLabelStore, buildRegistryFromEnv, loadRootEnv } from "./bootstrap.ts";
+import { cachedLookupAddress } from "./cachedLookup.ts";
 
-const ENV_PATH = fileURLToPath(new URL("../../../../.env", import.meta.url));
-if (existsSync(ENV_PATH)) {
-  try {
-    process.loadEnvFile(ENV_PATH);
-  } catch {
-    // A malformed .env must not crash the server — fall through to defaults/public endpoints.
-  }
-}
+loadRootEnv();
 
 const PORT = Number(process.env["PORT"] ?? 5300);
-const LABELS_PATH = fileURLToPath(new URL("../../../../data/labels/ofac-sdn.json", import.meta.url));
 
-const registry = buildRegistry({
-  ethRpcUrl: process.env["ETH_RPC_URL"] ?? "https://ethereum-rpc.publicnode.com",
-  etherscanApiKey: process.env["ETHERSCAN_API_KEY"],
-  solanaRpcUrl: process.env["SOLANA_RPC_URL"] ?? "https://api.mainnet-beta.solana.com",
-});
-const store = new JsonFileLabelStore(LABELS_PATH);
+const registry = buildRegistryFromEnv();
+const store = buildLabelStore();
+const cache = buildCache();
 
 const SUPPORTED_CHAINS: readonly ChainId[] = ["ethereum", "solana"];
 
@@ -70,7 +57,7 @@ const server = createServer(async (req, res) => {
     try {
       const limitParam = url.searchParams.get("limit");
       const limit = limitParam ? Number(limitParam) : 25;
-      const report = await lookupAddress(address, adapter, store, Number.isFinite(limit) ? limit : 25);
+      const report = await cachedLookupAddress(address, adapter, store, cache, Number.isFinite(limit) ? limit : 25);
       sendJson(res, 200, report);
     } catch (cause) {
       sendJson(res, 502, { error: cause instanceof Error ? cause.message : String(cause) });

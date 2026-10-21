@@ -17,6 +17,7 @@
     "check": "npm run typecheck && npm run test",
     "ingest:ofac": "node --experimental-strip-types scripts/ingest-ofac-sdn.ts",
     "dev:explorer": "npm run dev --workspace packages/features/explorer",
+    "dev:indexer": "npm run indexer --workspace packages/features/explorer",
     "dev:web": "npm run dev --workspace packages/web"
   },
   "devDependencies": {

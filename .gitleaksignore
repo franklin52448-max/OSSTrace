@@ -1,0 +1,19 @@
+# Each entry below was individually verified by reading the actual (unredacted) content before
+# being added here — every one is a public blockchain address (Ethereum 0x... address, Solana
+# token mint, or Solana token/account address) sitting in real test fixture data, not a secret.
+# Addresses are public by design; gitleaks' "generic-api-key" rule is a high-entropy heuristic
+# that can't tell a public key apart from a private one by string shape alone. Never add an
+# entry here without reading the real content first — see the comment on each.
+
+# Ethereum address (0x...) used as a test token identifier / from-address assertion
+deab651894dd63798b30304a5e2e73bc5741bb8d:packages/chains/ethereum/tests/etherscan.test.ts:generic-api-key:25
+deab651894dd63798b30304a5e2e73bc5741bb8d:packages/chains/ethereum/tests/etherscan.test.ts:generic-api-key:86
+
+# Solana addresses (mint / token account / account key) in SPL token decoding source + fixtures
+cd252154578b1ec57f84482b8b413a1464612650:packages/chains/solana/src/splToken.ts:generic-api-key:51
+cd252154578b1ec57f84482b8b413a1464612650:packages/chains/solana/tests/splToken.test.ts:generic-api-key:32
+cd252154578b1ec57f84482b8b413a1464612650:packages/chains/solana/tests/splToken.test.ts:generic-api-key:40
+cd252154578b1ec57f84482b8b413a1464612650:packages/chains/solana/tests/splToken.test.ts:generic-api-key:41
+cd252154578b1ec57f84482b8b413a1464612650:packages/chains/solana/tests/splToken.test.ts:generic-api-key:58
+cd252154578b1ec57f84482b8b413a1464612650:packages/chains/solana/tests/splToken.test.ts:generic-api-key:96
+cd252154578b1ec57f84482b8b413a1464612650:packages/chains/solana/tests/fixtures/raydium-v4-swap-transfer.json:generic-api-key:1

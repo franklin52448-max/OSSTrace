@@ -1,0 +1,19 @@
+{
+  "name": "@opentrace/chain-solana",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/adapter.ts",
+  "types": "./src/adapter.ts",
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@opentrace/core": "*",
+    "@solana/web3.js": "^1.99.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^24.9.1"
+  }
+}

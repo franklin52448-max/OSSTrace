@@ -12,8 +12,8 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "typecheck": "tsc -b tsconfig.json",
-    "test": "node --experimental-strip-types --test packages/*/tests/*.test.ts packages/*/*/tests/*.test.ts",
+    "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p packages/web",
+    "test": "node --experimental-strip-types --test packages/*/tests/*.test.ts packages/*/*/tests/*.test.ts scripts/tests/*.test.ts",
     "check": "npm run typecheck && npm run test",
     "ingest:ofac": "node --experimental-strip-types scripts/ingest-ofac-sdn.ts",
     "dev:explorer": "npm run dev --workspace packages/features/explorer",

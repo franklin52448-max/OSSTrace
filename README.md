@@ -8,6 +8,14 @@ proprietary platforms. Nothing here is a copy of any specific product, its name,
 its data — it's an independent, from-scratch build of the same *idea*: on-chain transparency
 tooling, open for anyone to run, audit, or extend.
 
+## The goal
+
+**Build and keep public, forever, the largest openly-licensed labeled wallet/entity database that
+exists** — every entry real, every entry sourced, free for anyone to use without asking
+permission. That's not a feature of this project, it's the point of it. See
+[ADR 0005](docs/adr/0005-public-labeled-database-is-the-goal.md) for where that data is allowed to
+come from (and the one place it explicitly never comes from).
+
 ## The two rules everything else follows
 
 **1. A label without a cited, public source is not a label — it's a guess, and it doesn't go in.**

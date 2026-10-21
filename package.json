@@ -23,7 +23,8 @@
     "dev:visualizer": "npm run dev --workspace packages/features/visualizer",
     "dev:web": "npm run dev --workspace packages/web",
     "dev:accounts": "npm run dev --workspace packages/features/accounts",
-    "dev:private-labels": "npm run dev --workspace packages/features/private-labels"
+    "dev:private-labels": "npm run dev --workspace packages/features/private-labels",
+    "dev:community-labels": "npm run dev --workspace packages/features/community-labels"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

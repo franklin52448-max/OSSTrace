@@ -35,9 +35,11 @@ The web UI calls it at `VITE_VISUALIZER_URL` (default `http://localhost:5302`).
   has to be registered in two places, and they would drift. The right long-term fix is to move
   `registry.ts` and `bootstrap.ts` into a shared package. That wasn't done here because it
   rewrites Explorer while other branches are changing it, so it's left as a follow-up.
-- **The only chain-aware code here** is `src/addressFormat.ts`. Ethereum addresses are lowercased
-  so a checksummed and a lowercase form become one node. There is also an "is this a real address
-  for this chain" check (see below). A third chain needs one line there.
+- **The only chain-aware code here** is the address-shape check, which now lives in
+  `@opentrace/core` (`packages/core/src/addressFormat.ts`, re-exported by this package's
+  `src/addressFormat.ts`) because community label submissions need the same check. Ethereum
+  addresses are lowercased so a checksummed and a lowercase form become one node. There is also an
+  "is this a real address for this chain" check (see below). A third chain needs one line there.
 
 ## API
 

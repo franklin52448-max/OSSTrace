@@ -20,3 +20,6 @@ __pycache__/
 .DS_Store
 # Accounts file (password hashes + emails) and any other per-user data -- never commit.
 data/private/
+# Community label submissions written by a running instance (links account ids to submissions).
+# Runtime data for that instance, not repo seed data -- see ADR 0007.
+data/community/

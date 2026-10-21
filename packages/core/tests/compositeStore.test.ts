@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CompositeLabelStore, JsonFileLabelStore } from "../src/store.ts";
-import type { Address, Label, Tag } from "../src/types.ts";
+import { isSubmittedLabel, type Address, type Label, type Tag } from "../src/types.ts";
 
 const addr: Address = { chain: "ethereum", value: "0xabc" };
 const sourceA = { description: "Source A", url: "https://example.org/a", addedAt: "2026-10-21" };
@@ -43,4 +43,38 @@ test("CompositeLabelStore falls through to a later store when earlier ones have 
 
 test("CompositeLabelStore rejects an empty store list", () => {
   assert.throws(() => new CompositeLabelStore([]));
+});
+
+test("lowerPriorityReaders are consulted after every store and never written to", async () => {
+  await withTwoStores(async (a, b) => {
+    // `b` stands in for a read-only source (e.g. community submissions): passed as a reader only.
+    const store = new CompositeLabelStore([a], [b]);
+    assert.equal((await store.getLabel(addr))?.name, "From A", "a store's label wins over a lower-priority reader");
+    assert.deepEqual((await store.getTags(addr)).map((t) => t.source.description), ["Source A", "Source B"]);
+
+    const onlyInB: Address = { chain: "ethereum", value: "0xfeed" };
+    await b.addLabel({ address: onlyInB, name: "Only in B", confidence: "predicted", source: sourceB });
+    assert.equal((await store.getLabel(onlyInB))?.name, "Only in B", "falls through to the reader");
+
+    const written: Address = { chain: "ethereum", value: "0xbeef" };
+    await store.addLabel({ address: written, name: "Written", confidence: "verified", source: sourceA });
+    assert.equal((await a.getLabel(written))?.name, "Written", "writes go to the first store");
+    assert.equal(await b.getLabel(written), null, "a lower-priority reader is never written to");
+  });
+});
+
+test("isSubmittedLabel distinguishes ingested labels (no reviewStatus) from community/confirmed ones", () => {
+  const ingested: Label = { address: addr, name: "Ingested", confidence: "verified", source: sourceA };
+  const submitted = { submissionId: "s1", submittedBy: "u1", submittedAt: "2026-10-21T12:00:00.000Z" };
+  const community: Label = { ...ingested, ...submitted, reviewStatus: "community" };
+  const confirmed: Label = {
+    ...ingested,
+    ...submitted,
+    reviewStatus: "confirmed",
+    confirmedBy: "u2",
+    confirmedAt: "2026-10-21T13:00:00.000Z",
+  };
+  assert.equal(isSubmittedLabel(ingested), false);
+  assert.equal(isSubmittedLabel(community), true);
+  assert.equal(isSubmittedLabel(confirmed), true);
 });

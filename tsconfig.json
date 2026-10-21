@@ -7,6 +7,7 @@
     { "path": "packages/features/explorer" },
     { "path": "packages/features/accounts" },
     { "path": "packages/features/visualizer" },
-    { "path": "packages/features/private-labels" }
+    { "path": "packages/features/private-labels" },
+    { "path": "packages/features/community-labels" }
   ]
 }

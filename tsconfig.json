@@ -1,17 +1,5 @@
 {
-  "compilerOptions": {
-    "target": "ES2023",
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "declaration": true,
-    "composite": true,
-    "verbatimModuleSyntax": true
-  },
+  "files": [],
   "references": [
     { "path": "packages/core" },
     { "path": "packages/chains/ethereum" },

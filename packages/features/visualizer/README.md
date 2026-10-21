@@ -152,10 +152,12 @@ selector (5 / 10 / 25 / 50) for this reason.
   merge that graph into the current one. A real expanding graph, where you click a node and its
   counterparties are added in place, needs a merge model, a hop limit, and a per-click call budget.
   It's the natural next step and the base of the Tracer.
-- **Native-token transfers only.** That's all the chain adapters report today: no ERC-20, no SPL
-  (see the Wave 1 decode items in `ROADMAP.md`). Token transfers show up under `omitted` as
-  unresolved, or not at all on Ethereum, because Etherscan's `txlist` holds native transactions
-  only.
+- **Decoded ERC-20 and SPL token transfers are drawn as their own edges** (`kind: "token"`),
+  alongside a transaction's native-currency edge when both exist. A transaction only lands in
+  `omitted` when the chain adapter couldn't decode a native transfer *or* any token transfer from
+  it — e.g. a DeFi/program interaction neither decoder recognizes yet. Not every "unresolved"
+  address is doing something suspicious; a lot of real on-chain activity (swaps, staking, PDAs)
+  just isn't a plain transfer of anything.
 - **No caching.** Explorer caches lookups and Visualizer doesn't yet. Each request reaches the
   chain adapter.
 - **No pagination or time window.** You get only "the most recent `limit` transactions".

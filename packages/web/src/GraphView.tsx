@@ -43,7 +43,9 @@ interface GraphEdge {
   source: string;
   target: string;
   direction: "in" | "out";
+  kind: "native" | "token";
   valueNative: string;
+  token?: { address: string | null; symbol: string | null; amount: string | null; rawAmount: string };
   timestamp: string;
 }
 interface OmittedTransaction {
@@ -608,7 +610,9 @@ function NodePanel({ node, report, onRecenter }: { node: GraphNode; report: Grap
                     </a>
                     <span className={incoming ? "shrink-0 text-emerald-400" : "shrink-0 text-orange-400"}>
                       {incoming ? "+" : "-"}
-                      {e.valueNative} {symbol}
+                      {e.kind === "token" && e.token
+                        ? (e.token.amount ?? `${e.token.rawAmount} raw units`) + " " + (e.token.symbol ?? short(e.token.address ?? "unknown token"))
+                        : `${e.valueNative} ${symbol}`}
                     </span>
                   </div>
                   <div className="text-[11px] text-neutral-500">

@@ -97,6 +97,85 @@ test("deriveGraph: Ethereum addresses are merged case-insensitively (checksummed
   assert.equal(g.edges.length, 2);
 });
 
+function tokenTransfer(
+  direction: "in" | "out" | "self",
+  counterparty: string | null,
+  amount: string,
+): NonNullable<TransactionSummary["tokenTransfers"]>[number] {
+  return {
+    token: "0xToken000000000000000000000000000000001",
+    symbol: "USDC",
+    name: "USD Coin",
+    decimals: 6,
+    rawAmount: `${Number(amount) * 1_000_000}`,
+    amount,
+    from: direction === "out" ? CENTER : counterparty,
+    to: direction === "out" ? counterparty : CENTER,
+    direction,
+  };
+}
+
+test("deriveGraph: a token-only transaction (no resolvable native leg) still draws a token edge, not omitted", () => {
+  // Real shape: an ERC-20-only transfer reports as "self" at the native level (no native value
+  // moved involving this address as a plain transfer) but carries a real decoded token leg.
+  const tx: TransactionSummary = { ...ethTx("0xtok1", CENTER, CENTER, "0", "self"), tokenTransfers: [tokenTransfer("out", BOB, "100.5")] };
+  const g = deriveGraph({ chain: "ethereum", value: CENTER }, [tx]);
+
+  assert.deepEqual(g.omitted, []);
+  assert.deepEqual(g.counterpartyIds, [BOB]);
+  assert.equal(g.edges.length, 1);
+  const edge = g.edges[0]!;
+  assert.equal(edge.kind, "token");
+  assert.equal(edge.source, CENTER);
+  assert.equal(edge.target, BOB);
+  assert.equal(edge.valueNative, "0");
+  assert.deepEqual(edge.token, { address: "0xToken000000000000000000000000000000001", symbol: "USDC", amount: "100.5", rawAmount: "100500000" });
+});
+
+test("deriveGraph: a transaction with both a resolved native leg and a token transfer draws both edges", () => {
+  const tx: TransactionSummary = { ...ethTx("0xboth", CENTER, ALICE, "1", "out"), tokenTransfers: [tokenTransfer("out", ALICE, "50")] };
+  const g = deriveGraph({ chain: "ethereum", value: CENTER }, [tx]);
+
+  assert.deepEqual(g.omitted, []);
+  assert.equal(g.edges.length, 2);
+  assert.deepEqual(
+    g.edges.map((e) => [e.id, e.kind]),
+    [
+      ["0xboth", "native"],
+      ["0xboth#1", "token"],
+    ],
+  );
+  // Only the native leg counts toward native totals — the token amount is a different currency.
+  assert.deepEqual(g.stats.get(CENTER), { txCount: 2, inCount: 0, outCount: 2, totalIn: "0", totalOut: "1" });
+});
+
+test("deriveGraph: a token transfer whose own counterparty is unresolved or self is skipped, not invented", () => {
+  const txSelf: TransactionSummary = { ...ethTx("0xselftok", CENTER, CENTER, "0", "self"), tokenTransfers: [tokenTransfer("self", null, "5")] };
+  const txUnresolved: TransactionSummary = { ...ethTx("0xnotok", CENTER, CENTER, "0", "self"), tokenTransfers: [tokenTransfer("out", null, "5")] };
+  const g = deriveGraph({ chain: "ethereum", value: CENTER }, [txSelf, txUnresolved]);
+
+  assert.deepEqual(g.edges, []);
+  assert.deepEqual(
+    g.omitted.map((o) => o.hash),
+    ["0xselftok", "0xnotok"],
+  );
+});
+
+test("deriveGraph: two token transfers in one transaction both draw, with unique edge ids", () => {
+  const tx: TransactionSummary = {
+    ...ethTx("0xswap", CENTER, CENTER, "0", "self"),
+    tokenTransfers: [tokenTransfer("out", ALICE, "10"), tokenTransfer("in", BOB, "20")],
+  };
+  const g = deriveGraph({ chain: "ethereum", value: CENTER }, [tx]);
+
+  assert.deepEqual(g.omitted, []);
+  assert.deepEqual(
+    g.edges.map((e) => e.id),
+    ["0xswap", "0xswap#1"],
+  );
+  assert.deepEqual(g.counterpartyIds.sort(), [ALICE, BOB].sort());
+});
+
 test("deriveGraph: self-transfers, contract creations, and unresolved counterparties are omitted, never invented", () => {
   const txs = [
     ethTx("0xself", CENTER, CENTER, "1", "self"),

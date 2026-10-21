@@ -49,3 +49,13 @@
   It was caught only because the Visualizer's edge for the same address changed between two
   identical queries. Fix: pair by `transaction.signatures[0]`. Rule: match any batched RPC result
   by id or content, never by position.
+- **Parallel agents merging cleanly (no git conflicts, full typecheck/test pass) doesn't mean
+  the features actually work together.** Wave 1's "decode SPL/ERC-20 token transfers" and "build
+  the Visualizer" agents ran in parallel and couldn't see each other's work; the merge itself was
+  conflict-free because they touched different files. But the Visualizer's graph-building code was
+  written against `TransactionSummary` *before* `tokenTransfers` existed, so it only ever looked at
+  the native-transfer fields — any transaction that was a token transfer (not native) silently
+  showed as "counterparty-unresolved" in the graph, for weeks of merged-and-passing CI, until a
+  live user report caught it. A clean merge only proves the *types* line up, not that one feature
+  actually consumes what another one now produces — that needs an explicit integration check (or a
+  real end-to-end try against live data) after merging parallel work, not just `npm run check`.

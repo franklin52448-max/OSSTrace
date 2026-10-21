@@ -55,12 +55,17 @@ folders, separate agents, same plugin architecture that made this possible in th
 
 ## Wave 2 — after accounts lands
 
-- [ ] **Label trust tiers** (ADR 0004): add `reviewStatus` to `Label`, build the Confirmed-tier
-      moderation workflow, wire a "confirmed" badge into the web UI
+- [x] **Label trust tiers** (ADR 0004): add `reviewStatus` to `Label`, build the Confirmed-tier
+      moderation workflow, wire a "confirmed" badge into the web UI — done in
+      `packages/features/community-labels/` + the web UI's login, "Suggest a label" and Moderation
+      tab; design in [ADR 0007](docs/adr/0007-community-label-submissions-and-review.md)
+      (ingested labels carry no `reviewStatus`; moderators can't review their own submissions)
+  - [ ] Before any public deployment: rate limiting on submissions (ADR 0007 "Deferred")
 - [x] **Private labels**: per-user, unshared, no source requirement (mirrors Arkham's own
       private-by-default model per ADR 0004) — `packages/features/private-labels/` (API +
-      adversarial cross-user isolation tests) and a private-label panel + log-in/sign-up form in
-      the web UI. "Share as a Community label" is not built.
+      adversarial cross-user isolation tests) and a private-label panel in the web UI, sharing the
+      same login session as the Community/Confirmed tiers above. "Share as a Community label" is
+      not built.
 
 ## Wave 3 — next features
 

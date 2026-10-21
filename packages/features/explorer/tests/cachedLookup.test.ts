@@ -136,3 +136,25 @@ test("a default-limit lookup uses the same cache key the background indexer refr
     assert.equal(adapter.txCalls, 1);
   });
 });
+
+test("a cache hit still re-reads labels, so a label added or changed after caching shows immediately", async () => {
+  await withTempStore(async (storePath) => {
+    const store = new JsonFileLabelStore(storePath);
+    const cache = new InMemoryCache();
+    const adapter = new CountingAdapter();
+    const address: Address = { chain: "ethereum", value: "0xabc" };
+
+    const first = await cachedLookupAddress(address, adapter, store, cache);
+    assert.equal(first.label, null);
+
+    await store.addLabel({
+      address,
+      name: "Added after caching",
+      confidence: "verified",
+      source: { description: "test source", url: "https://example.org/source", addedAt: "2026-10-21" },
+    });
+    const second = await cachedLookupAddress(address, adapter, store, cache);
+    assert.equal(adapter.balanceCalls, 1, "chain data still came from the cache");
+    assert.equal(second.label?.name, "Added after caching", "but the label is fresh");
+  });
+});

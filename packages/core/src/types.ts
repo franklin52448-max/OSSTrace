@@ -35,12 +35,72 @@ export interface Source {
 
 export type Confidence = "verified" | "predicted";
 
-/** At most one Label per Address (mirrors the model confirmed from Arkham's public API docs). */
-export interface Label {
+/**
+ * Moderation state of a label a *person* submitted (ADR 0004 tiers 1–2, ADR 0007):
+ * - `community` — submitted by a logged-in user with a cited source, shown as-is, not yet reviewed.
+ * - `confirmed` — a moderator reviewed the submission and its source and confirmed it.
+ *
+ * Deliberately separate from `confidence`, which says how strongly the *source* supports the claim
+ * (stated outright vs inferred). `reviewStatus` says whether a human moderator has checked it.
+ */
+export type ReviewStatus = "community" | "confirmed";
+
+/** A user account id (`UserId` in `@opentrace/accounts`): an opaque UUID, never an email. */
+export type AccountId = string;
+
+interface LabelFields {
   address: Address;
   name: string;
   confidence: Confidence;
   source: Source;
+}
+
+/**
+ * A label produced by an ingestion script (`scripts/ingest-*.ts`) straight from an official,
+ * published source (a government sanctions list, a protocol's own deployment registry). Nobody
+ * submitted it and nobody moderates it: its authority is the cited publisher, and it's refreshed
+ * by re-running the script, not by review. So it has **no** `reviewStatus` at all — the type
+ * forbids one. "Ingested" is not "unreviewed"; see ADR 0007 for why these aren't forced into
+ * `community` or `confirmed`.
+ */
+export interface IngestedLabel extends LabelFields {
+  reviewStatus?: never;
+}
+
+/** A person submitted this through the community label pipeline; not yet reviewed. */
+export interface CommunityLabel extends LabelFields {
+  reviewStatus: "community";
+  /** The submission record this label comes from (`@opentrace/community-labels`). */
+  submissionId: string;
+  submittedBy: AccountId;
+  /** ISO 8601 timestamp. */
+  submittedAt: string;
+}
+
+/** A community submission a moderator has reviewed and confirmed. */
+export interface ConfirmedLabel extends LabelFields {
+  reviewStatus: "confirmed";
+  submissionId: string;
+  submittedBy: AccountId;
+  submittedAt: string;
+  /** The moderator (or admin) who confirmed it — never the submitter themself. */
+  confirmedBy: AccountId;
+  /** ISO 8601 timestamp. */
+  confirmedAt: string;
+}
+
+/** Any label that came from a person rather than an ingestion script. */
+export type SubmittedLabel = CommunityLabel | ConfirmedLabel;
+
+/**
+ * At most one Label per Address (mirrors the model confirmed from Arkham's public API docs).
+ * Every variant carries a `source` (ADR 0002) — a community submission included.
+ */
+export type Label = IngestedLabel | SubmittedLabel;
+
+/** True for labels a person submitted (they carry `reviewStatus`); false for ingested ones. */
+export function isSubmittedLabel(label: Label): label is SubmittedLabel {
+  return label.reviewStatus === "community" || label.reviewStatus === "confirmed";
 }
 
 /** Independent of labeling — an address can be tagged without being labeled. */

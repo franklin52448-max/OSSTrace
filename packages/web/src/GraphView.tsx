@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChainId } from "@opentrace/core";
 import { forceLayout, type Point } from "./layout.ts";
+import { ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
 
 const VISUALIZER_URL = import.meta.env["VITE_VISUALIZER_URL"] ?? "http://localhost:5302";
 
@@ -10,11 +11,7 @@ interface Source {
   url: string;
   addedAt: string;
 }
-interface Label {
-  name: string;
-  confidence: "verified" | "predicted";
-  source: Source;
-}
+type Label = LabelView;
 interface Tag {
   tag: string;
   source: Source;
@@ -534,10 +531,12 @@ function NodePanel({ node, report, onRecenter }: { node: GraphNode; report: Grap
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{node.label.name}</span>
             <span className="rounded bg-neutral-800 px-2 py-0.5 text-xs text-neutral-400">{node.label.confidence}</span>
+            <ReviewBadge label={node.label} />
           </div>
           <a href={node.label.source.url} target="_blank" rel="noreferrer" className="mt-1 block text-xs text-neutral-500 hover:text-neutral-300">
             Source: {node.label.source.description} · added {node.label.source.addedAt}
           </a>
+          <SubmissionByline label={node.label} />
         </div>
       ) : (
         <div className="text-xs text-neutral-500">No label on record.</div>

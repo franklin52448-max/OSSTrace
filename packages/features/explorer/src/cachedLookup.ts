@@ -26,6 +26,11 @@ export function reportCacheKey(address: Address, txLimit: number): string {
  * indexer knows what's actually in demand), and a cache hit never touches the chain adapter at
  * all. This is the "instant loading" fix from SCALING-AND-COSTS.md — see that file (local only)
  * for the reasoning.
+ *
+ * Only the *chain* data (balance, transactions) is served from cache. Label/tags/entity are
+ * re-read from the label store on every lookup, cache hit or not: they're cheap local reads, and
+ * community labels change at human speed through moderation — a label confirmed or rejected a
+ * second ago must not keep showing its old state for the rest of the cache TTL.
  */
 export async function cachedLookupAddress(
   address: Address,
@@ -39,7 +44,9 @@ export async function cachedLookupAddress(
   const key = reportCacheKey(address, txLimit);
   const cached = await cache.get(key);
   if (cached) {
-    return JSON.parse(cached) as AddressReport;
+    const report = JSON.parse(cached) as AddressReport;
+    const [label, tags, entity] = await Promise.all([store.getLabel(address), store.getTags(address), store.getEntity(address)]);
+    return { ...report, label, tags, entity };
   }
 
   const report = await lookupAddress(address, adapter, store, txLimit);

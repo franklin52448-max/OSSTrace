@@ -1,10 +1,18 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { addressKey, type Address, type Entity, type Label, type Tag } from "./types.ts";
 
-export interface LabelStore {
+/**
+ * The read half of a label store — all a lookup needs. A source that must never be written
+ * through the generic `addLabel` path (community submissions, which only enter through the
+ * submit → review workflow in `@opentrace/community-labels`) implements just this.
+ */
+export interface LabelReader {
   getLabel(address: Address): Promise<Label | null>;
   getTags(address: Address): Promise<Tag[]>;
   getEntity(address: Address): Promise<Entity | null>;
+}
+
+export interface LabelStore extends LabelReader {
   addLabel(label: Label): Promise<void>;
   addTag(tag: Tag): Promise<void>;
   addEntity(entity: Entity): Promise<void>;
@@ -97,21 +105,27 @@ export class JsonFileLabelStore implements LabelStore {
  * priority: getLabel/getEntity return the first store's match (the store holds at most one Label
  * per address); getTags returns every store's tags, so an address listed by two sources keeps both
  * citations. Writes go to the first store.
+ *
+ * `lowerPriorityReaders` are read-only sources consulted after every store — so an official
+ * dataset's label always wins over them — and never written to. Community label submissions plug
+ * in here: they can only enter through their own submit → review workflow, never `addLabel`.
  */
 export class CompositeLabelStore implements LabelStore {
-  readonly #stores: LabelStore[];
+  readonly #writable: LabelStore[];
+  readonly #readers: LabelReader[];
 
-  constructor(stores: LabelStore[]) {
+  constructor(stores: LabelStore[], lowerPriorityReaders: LabelReader[] = []) {
     if (stores.length === 0) throw new Error("CompositeLabelStore needs at least one store");
-    this.#stores = stores;
+    this.#writable = stores;
+    this.#readers = [...stores, ...lowerPriorityReaders];
   }
 
   get #primary(): LabelStore {
-    return this.#stores[0] as LabelStore;
+    return this.#writable[0] as LabelStore;
   }
 
   async getLabel(address: Address): Promise<Label | null> {
-    for (const store of this.#stores) {
+    for (const store of this.#readers) {
       const label = await store.getLabel(address);
       if (label) return label;
     }
@@ -119,12 +133,12 @@ export class CompositeLabelStore implements LabelStore {
   }
 
   async getTags(address: Address): Promise<Tag[]> {
-    const all = await Promise.all(this.#stores.map((s) => s.getTags(address)));
+    const all = await Promise.all(this.#readers.map((s) => s.getTags(address)));
     return all.flat();
   }
 
   async getEntity(address: Address): Promise<Entity | null> {
-    for (const store of this.#stores) {
+    for (const store of this.#readers) {
       const entity = await store.getEntity(address);
       if (entity) return entity;
     }

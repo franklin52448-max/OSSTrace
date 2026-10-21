@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CompositeLabelStore, InMemoryCache, JsonFileLabelStore, type Cache, type LabelStore } from "@opentrace/core";
+import { CommunityLabelReader, communityLabelsPath, JsonFileSubmissionStore } from "@opentrace/community-labels";
 import { buildRegistry, type RegistryConfig } from "./registry.ts";
 import { RedisCache } from "./redisCache.ts";
 
@@ -36,6 +37,10 @@ const LABEL_DATASETS = ["ofac-sdn.json", "uk-sanctions-list.json", "safe-deploym
 export function buildLabelStore(): LabelStore {
   return new CompositeLabelStore(
     LABEL_DATASETS.map((file) => new JsonFileLabelStore(fileURLToPath(new URL(`../../../../data/labels/${file}`, import.meta.url)))),
+    // Community submissions (ADR 0007) come last: an ingested official label always wins, and this
+    // reader is read-only — community labels only enter through the submit → review workflow.
+    // Re-read on every lookup, so a submission or a moderator's decision shows up immediately.
+    [new CommunityLabelReader(new JsonFileSubmissionStore(communityLabelsPath()))],
   );
 }
 

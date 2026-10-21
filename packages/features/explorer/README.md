@@ -31,6 +31,22 @@ each hot address at `DEFAULT_TX_LIMIT` (25, the API's default when no `?limit=` 
 that same limit-aware key. A lookup with a non-default limit is cached normally for its TTL but
 isn't kept warm by the indexer.
 
+Only **chain data** (balance, transactions) is served from the cache. Label, tags and entity are
+re-read from the label store on every lookup, hit or miss. These are cheap local reads, and
+community labels change through moderation, so a label confirmed or rejected a moment ago shows
+up on the next lookup instead of after the cache TTL.
+
+## Where labels come from
+
+`buildLabelStore()` (`src/bootstrap.ts`) is a `CompositeLabelStore` over every ingested dataset
+in `data/labels/`, in priority order. After those comes a read-only `CommunityLabelReader` over
+community submissions
+([`@opentrace/community-labels`](../community-labels/README.md), ADR 0007). An official source's
+label always wins. A community label comes back with `reviewStatus: "community"` (unreviewed) or
+`"confirmed"` (reviewed by a moderator), plus `submittedBy`/`confirmedBy` account ids. Ingested
+labels have no `reviewStatus`. Reading community labels doesn't need the community-labels server
+running, because the Explorer reads its file (`COMMUNITY_LABELS_PATH`) directly.
+
 Without `REDIS_URL` set, this uses `InMemoryCache` — fine for one process, but **not shared**
 across processes. The background indexer (`src/indexer.ts`) is a separate process that keeps the
 most-looked-up addresses warm on a schedule, which only does anything useful once it shares a

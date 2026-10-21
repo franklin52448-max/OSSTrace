@@ -13,6 +13,7 @@
     "@opentrace/core": "*",
     "@opentrace/chain-ethereum": "*",
     "@opentrace/chain-solana": "*",
+    "@opentrace/community-labels": "*",
     "ioredis": "^6.0.0"
   },
   "devDependencies": {

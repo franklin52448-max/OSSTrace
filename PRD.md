@@ -97,7 +97,7 @@ Storage today is a deliberately simple file-backed JSON store (`JsonFileLabelSto
 
 ## 8. Label Trust Model
 
-**Status: designed and decided (ADR 0004). Private labels implemented; the Community/Confirmed tiers not yet.**
+**Status: tiers 1–2 (Community, Confirmed) implemented (`packages/features/community-labels/`, [ADR 0007](docs/adr/0007-community-label-submissions-and-review.md)), and private labels implemented (`packages/features/private-labels/`). Only tier 3 (self-attested) remains deliberately deferred.** Ingested labels from official sources (OFAC, UK Sanctions List, Safe) sit outside the tiers. They carry no `reviewStatus`, because nobody submitted or reviewed them; their authority is the cited publisher. ADR 0007 explains this decision.
 
 Three tiers are planned, two of which are intended to ship first:
 
@@ -107,7 +107,7 @@ Three tiers are planned, two of which are intended to ship first:
 
 **Private labels** (implemented in `packages/features/private-labels/`, with a panel in the web UI): any signed-in user can label an address for themselves only, never shown to anyone else, with no source requirement since it's not a public claim. This explicitly mirrors Arkham's own private-by-default custom-label model, identified as reasonable prior art worth reusing rather than reinventing differently for no reason. A later "share" action could promote a private label into a public Community submission, which would then need a real source to pass review.
 
-**Shared prerequisite:** both Confirmed-tier moderation and private labels require a real accounts/auth system. That now exists (`packages/features/accounts/`, ADR 0006): self-hosted email + argon2id passwords, opaque server-side sessions, and `user` < `moderator` < `admin` roles. How moderation is granted is resolved there: the operator promotes the first admin from the command line (never over HTTP), and admins then grant `moderator` to others. Private labels are now built on it; the Community/Confirmed tiers are not yet.
+**Shared prerequisite:** both Confirmed-tier moderation and private labels require a real accounts/auth system. That now exists (`packages/features/accounts/`, ADR 0006): self-hosted email + argon2id passwords, opaque server-side sessions, and `user` < `moderator` < `admin` roles. How moderation is granted is resolved there: the operator promotes the first admin from the command line (never over HTTP), and admins then grant `moderator` to others. Both the Community/Confirmed tiers and private labels are now built on top of this. Moderators can't review their own submissions.
 
 ## 9. Success Criteria
 

@@ -17,6 +17,10 @@ directly from Explorer's source.
 - [`private-labels/`](private-labels/README.md) — a signed-in user's own free-text labels on
   addresses (ADR 0004). They're visible only to that user, need no source, and are never merged
   into the public label dataset. Built on `@opentrace/accounts`' `authenticate()`.
+- [`community-labels/`](community-labels/README.md) — logged-in users submit labels with a
+  required cited source; moderators confirm or reject them (ADR 0004 tiers 1–2, ADR 0007).
+  Lookups read the results through a read-only `CommunityLabelReader`, after every ingested
+  dataset.
 - [`visualizer/`](visualizer/README.md) — given a chain + address, returns a one-hop transaction
   graph (center node, one node per direct counterparty, one edge per real transfer, labels/tags on
   every node). Drawn interactively by the web UI's Graph tab.

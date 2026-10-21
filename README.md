@@ -41,6 +41,7 @@ harder for the next contributor to understand, it probably isn't. See
 | Ethereum chain adapter (balance via public RPC; tx history needs a free Etherscan API key) | **Active** |
 | Solana chain adapter (balance + tx history via public RPC, no key needed) | **Active** |
 | Explorer API (`GET /address/:chain/:address` — balance, recent txs, label, tags) | **Active** |
+| Caching + a background indexer (real Redis-backed, keeps popular addresses instant) | **Active** |
 | Minimal web UI (paste an address, see what we know) | **Active** |
 | Seed labelset: OFAC SDN sanctioned digital-currency addresses | **Active** |
 | Visualizer (interactive transaction graph) | Not built |
@@ -101,3 +102,9 @@ open source. See [ADR 0003](docs/adr/0003-license-choice.md) for why.
 Early, in development. Built in one focused session as a real, working vertical slice — not a
 mockup — with a lot of the product surface (Visualizer, Tracer, Risk Scoring, more chains) still
 to build. Contributions welcome once this has a public home.
+
+## More context
+
+[`PRD.md`](PRD.md) — the full product requirements doc (goals, scope, feature inventory, open
+questions). [`LORE.md`](LORE.md) — the positioning/narrative doc: why this exists, what it
+deliberately isn't, and what it's trying to become.

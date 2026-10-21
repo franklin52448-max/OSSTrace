@@ -75,6 +75,25 @@ function summarizeTransaction(
   };
 }
 
+/**
+ * Pairs each requested signature with its parsed transaction BY SIGNATURE, not by array index.
+ * A JSON-RPC batch response may legally come back in any order, and web3.js's
+ * getParsedTransactions returns it in whatever order the server sent it — confirmed against the
+ * real public mainnet RPC (2026-10-21), which returned 2 of 5 transactions swapped. Pairing by
+ * index silently attached one transaction's hash/timestamp to another transaction's transfer.
+ */
+export function matchTransactionsToSignatures(
+  signatures: readonly string[],
+  parsedTxs: readonly (ParsedTransactionWithMeta | null)[],
+): (ParsedTransactionWithMeta | null)[] {
+  const bySignature = new Map<string, ParsedTransactionWithMeta>();
+  for (const tx of parsedTxs) {
+    const signature = tx?.transaction.signatures[0];
+    if (tx && signature) bySignature.set(signature, tx);
+  }
+  return signatures.map((signature) => bySignature.get(signature) ?? null);
+}
+
 export class SolanaAdapter implements ChainAdapter {
   readonly chain = "solana" as const;
   readonly #connection: Connection;
@@ -113,7 +132,11 @@ export class SolanaAdapter implements ChainAdapter {
       { maxSupportedTransactionVersion: 255 },
     );
 
-    const transactions = signatures.map((sigInfo, i) => summarizeTransaction(sigInfo, parsedTxs[i] ?? null, address));
+    const matched = matchTransactionsToSignatures(
+      signatures.map((s) => s.signature),
+      parsedTxs,
+    );
+    const transactions = signatures.map((sigInfo, i) => summarizeTransaction(sigInfo, matched[i] ?? null, address));
     return { available: true, transactions };
   }
 }

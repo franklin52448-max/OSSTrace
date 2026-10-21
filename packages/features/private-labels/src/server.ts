@@ -4,8 +4,8 @@ import { createPrivateLabelsHandler } from "./http.ts";
 
 loadRootEnv();
 
-// 5311: next to the accounts API (5310), clear of 5302+ which worktree dev servers use.
-const PORT = Number(process.env["PRIVATE_LABELS_PORT"] ?? 5311);
+// 5312: next to the accounts API (5310), clear of 5302+ which worktree dev servers use.
+const PORT = Number(process.env["PRIVATE_LABELS_PORT"] ?? 5312);
 
 const handle = createPrivateLabelsHandler(buildPrivateLabelService(), { allowedOrigins: allowedOriginsFromEnv() });
 

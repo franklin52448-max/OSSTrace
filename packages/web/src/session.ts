@@ -10,7 +10,7 @@ import { useSyncExternalStore } from "react";
  */
 
 export const ACCOUNTS_URL = import.meta.env["VITE_ACCOUNTS_URL"] ?? "http://localhost:5310";
-export const PRIVATE_LABELS_URL = import.meta.env["VITE_PRIVATE_LABELS_URL"] ?? "http://localhost:5311";
+export const PRIVATE_LABELS_URL = import.meta.env["VITE_PRIVATE_LABELS_URL"] ?? "http://localhost:5312";
 
 export interface Session {
   token: string;

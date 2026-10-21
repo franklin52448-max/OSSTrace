@@ -17,7 +17,7 @@ any other public label.
 npm run dev:private-labels      # from the repo root
 ```
 
-Listens on `PRIVATE_LABELS_PORT` (default 5311). It needs the accounts API
+Listens on `PRIVATE_LABELS_PORT` (default 5312). It needs the accounts API
 (`npm run dev:accounts`, port 5310) for signup and login, and it authenticates sessions against the
 same accounts file (`ACCOUNTS_STORE_PATH`, default `data/private/accounts.json`). Labels are stored
 in `data/private/private-labels.json`, or wherever `PRIVATE_LABELS_STORE_PATH` points. That folder
@@ -58,7 +58,7 @@ control characters. Each account can hold up to 5,000, which bounds how large th
 file can grow.
 
 ```sh
-curl -X PUT localhost:5311/private-labels/ethereum/0x00000000219ab540356cbb839cbe05303d7705fa \
+curl -X PUT localhost:5312/private-labels/ethereum/0x00000000219ab540356cbb839cbe05303d7705fa \
   -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"label":"my cold wallet"}'
 ```
 

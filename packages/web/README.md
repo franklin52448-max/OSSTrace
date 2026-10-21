@@ -47,7 +47,7 @@ unknown, the exact raw integer amount is shown and labelled as raw units.
 ## Accounts and private labels
 
 These are optional, and both need APIs running: `npm run dev:accounts` (port 5310,
-`VITE_ACCOUNTS_URL`) and `npm run dev:private-labels` (port 5311, `VITE_PRIVATE_LABELS_URL`).
+`VITE_ACCOUNTS_URL`) and `npm run dev:private-labels` (port 5312, `VITE_PRIVATE_LABELS_URL`).
 
 - **`src/AccountBar.tsx`**: a log-in/sign-up form against the real accounts API. When you're signed
   in, it shows your email, a "My private labels" list and "Log out", which revokes the session

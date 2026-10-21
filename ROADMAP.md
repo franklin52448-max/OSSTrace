@@ -32,9 +32,14 @@ folders, separate agents, same plugin architecture that made this possible in th
   - [ ] Implement as its own plugin-shaped package, same pattern as everything else
   - [ ] Real tests, a README, and an ADR recording the design decision
 - [ ] **More label sources** (ADR 0005 — grows the actual mission, doesn't block on anything)
-  - [ ] UK OFSI sanctions list ingestion script (same shape as `scripts/ingest-ofac-sdn.ts`)
+  - [x] UK OFSI sanctions list ingestion script (same shape as `scripts/ingest-ofac-sdn.ts`) —
+        `scripts/ingest-uk-sanctions.ts`; reads the UK Sanctions List, which replaced OFSI's
+        Consolidated List as the single UK source on 28 Jan 2026
   - [ ] EU / UN / Canada SEMA sanctions lists, same pattern
-  - [ ] At least one GitHub-published open exchange/protocol address list, ingested and sourced
+  - [x] At least one GitHub-published open exchange/protocol address list, ingested and sourced —
+        `scripts/ingest-safe-deployments.ts` (Safe's official `safe-global/safe-deployments`)
+  - [ ] A GitHub-published *exchange* address list — none found yet whose data verifiably
+        originates with the exchange itself rather than a scraped labeling platform (ADR 0005)
 - [ ] **Visualizer** (interactive transaction graph — builds directly on today's Explorer data
       layer, no new dependency)
   - [ ] `packages/features/visualizer/` — paste an address, render its transaction graph

@@ -21,6 +21,15 @@ For each signature, this adapter:
    (non-transfer instruction)"` when we can't name the actual counterparty, rather than
    guessing one.
 
+## Why `@solana/web3.js` v1.x, not v3/Kit
+
+Deliberate choice, same reasoning as this machine's `solana-reclaimer` project: v3 is a thin
+legacy bridge over `@solana/kit`'s different (functional, no classes) paradigm, with sparser
+real-world examples. v1.x is still fully functional against mainnet RPC. Known tradeoff: `npm
+audit` flags a moderate-severity transitive issue in v1.x's `jayson`/`stream-json` dependency
+chain, fixed only by the v3 upgrade. Accepted for now — re-evaluate if `@solana/kit` matures, or
+if a non-breaking patch lands upstream.
+
 ## Known limitations (real, disclosed — not hidden)
 
 - SPL token transfers aren't decoded into their own transfer records yet — they currently show up

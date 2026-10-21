@@ -25,7 +25,7 @@ type PanelState =
 export default function PrivateLabelPanel({ chain, address }: { chain: ChainId; address: string }) {
   const session = useSession();
   const path = `/private-labels/${chain}/${encodeURIComponent(address)}`;
-  const token = session?.token ?? null;
+  const token = session.status === "signed-in" ? session.token : null;
   // Fetched state is tagged with the session + address it belongs to, and ignored for any other.
   // Without this, switching accounts on a shared browser would paint the previous user's label
   // for one frame before the refetch — a (brief) cross-user leak.
@@ -43,11 +43,11 @@ export default function PrivateLabelPanel({ chain, address }: { chain: ChainId; 
     setActionError(null);
     if (!token) return;
     let cancelled = false;
-    void apiCall<{ label: PrivateLabel | null }>(PRIVATE_LABELS_URL, "GET", path, { token }).then((res) => {
+    void apiCall<{ label: PrivateLabel | null }>(PRIVATE_LABELS_URL + path, { token }).then((res) => {
       if (cancelled) return;
       setTagged({
         owner: `${token}|${path}`,
-        state: res.ok ? { status: "ready", label: res.body.label } : { status: "error", message: res.error.message },
+        state: res.ok ? { status: "ready", label: res.body.label } : { status: "error", message: res.message },
       });
     });
     return () => {
@@ -68,10 +68,10 @@ export default function PrivateLabelPanel({ chain, address }: { chain: ChainId; 
     if (!token) return;
     setBusy(true);
     setActionError(null);
-    const res = await apiCall<{ label: PrivateLabel }>(PRIVATE_LABELS_URL, "PUT", path, { token, body: { label: draft } });
+    const res = await apiCall<{ label: PrivateLabel }>(PRIVATE_LABELS_URL + path, { method: "PUT", token, body: { label: draft } });
     setBusy(false);
     if (!res.ok) {
-      setActionError(res.error.message);
+      setActionError(res.message);
       return;
     }
     setState({ status: "ready", label: res.body.label });
@@ -83,11 +83,11 @@ export default function PrivateLabelPanel({ chain, address }: { chain: ChainId; 
     if (!token) return;
     setBusy(true);
     setActionError(null);
-    const res = await apiCall(PRIVATE_LABELS_URL, "DELETE", path, { token });
+    const res = await apiCall(PRIVATE_LABELS_URL + path, { method: "DELETE", token });
     setBusy(false);
     // 404 means it was already gone (e.g. removed in another tab) — the end state is the same.
     if (!res.ok && res.status !== 404) {
-      setActionError(res.error.message);
+      setActionError(res.message);
       return;
     }
     setState({ status: "ready", label: null });

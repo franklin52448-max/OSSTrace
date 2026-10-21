@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import type { ChainId } from "@opentrace/core";
 import GraphView from "./GraphView.tsx";
-import AccountBar from "./AccountBar.tsx";
 import PrivateLabelPanel from "./PrivateLabelPanel.tsx";
+import AccountPanel from "./AccountPanel.tsx";
+import ModerationView from "./ModerationView.tsx";
+import { LabelSubmitForm, ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
+import { isModerator, useSession } from "./session.ts";
 
 const EXPLORER_URL = import.meta.env["VITE_EXPLORER_URL"] ?? "http://localhost:5300";
 
@@ -39,16 +42,13 @@ function tokenLabel(t: TokenTransfer): string {
   return t.amount !== null ? `${t.amount} ${unit}` : `${t.rawAmount} raw units of ${unit}`;
 }
 type TransactionsResult = { available: true; transactions: TransactionSummary[] } | { available: false; reason: string };
-interface Label {
-  name: string;
-  confidence: "verified" | "predicted";
-  source: { description: string; url: string; addedAt: string };
-}
+type Label = LabelView;
 interface Tag {
   tag: string;
   source: { description: string; url: string; addedAt: string };
 }
 interface AddressReport {
+  address: { chain: ChainId; value: string };
   balance: Balance;
   transactions: TransactionsResult;
   label: Label | null;
@@ -61,14 +61,17 @@ type LookupState =
   | { status: "error"; message: string }
   | { status: "done"; report: AddressReport; chain: ChainId; address: string };
 
-type View = "lookup" | "graph";
+type View = "lookup" | "graph" | "moderation";
 
 function viewFromHash(): View {
-  return window.location.hash === "#graph" ? "graph" : "lookup";
+  if (window.location.hash === "#graph") return "graph";
+  if (window.location.hash === "#moderation") return "moderation";
+  return "lookup";
 }
 
 export default function App() {
   const [view, setView] = useState<View>(viewFromHash);
+  const session = useSession();
 
   useEffect(() => {
     const onHashChange = () => setView(viewFromHash());
@@ -83,16 +86,18 @@ export default function App() {
         <p className="mt-1 text-sm text-neutral-400">
           Open-source on-chain lookup — real data, sourced labels. No affiliation with any proprietary platform.
         </p>
-
-        <AccountBar />
+        <AccountPanel />
 
         <nav className="mt-5 flex gap-1 border-b border-neutral-800 text-sm" aria-label="Views">
           {(
             [
               { id: "lookup", label: "Lookup", href: "#" },
               { id: "graph", label: "Graph", href: "#graph" },
+              { id: "moderation", label: "Moderation", href: "#moderation" },
             ] as const
-          ).map((tab) => (
+          )
+            .filter((tab) => tab.id !== "moderation" || isModerator(session) || view === "moderation")
+            .map((tab) => (
             <a
               key={tab.id}
               href={tab.href}
@@ -109,7 +114,7 @@ export default function App() {
           ))}
         </nav>
 
-        {view === "graph" ? <GraphView /> : <Lookup />}
+        {view === "graph" ? <GraphView /> : view === "moderation" ? <ModerationView /> : <Lookup />}
       </div>
     </div>
   );
@@ -168,12 +173,42 @@ function Lookup() {
         <div className="mt-6 rounded-md border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">{state.message}</div>
       )}
 
-      {state.status === "done" && <Report report={state.report} chain={state.chain} address={state.address} />}
+      {state.status === "done" && (
+        <Report
+          report={state.report}
+          chain={state.chain}
+          address={state.address}
+          onLabelSubmitted={() => void refresh(state.report)}
+        />
+      )}
     </div>
   );
+
+  /** Re-fetch after a label submission, without blanking the report while it loads. */
+  async function refresh(report: AddressReport): Promise<void> {
+    try {
+      const res = await fetch(`${EXPLORER_URL}/address/${report.address.chain}/${encodeURIComponent(report.address.value)}`);
+      const body = (await res.json()) as AddressReport | { error: string };
+      if (res.ok && !("error" in body)) {
+        setState({ status: "done", report: body, chain: report.address.chain, address: report.address.value });
+      }
+    } catch {
+      // Keep showing the report we have; the next manual lookup will retry.
+    }
+  }
 }
 
-function Report({ report, chain, address }: { report: AddressReport; chain: ChainId; address: string }) {
+function Report({
+  report,
+  chain,
+  address,
+  onLabelSubmitted,
+}: {
+  report: AddressReport;
+  chain: ChainId;
+  address: string;
+  onLabelSubmitted: () => void;
+}) {
   const sanctioned = report.tags.some((t) => t.tag === "sanctioned");
   return (
     <div className="mt-6 space-y-4">
@@ -181,16 +216,20 @@ function Report({ report, chain, address }: { report: AddressReport; chain: Chai
 
       {report.label && (
         <div className="rounded-md border border-neutral-800 bg-neutral-900 px-4 py-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{report.label.name}</span>
             <span className="rounded bg-neutral-800 px-2 py-0.5 text-xs text-neutral-400">{report.label.confidence}</span>
+            <ReviewBadge label={report.label} />
             {sanctioned && <span className="rounded bg-red-900 px-2 py-0.5 text-xs font-medium text-red-200">SANCTIONED</span>}
           </div>
           <a href={report.label.source.url} target="_blank" rel="noreferrer" className="mt-1 block text-xs text-neutral-500 hover:text-neutral-300">
             Source: {report.label.source.description} · added {report.label.source.addedAt}
           </a>
+          <SubmissionByline label={report.label} />
         </div>
       )}
+
+      <LabelSubmitForm chain={report.address.chain} address={report.address.value} onSubmitted={onLabelSubmitted} />
 
       <div className="rounded-md border border-neutral-800 bg-neutral-900 px-4 py-3">
         <div className="text-xs uppercase tracking-wide text-neutral-500">Balance</div>

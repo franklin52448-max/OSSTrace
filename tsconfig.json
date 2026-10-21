@@ -6,6 +6,7 @@
     { "path": "packages/chains/solana" },
     { "path": "packages/features/explorer" },
     { "path": "packages/features/accounts" },
-    { "path": "packages/features/visualizer" }
+    { "path": "packages/features/visualizer" },
+    { "path": "packages/features/private-labels" }
   ]
 }

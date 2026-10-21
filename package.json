@@ -22,7 +22,8 @@
     "dev:indexer": "npm run indexer --workspace packages/features/explorer",
     "dev:visualizer": "npm run dev --workspace packages/features/visualizer",
     "dev:web": "npm run dev --workspace packages/web",
-    "dev:accounts": "npm run dev --workspace packages/features/accounts"
+    "dev:accounts": "npm run dev --workspace packages/features/accounts",
+    "dev:private-labels": "npm run dev --workspace packages/features/private-labels"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

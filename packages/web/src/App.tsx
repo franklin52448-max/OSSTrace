@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ChainId } from "@opentrace/core";
+import GraphView from "./GraphView.tsx";
 
 const EXPLORER_URL = import.meta.env["VITE_EXPLORER_URL"] ?? "http://localhost:5300";
 
@@ -34,7 +35,59 @@ interface AddressReport {
 
 type LookupState = { status: "idle" } | { status: "loading" } | { status: "error"; message: string } | { status: "done"; report: AddressReport };
 
+type View = "lookup" | "graph";
+
+function viewFromHash(): View {
+  return window.location.hash === "#graph" ? "graph" : "lookup";
+}
+
 export default function App() {
+  const [view, setView] = useState<View>(viewFromHash);
+
+  useEffect(() => {
+    const onHashChange = () => setView(viewFromHash());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-neutral-950 text-neutral-100 px-4 py-10">
+      <div className={view === "graph" ? "mx-auto max-w-6xl" : "mx-auto max-w-2xl"}>
+        <h1 className="text-2xl font-semibold">OpenTraceIntelligence</h1>
+        <p className="mt-1 text-sm text-neutral-400">
+          Open-source on-chain lookup — real data, sourced labels. No affiliation with any proprietary platform.
+        </p>
+
+        <nav className="mt-5 flex gap-1 border-b border-neutral-800 text-sm" aria-label="Views">
+          {(
+            [
+              { id: "lookup", label: "Lookup", href: "#" },
+              { id: "graph", label: "Graph", href: "#graph" },
+            ] as const
+          ).map((tab) => (
+            <a
+              key={tab.id}
+              href={tab.href}
+              onClick={() => setView(tab.id)}
+              aria-current={view === tab.id ? "page" : undefined}
+              className={
+                view === tab.id
+                  ? "-mb-px border-b-2 border-emerald-500 px-3 py-2 font-medium text-neutral-100"
+                  : "-mb-px border-b-2 border-transparent px-3 py-2 text-neutral-400 hover:text-neutral-200"
+              }
+            >
+              {tab.label}
+            </a>
+          ))}
+        </nav>
+
+        {view === "graph" ? <GraphView /> : <Lookup />}
+      </div>
+    </div>
+  );
+}
+
+function Lookup() {
   const [chain, setChain] = useState<ChainId>("ethereum");
   const [address, setAddress] = useState("");
   const [state, setState] = useState<LookupState>({ status: "idle" });
@@ -58,43 +111,36 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 px-4 py-10">
-      <div className="mx-auto max-w-2xl">
-        <h1 className="text-2xl font-semibold">OpenTraceIntelligence</h1>
-        <p className="mt-1 text-sm text-neutral-400">
-          Open-source on-chain lookup — real data, sourced labels. No affiliation with any proprietary platform.
-        </p>
+    <div>
+      <form onSubmit={handleSubmit} className="mt-6 flex gap-2">
+        <select
+          value={chain}
+          onChange={(e) => setChain(e.target.value as ChainId)}
+          className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
+        >
+          <option value="ethereum">Ethereum</option>
+          <option value="solana">Solana</option>
+        </select>
+        <input
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          placeholder={chain === "ethereum" ? "0x..." : "a Solana address"}
+          className="flex-1 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
+        />
+        <button
+          type="submit"
+          disabled={state.status === "loading"}
+          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500 disabled:opacity-50"
+        >
+          {state.status === "loading" ? "Looking up..." : "Look up"}
+        </button>
+      </form>
 
-        <form onSubmit={handleSubmit} className="mt-6 flex gap-2">
-          <select
-            value={chain}
-            onChange={(e) => setChain(e.target.value as ChainId)}
-            className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-          >
-            <option value="ethereum">Ethereum</option>
-            <option value="solana">Solana</option>
-          </select>
-          <input
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder={chain === "ethereum" ? "0x..." : "a Solana address"}
-            className="flex-1 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-          />
-          <button
-            type="submit"
-            disabled={state.status === "loading"}
-            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500 disabled:opacity-50"
-          >
-            {state.status === "loading" ? "Looking up..." : "Look up"}
-          </button>
-        </form>
+      {state.status === "error" && (
+        <div className="mt-6 rounded-md border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">{state.message}</div>
+      )}
 
-        {state.status === "error" && (
-          <div className="mt-6 rounded-md border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">{state.message}</div>
-        )}
-
-        {state.status === "done" && <Report report={state.report} />}
-      </div>
+      {state.status === "done" && <Report report={state.report} />}
     </div>
   );
 }

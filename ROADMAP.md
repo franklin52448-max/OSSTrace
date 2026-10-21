@@ -45,10 +45,11 @@ folders, separate agents, same plugin architecture that made this possible in th
         `scripts/ingest-safe-deployments.ts` (Safe's official `safe-global/safe-deployments`)
   - [ ] A GitHub-published *exchange* address list — none found yet whose data verifiably
         originates with the exchange itself rather than a scraped labeling platform (ADR 0005)
-- [ ] **Visualizer** (interactive transaction graph — builds directly on today's Explorer data
+- [x] **Visualizer** (interactive transaction graph — builds directly on today's Explorer data
       layer, no new dependency)
-  - [ ] `packages/features/visualizer/` — paste an address, render its transaction graph
-  - [ ] Real tests, a README
+  - [x] `packages/features/visualizer/` — paste an address, render its transaction graph
+        (v1: one hop only; in-place multi-hop expansion is not built — see its README)
+  - [x] Real tests, a README
 
 ## Wave 2 — after accounts lands
 

@@ -42,3 +42,10 @@
   separator and an address with the next word glued on (`...Bc181Byex`, where `B` is valid hex).
   Matching `0x` + 40 hex naively would silently invent a truncated address; split runs on `0x`
   and drop any piece that isn't exactly 40 hex digits instead.
+- **JSON-RPC batch responses are not guaranteed to come back in request order**, and
+  `@solana/web3.js`'s `getParsedTransactions` passes them through as received. The Solana adapter
+  paired results with signatures by array index. Against the real public mainnet RPC, 2 of 5
+  came back swapped, which silently attached one tx's hash/timestamp to another tx's transfer.
+  It was caught only because the Visualizer's edge for the same address changed between two
+  identical queries. Fix: pair by `transaction.signatures[0]`. Rule: match any batched RPC result
+  by id or content, never by position.

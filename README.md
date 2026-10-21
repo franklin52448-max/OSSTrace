@@ -45,8 +45,8 @@ harder for the next contributor to understand, it probably isn't. See
 | Minimal web UI (paste an address, see what we know) | **Active** |
 | Seed labelset: sanctioned digital-currency addresses (US OFAC SDN + UK Sanctions List) and Safe's official protocol contracts | **Active** |
 | Accounts API (signup/login/sessions, `user`/`moderator`/`admin` roles — [ADR 0006](docs/adr/0006-accounts-and-auth.md)) | **Active** (no login UI, email verification or rate limiting yet) |
+| Visualizer (`GET /graph/:chain/:address` + interactive graph in the web UI) — **v1 is one hop**: the address and its direct counterparties only, native-token transfers only | **Active** |
 | Label trust tiers (Confirmed) + private labels ([ADR 0004](docs/adr/0004-label-trust-tiers-and-private-labels.md)) | Not built (unblocked by accounts) |
-| Visualizer (interactive transaction graph) | Not built |
 | Tracer (hop-by-hop fund tracing across chains/bridges) | Not built |
 | Risk scoring | Not built |
 | Case management | Not built |
@@ -55,7 +55,7 @@ harder for the next contributor to understand, it probably isn't. See
 
 **The honest pitch today**: a real, working address-lookup tool across Ethereum and Solana, with a
 small, genuinely-sourced seed labelset and an architecture built so a new chain or a new feature
-(Visualizer, Tracer, Risk Scoring, ...) can be added as a self-contained module without touching
+(Tracer, Risk Scoring, ...) can be added as a self-contained module without touching
 the core. Everything past the table above is unbuilt — tracked honestly, not hidden.
 
 ## Why the architecture looks like this
@@ -67,7 +67,7 @@ first. Three rules make that true:
 1. **Chains are plugins.** Every chain lives in its own folder under `packages/chains/<chain>/`
    implementing one interface (`ChainAdapter` in `packages/core`). Adding a chain never requires
    touching core or any other chain.
-2. **Features are plugins.** Every feature (Explorer today; Visualizer/Tracer/Risk Scoring later)
+2. **Features are plugins.** Every feature (Explorer and Visualizer today; Tracer/Risk Scoring later)
    lives in its own folder under `packages/features/<feature>/`, consuming the core data model and
    chain adapters, never reaching into another feature's internals.
 3. **Every folder explains itself.** Every package has its own `README.md` stating what it is, how
@@ -89,7 +89,8 @@ npm run ingest:uk      # same for the UK Sanctions List
 npm run ingest:safe    # Safe's official deployment list (Ethereum mainnet contracts)
 npm run check          # typecheck + tests
 npm run dev:explorer   # starts the Explorer API
-npm run dev:web        # starts the web UI, in a second terminal
+npm run dev:visualizer # starts the Visualizer (graph) API, in another terminal
+npm run dev:web        # starts the web UI, in another terminal
 npm run dev:accounts   # optional: the accounts API (see packages/features/accounts/README.md)
 ```
 
@@ -105,7 +106,7 @@ open source. See [ADR 0003](docs/adr/0003-license-choice.md) for why.
 ## Status
 
 Early, in development. Built in one focused session as a real, working vertical slice — not a
-mockup — with a lot of the product surface (Visualizer, Tracer, Risk Scoring, more chains) still
+mockup — with a lot of the product surface (Tracer, Risk Scoring, more chains) still
 to build. Contributions welcome once this has a public home.
 
 ## More context

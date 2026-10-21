@@ -5,6 +5,7 @@
     { "path": "packages/chains/ethereum" },
     { "path": "packages/chains/solana" },
     { "path": "packages/features/explorer" },
-    { "path": "packages/features/accounts" }
+    { "path": "packages/features/accounts" },
+    { "path": "packages/features/visualizer" }
   ]
 }

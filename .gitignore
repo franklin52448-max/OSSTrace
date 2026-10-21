@@ -8,6 +8,7 @@ keys/
 .worktrees/
 NOTES.md
 BRIEF.md
+SCALING-AND-COSTS.md
 node_modules/
 .next/
 dist/

@@ -1,5 +1,5 @@
 {
-  "name": "@opentrace/chain-ethereum",
+  "name": "@osstrace/chain-ethereum",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
-    "@opentrace/core": "*"
+    "@osstrace/core": "*"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

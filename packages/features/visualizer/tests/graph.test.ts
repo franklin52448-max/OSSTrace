@@ -11,7 +11,7 @@ import {
   type ChainId,
   type TransactionSummary,
   type TransactionsResult,
-} from "@opentrace/core";
+} from "@osstrace/core";
 import { buildGraph, deriveGraph } from "../src/graph.ts";
 import { addDecimal } from "../src/decimal.ts";
 

@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 /** A fresh temp dir with an accounts-file path inside it, removed afterwards — real files, no mocks. */
 export async function withTempAccountsFile(run: (path: string) => Promise<void>): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), "opentrace-accounts-test-"));
+  const dir = await mkdtemp(join(tmpdir(), "osstrace-accounts-test-"));
   try {
     await run(join(dir, "accounts.json"));
   } finally {

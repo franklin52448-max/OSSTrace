@@ -123,7 +123,7 @@ async function addressesWithoutCode(rpcUrl: string, addresses: string[]): Promis
 }
 
 async function main(): Promise<void> {
-  const headers = { accept: "application/vnd.github+json", "user-agent": "opentrace-label-ingest" };
+  const headers = { accept: "application/vnd.github+json", "user-agent": "osstrace-label-ingest" };
   const commit = await fetchJson<{ sha: string }>(`${API}/commits/main`, { headers });
   console.log(`safe-global/safe-deployments main is at ${commit.sha}`);
   const tree = await fetchJson<{ tree: Array<{ path: string }>; truncated: boolean }>(`${API}/git/trees/${commit.sha}?recursive=1`, { headers });

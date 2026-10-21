@@ -4,7 +4,7 @@ import { addressKey, type Address, type Entity, type Label, type Tag } from "./t
 /**
  * The read half of a label store — all a lookup needs. A source that must never be written
  * through the generic `addLabel` path (community submissions, which only enter through the
- * submit → review workflow in `@opentrace/community-labels`) implements just this.
+ * submit → review workflow in `@osstrace/community-labels`) implements just this.
  */
 export interface LabelReader {
   getLabel(address: Address): Promise<Label | null>;

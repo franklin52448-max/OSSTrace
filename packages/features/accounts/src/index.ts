@@ -1,5 +1,5 @@
 /**
- * Public API of @opentrace/accounts. Other packages (Wave 2's moderation + private labels) import
+ * Public API of @osstrace/accounts. Other packages (Wave 2's moderation + private labels) import
  * from here only — never from this package's individual source files.
  */
 export * from "./types.ts";

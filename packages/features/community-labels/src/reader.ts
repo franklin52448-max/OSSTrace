@@ -1,4 +1,4 @@
-import type { Address, Entity, LabelReader, SubmittedLabel, Tag } from "@opentrace/core";
+import type { Address, Entity, LabelReader, SubmittedLabel, Tag } from "@osstrace/core";
 import type { SubmissionStore } from "./store.ts";
 import { submissionToLabel, type ConfirmedSubmission, type PendingSubmission } from "./types.ts";
 

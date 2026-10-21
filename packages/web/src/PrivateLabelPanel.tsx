@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ChainId } from "@opentrace/core";
+import type { ChainId } from "@osstrace/core";
 import { apiCall, notifyPrivateLabelsChanged, PRIVATE_LABELS_URL, useSession, type PrivateLabel } from "./session.ts";
 
 export function LockIcon() {

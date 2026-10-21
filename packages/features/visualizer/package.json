@@ -1,5 +1,5 @@
 {
-  "name": "@opentrace/visualizer",
+  "name": "@osstrace/visualizer",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,8 +9,8 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
-    "@opentrace/core": "*",
-    "@opentrace/explorer": "*"
+    "@osstrace/core": "*",
+    "@osstrace/explorer": "*"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

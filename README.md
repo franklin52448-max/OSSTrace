@@ -1,4 +1,4 @@
-# OpenTraceIntelligence
+# OSSTrace
 
 An open-source, multi-chain on-chain intelligence platform: look up an address or entity, see its
 balance and transaction history, and see any **genuinely sourced** label or tag attached to it.

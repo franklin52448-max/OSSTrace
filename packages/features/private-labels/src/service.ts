@@ -1,5 +1,5 @@
-import type { AuthResult, PublicUser } from "@opentrace/accounts";
-import type { ChainId } from "@opentrace/core";
+import type { AuthResult, PublicUser } from "@osstrace/accounts";
+import type { ChainId } from "@osstrace/core";
 import { canonicalAddress, isChainId, SUPPORTED_CHAINS } from "./address.ts";
 import type { PrivateLabelStore } from "./store.ts";
 import {
@@ -11,7 +11,7 @@ import {
 
 /**
  * The only thing this package needs from accounts: "whose session is this?". `AccountService`
- * from `@opentrace/accounts` satisfies it as-is; it's an interface so the dependency is explicit
+ * from `@osstrace/accounts` satisfies it as-is; it's an interface so the dependency is explicit
  * and narrow (this package can never create users, change roles or issue sessions).
  */
 export interface Authenticator {

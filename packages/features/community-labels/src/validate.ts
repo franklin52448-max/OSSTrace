@@ -1,4 +1,4 @@
-import { canonicalAddress, isChainId, isRealAddress, SUPPORTED_CHAINS, type Address, type Confidence } from "@opentrace/core";
+import { canonicalAddress, isChainId, isRealAddress, SUPPORTED_CHAINS, type Address, type Confidence } from "@osstrace/core";
 
 export const NAME_MAX_LENGTH = 120;
 export const DESCRIPTION_MAX_LENGTH = 500;

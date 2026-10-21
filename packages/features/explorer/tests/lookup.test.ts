@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { JsonFileLabelStore, type Address, type Balance, type ChainAdapter, type TransactionsResult } from "@opentrace/core";
+import { JsonFileLabelStore, type Address, type Balance, type ChainAdapter, type TransactionsResult } from "@osstrace/core";
 import { lookupAddress } from "../src/lookup.ts";
 
 /** A real, concrete ChainAdapter implementation for tests — not a mocking framework, a small working stand-in. */

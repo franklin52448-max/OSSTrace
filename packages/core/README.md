@@ -1,4 +1,4 @@
-# @opentrace/core
+# @osstrace/core
 
 The shared data model and plugin interfaces. Every other package imports from here; this package
 imports from nothing chain- or feature-specific.
@@ -16,7 +16,7 @@ imports from nothing chain- or feature-specific.
 
 ## If you're adding a chain or a feature
 
-You don't need to change anything in this package. Import what you need from `@opentrace/core`
+You don't need to change anything in this package. Import what you need from `@osstrace/core`
 and implement/consume the interfaces. If you find yourself wanting to *change* a type here,
 that's a cross-cutting decision — flag it in a PR description or an ADR, since it affects every
 other package.

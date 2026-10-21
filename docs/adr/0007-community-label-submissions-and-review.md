@@ -16,7 +16,7 @@ Building it forced four decisions ADR 0004 left open.
 
 ### 1. `reviewStatus` exists only on labels a person submitted. Ingested labels have none.
 
-`Label` in `@opentrace/core` is now a union:
+`Label` in `@osstrace/core` is now a union:
 
 - `IngestedLabel` — `reviewStatus?: never`. The type forbids the field.
 - `CommunityLabel` — `reviewStatus: "community"`, plus `submissionId`, `submittedBy`, `submittedAt`.
@@ -44,7 +44,7 @@ says what it means, and a label can't be both ingested and reviewed.
 
 ### 2. Submissions live in their own feature package and their own store, not in `data/labels/`
 
-`@opentrace/community-labels` owns the **submission** record (`community` | `confirmed` |
+`@osstrace/community-labels` owns the **submission** record (`community` | `confirmed` |
 `rejected`). A submission isn't the same thing as the label the public sees. It can be
 **rejected** (with a reason the submitter sees), and a rejected submission is never shown as a
 label anywhere. It's only kept so the decision can be audited.
@@ -60,7 +60,7 @@ about contributor submissions.
 
 ### 3. Community labels are read through a read-only `LabelReader`, after every ingested source
 
-`@opentrace/core` gains `LabelReader` (the read half of `LabelStore`), and `CompositeLabelStore`
+`@osstrace/core` gains `LabelReader` (the read half of `LabelStore`), and `CompositeLabelStore`
 takes `lowerPriorityReaders`. These are consulted after every writable store and never written
 to. The Explorer (and through it the Visualizer) plugs in `CommunityLabelReader` there. Two
 consequences:

@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AccountService, JsonFileAccountStore, type PublicUser, type Role } from "@opentrace/accounts";
+import { AccountService, JsonFileAccountStore, type PublicUser, type Role } from "@osstrace/accounts";
 import { LabelSubmissionService } from "../src/service.ts";
 import { JsonFileSubmissionStore } from "../src/store.ts";
 
@@ -40,7 +40,7 @@ export interface Env {
 
 /** Real temp files for both the accounts store and the submissions store, removed afterwards. */
 export async function withEnv(run: (env: Env) => Promise<void>): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), "opentrace-community-labels-test-"));
+  const dir = await mkdtemp(join(tmpdir(), "osstrace-community-labels-test-"));
   try {
     const clock = new TestClock();
     const accounts = new AccountService(new JsonFileAccountStore(join(dir, "accounts.json")));

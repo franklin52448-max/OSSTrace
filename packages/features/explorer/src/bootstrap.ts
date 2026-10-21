@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { CompositeLabelStore, InMemoryCache, JsonFileLabelStore, type Cache, type LabelStore } from "@opentrace/core";
-import { CommunityLabelReader, communityLabelsPath, JsonFileSubmissionStore } from "@opentrace/community-labels";
+import { CompositeLabelStore, InMemoryCache, JsonFileLabelStore, type Cache, type LabelStore } from "@osstrace/core";
+import { CommunityLabelReader, communityLabelsPath, JsonFileSubmissionStore } from "@osstrace/community-labels";
 import { buildRegistry, type RegistryConfig } from "./registry.ts";
 import { RedisCache } from "./redisCache.ts";
 

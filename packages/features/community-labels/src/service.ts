@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 // Type-only: this package never constructs accounts itself (bootstrap.ts does, for the server), so
 // a reader of community labels (the Explorer) doesn't load the accounts runtime just by importing us.
-import type { AccountService, AuthResult, PublicUser } from "@opentrace/accounts";
+import type { AccountService, AuthResult, PublicUser } from "@osstrace/accounts";
 import type { SubmissionStore } from "./store.ts";
 import type { PendingSubmission, Submission, SubmissionResult } from "./types.ts";
 import { parseRejectionReason, parseSubmissionInput } from "./validate.ts";
@@ -29,7 +29,7 @@ function fromAuth(auth: AuthResult<{ user: PublicUser }>): Actor {
  * - a `moderator` (or admin) **confirms** it — it becomes a `confirmed` label — or **rejects** it
  *   with a reason, which removes it from public view.
  *
- * Identity and roles come entirely from `@opentrace/accounts` (`authenticate` / `requireRole`),
+ * Identity and roles come entirely from `@osstrace/accounts` (`authenticate` / `requireRole`),
  * re-checked on every call, so a demoted moderator loses review rights on their next request.
  * Who did what is recorded by account id, never email.
  */

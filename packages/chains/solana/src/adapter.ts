@@ -1,5 +1,5 @@
 import { Connection, PublicKey, type ConfirmedSignatureInfo, type ParsedInstruction, type ParsedTransactionWithMeta } from "@solana/web3.js";
-import type { Balance, ChainAdapter, TransactionSummary, TransactionsResult } from "@opentrace/core";
+import type { Balance, ChainAdapter, TransactionSummary, TransactionsResult } from "@osstrace/core";
 import { decodeSplTransfers } from "./splToken.ts";
 import { lamportsToSol } from "./units.ts";
 

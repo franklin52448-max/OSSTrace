@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { createAccountsHandler } from "@opentrace/accounts";
+import { createAccountsHandler } from "@osstrace/accounts";
 import { createLabelSubmissionsHandler } from "../src/http.ts";
 import { CommunityLabelReader } from "../src/reader.ts";
 import { JsonFileSubmissionStore } from "../src/store.ts";

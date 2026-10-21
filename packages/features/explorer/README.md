@@ -1,4 +1,4 @@
-# @opentrace/explorer
+# @osstrace/explorer
 
 The first feature: given a chain + address, returns its balance, recent transactions, and any
 label/tags/entity on record. Every later feature (Visualizer, Tracer, Risk Scoring) builds on this
@@ -41,7 +41,7 @@ up on the next lookup instead of after the cache TTL.
 `buildLabelStore()` (`src/bootstrap.ts`) is a `CompositeLabelStore` over every ingested dataset
 in `data/labels/`, in priority order. After those comes a read-only `CommunityLabelReader` over
 community submissions
-([`@opentrace/community-labels`](../community-labels/README.md), ADR 0007). An official source's
+([`@osstrace/community-labels`](../community-labels/README.md), ADR 0007). An official source's
 label always wins. A community label comes back with `reviewStatus: "community"` (unreviewed) or
 `"confirmed"` (reviewed by a moderator), plus `submittedBy`/`confirmedBy` account ids. Ingested
 labels have no `reviewStatus`. Reading community labels doesn't need the community-labels server

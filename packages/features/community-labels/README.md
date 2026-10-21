@@ -1,4 +1,4 @@
-# @opentrace/community-labels
+# @osstrace/community-labels
 
 Lets people add labels, and lets moderators review them. This is ADR 0004's tiers 1–2, and the
 design is in [ADR 0007](../../../docs/adr/0007-community-label-submissions-and-review.md).
@@ -10,7 +10,7 @@ design is in [ADR 0007](../../../docs/adr/0007-community-label-submissions-and-r
   (`reviewStatus: "confirmed"`, shown with a ✓ CONFIRMED badge). **Reject**, which needs a reason,
   removes it from public view. Moderators can't review their own submissions.
 
-Identity and roles come from [`@opentrace/accounts`](../accounts/README.md) (`authenticate`,
+Identity and roles come from [`@osstrace/accounts`](../accounts/README.md) (`authenticate`,
 `requireRole(token, "moderator")`). Nothing here re-implements auth.
 
 ## Running it
@@ -83,12 +83,12 @@ Error codes:
   official label always wins for the same address. Otherwise a lookup shows the newest confirmed
   submission, then the newest unreviewed one. Rejected submissions never appear. Labels are re-read
   on every lookup, so a decision shows up immediately even when the chain data comes from cache.
-- **The label shape** is `CommunityLabel` / `ConfirmedLabel` in `@opentrace/core`. Ingested labels
+- **The label shape** is `CommunityLabel` / `ConfirmedLabel` in `@osstrace/core`. Ingested labels
   (`IngestedLabel`) have no `reviewStatus` at all. ADR 0007 explains why.
 - **Mounting elsewhere.** `createLabelSubmissionsHandler(service)` returns `false` for other paths,
   so it can share a server with `createAccountsHandler`.
 
-Import from `@opentrace/community-labels` only.
+Import from `@osstrace/community-labels` only.
 
 ## What's not built yet
 

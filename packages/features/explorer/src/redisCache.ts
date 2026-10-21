@@ -3,7 +3,7 @@
 // itself (a known rough edge of its hand-maintained .d.ts under this resolution mode). The
 // named `Redis` export doesn't have that ambiguity.
 import { Redis } from "ioredis";
-import type { Cache } from "@opentrace/core";
+import type { Cache } from "@osstrace/core";
 
 /**
  * Real Redis-backed Cache — use this once there's more than one API/worker process, so they

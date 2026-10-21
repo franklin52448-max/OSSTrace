@@ -45,7 +45,7 @@ export type Confidence = "verified" | "predicted";
  */
 export type ReviewStatus = "community" | "confirmed";
 
-/** A user account id (`UserId` in `@opentrace/accounts`): an opaque UUID, never an email. */
+/** A user account id (`UserId` in `@osstrace/accounts`): an opaque UUID, never an email. */
 export type AccountId = string;
 
 interface LabelFields {
@@ -70,7 +70,7 @@ export interface IngestedLabel extends LabelFields {
 /** A person submitted this through the community label pipeline; not yet reviewed. */
 export interface CommunityLabel extends LabelFields {
   reviewStatus: "community";
-  /** The submission record this label comes from (`@opentrace/community-labels`). */
+  /** The submission record this label comes from (`@osstrace/community-labels`). */
   submissionId: string;
   submittedBy: AccountId;
   /** ISO 8601 timestamp. */

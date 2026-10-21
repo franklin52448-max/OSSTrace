@@ -1,8 +1,8 @@
 # Features
 
-Each subfolder is a self-contained feature, consuming `@opentrace/core` and the chain registry.
+Each subfolder is a self-contained feature, consuming `@osstrace/core` and the chain registry.
 A feature never reaches into another feature's internals — if Visualizer needs something Explorer
-computes, that logic belongs in `@opentrace/core` (or its own shared package), not borrowed
+computes, that logic belongs in `@osstrace/core` (or its own shared package), not borrowed
 directly from Explorer's source.
 
 ## Currently implemented
@@ -12,11 +12,11 @@ directly from Explorer's source.
   Scoring, Case Management) is meant to build on this same data layer.
 - [`accounts/`](accounts/README.md) — real user accounts: signup/login, server-side sessions,
   `user`/`moderator`/`admin` roles. A foundation package: other features (Confirmed-tier
-  moderation, private labels, Case Management) depend on its public API (`@opentrace/accounts`)
+  moderation, private labels, Case Management) depend on its public API (`@osstrace/accounts`)
   to answer "who is this?" and "may they do this?", rather than each building their own auth.
 - [`private-labels/`](private-labels/README.md) — a signed-in user's own free-text labels on
   addresses (ADR 0004). They're visible only to that user, need no source, and are never merged
-  into the public label dataset. Built on `@opentrace/accounts`' `authenticate()`.
+  into the public label dataset. Built on `@osstrace/accounts`' `authenticate()`.
 - [`community-labels/`](community-labels/README.md) — logged-in users submit labels with a
   required cited source; moderators confirm or reject them (ADR 0004 tiers 1–2, ADR 0007).
   Lookups read the results through a read-only `CommunityLabelReader`, after every ingested
@@ -31,7 +31,7 @@ Read [`../../FEATURE_GUIDELINES.md`](../../FEATURE_GUIDELINES.md) first — the 
 style. Then:
 
 1. `mkdir packages/features/<feature-name>` with the same shape as `explorer/`.
-2. Consume `@opentrace/core` (types, `LabelStore`) and the chain registry pattern from
+2. Consume `@osstrace/core` (types, `LabelStore`) and the chain registry pattern from
    `explorer/src/registry.ts` — don't reinvent chain wiring per feature.
 3. Write a `README.md`: what the feature does, what it exposes (an API? a UI? both?), and what's
    not built yet.

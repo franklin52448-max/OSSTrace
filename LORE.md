@@ -1,4 +1,4 @@
-# OpenTraceIntelligence: Why This Exists
+# OSSTrace: Why This Exists
 
 *A positioning document, not a spec. If you want the architecture, read `ARCHITECTURE.md`. If you want the rules, read `CONTRIBUTING.md` and `FEATURE_GUIDELINES.md`. This is the document for before any of that — what this project is, why it exists, and what it's trying to become.*
 

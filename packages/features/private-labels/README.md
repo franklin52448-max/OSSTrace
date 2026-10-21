@@ -1,11 +1,11 @@
-# @opentrace/private-labels
+# @osstrace/private-labels
 
 Private labels ([ADR 0004](../../../docs/adr/0004-label-trust-tiers-and-private-labels.md)): any
 signed-in user can put their own free-text label on an address, like "my cold wallet" or "scammer
 from discord". **Nobody else ever sees it.** It needs no source, because it isn't a public claim,
 so ADR 0002's sourcing rule doesn't apply. This mirrors Arkham's private-by-default custom labels.
 
-A private label is **not** a `Label` from `@opentrace/core`. It's a separate type in a separate
+A private label is **not** a `Label` from `@osstrace/core`. It's a separate type in a separate
 store, keyed by `(userId, chain, address)`. It never goes into `data/labels/`, the Explorer's
 `/address` response, or the Explorer's Redis cache. Promoting one into a public Community label (a
 "share" action) is not built. If it gets built, the promoted label would need a real source like
@@ -64,13 +64,13 @@ curl -X PUT localhost:5312/private-labels/ethereum/0x00000000219ab540356cbb839cb
 
 ## How it plugs in
 
-- **`@opentrace/accounts`** (public API only): `AccountService.authenticate()` answers "whose
+- **`@osstrace/accounts`** (public API only): `AccountService.authenticate()` answers "whose
   request is this?", and `bearerToken()` reads the header. The service depends on a one-method
   `Authenticator` interface, so this package can't create users, issue sessions or change roles.
   The default path for the accounts file is mirrored in `src/bootstrap.ts` rather than imported,
   because the accounts package doesn't export its resolver. This server only reads that file. It
   never writes it, so the accounts store's one-writer assumption still holds.
-- **`@opentrace/core`**: just the `ChainId` type.
+- **`@osstrace/core`**: just the `ChainId` type.
 - **`createPrivateLabelsHandler(service)`** returns `false` for paths outside `/private-labels`,
   the same mountable shape as `createAccountsHandler`.
 - **Web UI** (`packages/web`): `PrivateLabelPanel.tsx` (per address) and `AccountBar.tsx` (log in

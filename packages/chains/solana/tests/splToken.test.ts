@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { Connection, type ParsedTransactionWithMeta } from "@solana/web3.js";
-import type { TokenTransfer } from "@opentrace/core";
+import type { TokenTransfer } from "@osstrace/core";
 import { SolanaAdapter, summarizeTransaction } from "../src/adapter.ts";
 import { decodeSplTransfers } from "../src/splToken.ts";
 import { liveHistoryOrSkip, liveOrSkip, RPC_URL, rpcReachable } from "./liveRpc.ts";

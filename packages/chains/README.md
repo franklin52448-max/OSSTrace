@@ -1,7 +1,7 @@
 # Chains
 
 Each subfolder here is a self-contained chain integration implementing `ChainAdapter` from
-`@opentrace/core`. Nothing in one chain's folder should ever import from another chain's folder.
+`@osstrace/core`. Nothing in one chain's folder should ever import from another chain's folder.
 
 ## The contract
 
@@ -22,7 +22,7 @@ interface ChainAdapter {
   shape (e.g. a Solana instruction this adapter doesn't decode), say so in the adapter's own
   README rather than guessing.
 - Token movements go in the optional `TransactionSummary.tokenTransfers` (`TokenTransfer` in
-  `@opentrace/core`), never in `valueNative`, which is always the chain's native currency. Omit
+  `@osstrace/core`), never in `valueNative`, which is always the chain's native currency. Omit
   the key entirely when you decoded none. Any `TokenTransfer` field you couldn't resolve from real
   data (decimals, symbol, owner, ...) is `null` — and `amount` is `null` when decimals are unknown.
 

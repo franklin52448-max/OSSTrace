@@ -1,10 +1,10 @@
-import type { AccountId, Address, Confidence, Source, SubmittedLabel } from "@opentrace/core";
+import type { AccountId, Address, Confidence, Source, SubmittedLabel } from "@osstrace/core";
 
 /**
  * The submission data model. See docs/adr/0007-community-label-submissions-and-review.md.
  *
  * A *submission* is the moderation record; a *label* (`CommunityLabel` / `ConfirmedLabel` in
- * `@opentrace/core`) is what the public sees. They differ in one way that matters: a submission
+ * `@osstrace/core`) is what the public sees. They differ in one way that matters: a submission
  * can be `rejected`, and a rejected submission never becomes a label anywhere — it's kept only so
  * its submitter can see why, and so the decision is auditable.
  */
@@ -74,5 +74,5 @@ export type SubmissionErrorCode =
   | "already_reviewed"
   | "own_submission";
 
-/** Same convention as `@opentrace/accounts`: expected failures are values, never thrown. */
+/** Same convention as `@osstrace/accounts`: expected failures are values, never thrown. */
 export type SubmissionResult<T> = ({ ok: true } & T) | { ok: false; error: SubmissionErrorCode; message: string };

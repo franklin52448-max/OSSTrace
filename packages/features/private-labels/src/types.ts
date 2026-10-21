@@ -1,7 +1,7 @@
-import type { ChainId } from "@opentrace/core";
+import type { ChainId } from "@osstrace/core";
 
 /**
- * The private-label data model. A private label is NOT a `Label` from `@opentrace/core`:
+ * The private-label data model. A private label is NOT a `Label` from `@osstrace/core`:
  * it's one person's own note about an address, never part of the public dataset, never shown to
  * anyone else, and it carries no `Source` (ADR 0004 — it isn't a public claim, so ADR 0002's
  * sourcing rule doesn't apply). Keeping it a separate type, in a separate store, is what makes it
@@ -61,5 +61,5 @@ export type PrivateLabelErrorCode =
   | "not_found"
   | "limit_reached";
 
-/** Same shape as `@opentrace/accounts`' `AuthResult`: expected failures are values, never throws. */
+/** Same shape as `@osstrace/accounts`' `AuthResult`: expected failures are values, never throws. */
 export type PrivateLabelResult<T> = ({ ok: true } & T) | { ok: false; error: PrivateLabelErrorCode; message: string };

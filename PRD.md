@@ -1,4 +1,4 @@
-# Product Requirements Document: OpenTraceIntelligence
+# Product Requirements Document: OSSTrace
 
 **Status:** Early development, local-only, not yet pushed to GitHub
 **Last updated:** 2026-10-21
@@ -10,7 +10,7 @@
 
 On-chain intelligence — looking up a wallet address, seeing its transaction history, and knowing whether it belongs to a known entity (an exchange, a sanctioned actor, a hacker) — is one of the most load-bearing tools in crypto investigation, compliance, and research. Today that space is dominated by closed, proprietary platforms. The immediate trigger for this project: Arkham (arkm.com) just launched a paid "Arkham Enterprise" tier and moved previously-free capability behind it.
 
-OpenTraceIntelligence is an independent, from-scratch alternative to the same underlying *idea* — not a copy of Arkham's name, branding, product, or data. It does not reuse, scrape, or derive from any proprietary labelset. It exists to prove that the same category of tool (address lookup, entity labeling, visualization, tracing, risk scoring) can be built and kept genuinely open: free to run, free to audit, free to extend, with every data point checkable against a real public source.
+OSSTrace is an independent, from-scratch alternative to the same underlying *idea* — not a copy of Arkham's name, branding, product, or data. It does not reuse, scrape, or derive from any proprietary labelset. It exists to prove that the same category of tool (address lookup, entity labeling, visualization, tracing, risk scoring) can be built and kept genuinely open: free to run, free to audit, free to extend, with every data point checkable against a real public source.
 
 The problem this solves has two layers:
 
@@ -42,7 +42,7 @@ The problem this solves has two layers:
 
 ## 5. Architecture Summary
 
-OpenTraceIntelligence is a **plugin-shaped monorepo**, organized so that every new capability — a chain or a feature — is an isolated, self-contained addition rather than a change to a shared "god" file.
+OSSTrace is a **plugin-shaped monorepo**, organized so that every new capability — a chain or a feature — is an isolated, self-contained addition rather than a change to a shared "god" file.
 
 - **`packages/core`** is the only place the shared data model and contracts live: the `Address` / `Entity` / `Label` / `Tag` / `Source` types, the `ChainAdapter` interface every chain must implement, and the `LabelStore`/`Cache` interfaces. Core itself contains zero chain-specific or feature-specific logic — it only defines the shapes other packages agree to.
 - **`packages/chains/<chain>`** — one folder per supported blockchain, each implementing the single `ChainAdapter` interface (`getBalance`, `getRecentTransactions`). Adding a new chain never requires touching core or any existing chain's code, beyond one line registering a new `ChainId` and one registry entry in the Explorer feature. This boundary is deliberate: the ADR record notes that even Arkham's own supported-chain list has visibly churned over time, which is read as evidence that chain support is inherently a plugin surface, not something to hardcode.
@@ -125,7 +125,7 @@ No numeric targets (addresses labeled, chains supported, users served, uptime, l
 ## 10. Open Questions / What's Undecided
 
 - **GitHub home.** The project is currently 100% local; nothing has been pushed. The operator is setting up a dedicated GitHub account for this project (separate from other accounts) and will provide it later. Until then, there is no public repository, no public contribution pipeline, and no way for outside contributors to actually participate yet.
-- **Branding/visual identity.** Explicitly not decided in these documents. The operator is getting help from a friend on this separately. No logo, tagline, or visual identity should be invented or assumed by anyone working on this project in the meantime — the name "OpenTraceIntelligence" is the only settled identity element.
+- **Branding/visual identity.** Explicitly not decided in these documents. The operator is getting help from a friend on this separately. No logo, tagline, or visual identity should be invented or assumed by anyone working on this project in the meantime — the name "OSSTrace" is the only settled identity element.
 - **Moderation governance.** *How* moderator authority is granted is decided (ADR 0006: operator CLI creates the first admin; admins grant moderators). *Who* should be a moderator — written criteria, removal, conflicts of interest — is still open, and deferred until there's a contributor community to write that policy with.
 - **Accounts/auth hardening before public use.** The accounts system exists (ADR 0006), but email verification, password reset, login rate limiting and OAuth sign-in are deliberately deferred; the first two need outbound email, the third depends on the (undecided) deployment setup.
 - **Self-attestation (signature-proof wallet ownership).** Deliberately deferred as its own future security-design effort; no design work has started beyond naming it as tier 3 of the trust model.

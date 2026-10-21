@@ -1,4 +1,4 @@
-import type { Address, Balance, ChainAdapter, Entity, Label, LabelStore, Tag, TransactionsResult } from "@opentrace/core";
+import type { Address, Balance, ChainAdapter, Entity, Label, LabelStore, Tag, TransactionsResult } from "@osstrace/core";
 
 export interface AddressReport {
   address: Address;

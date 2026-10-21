@@ -10,7 +10,7 @@ exists to make that true.
 ## Layout
 
 ```
-open-trace-intelligence/
+osstrace/
 ├── packages/
 │   ├── core/              shared types + the ChainAdapter interface + the label/entity store
 │   ├── chains/

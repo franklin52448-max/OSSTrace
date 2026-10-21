@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { addressKey, type AccountId, type Address } from "@opentrace/core";
+import { addressKey, type AccountId, type Address } from "@osstrace/core";
 import type { ConfirmedSubmission, PendingSubmission, RejectedSubmission, Submission, SubmissionStatus } from "./types.ts";
 
 export interface SubmissionFilter {

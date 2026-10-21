@@ -1,5 +1,5 @@
 /**
- * Public API of @opentrace/community-labels. Other packages import from here only.
+ * Public API of @osstrace/community-labels. Other packages import from here only.
  *
  * - The Explorer/Visualizer need only `CommunityLabelReader` + `JsonFileSubmissionStore` +
  *   `communityLabelsPath` to show community/confirmed labels in lookups.

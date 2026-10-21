@@ -1,5 +1,5 @@
 {
-  "name": "@opentrace/explorer",
+  "name": "@osstrace/explorer",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,10 +10,10 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
-    "@opentrace/core": "*",
-    "@opentrace/chain-ethereum": "*",
-    "@opentrace/chain-solana": "*",
-    "@opentrace/community-labels": "*",
+    "@osstrace/core": "*",
+    "@osstrace/chain-ethereum": "*",
+    "@osstrace/chain-solana": "*",
+    "@osstrace/community-labels": "*",
     "ioredis": "^6.0.0"
   },
   "devDependencies": {

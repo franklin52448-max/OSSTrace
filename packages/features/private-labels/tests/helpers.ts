@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AccountService, createAccountsHandler, JsonFileAccountStore } from "@opentrace/accounts";
+import { AccountService, createAccountsHandler, JsonFileAccountStore } from "@osstrace/accounts";
 import { createPrivateLabelsHandler } from "../src/http.ts";
 import { PrivateLabelService } from "../src/service.ts";
 import { JsonFilePrivateLabelStore } from "../src/store.ts";
@@ -20,7 +20,7 @@ export const SOL_ADDR = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
 /** A fresh temp dir holding both real store files, removed afterwards — no mocks. */
 export async function withTempDir(run: (dir: string) => Promise<void>): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), "opentrace-private-labels-test-"));
+  const dir = await mkdtemp(join(tmpdir(), "osstrace-private-labels-test-"));
   try {
     await run(dir);
   } finally {

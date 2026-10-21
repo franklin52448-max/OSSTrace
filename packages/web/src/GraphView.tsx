@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChainId } from "@opentrace/core";
+import type { ChainId } from "@osstrace/core";
 import { forceLayout, type Point } from "./layout.ts";
 import { ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
 

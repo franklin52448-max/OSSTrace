@@ -19,7 +19,7 @@ to keep that true as the project grows, not to slow anyone down for its own sake
    UI working." If something isn't built yet, say so in the feature's own README. A cosmetic
    stand-in that looks real is worse than an honest "not built yet."
 5. **A feature isn't done without a README** in its own folder: what it is, how it plugs into
-   `@opentrace/core` and the chain registry, and what it explicitly doesn't do yet.
+   `@osstrace/core` and the chain registry, and what it explicitly doesn't do yet.
 6. **Update the root README's status table** in the same PR that adds or changes a feature's
    state. "Done" vs "not built" stays accurate by being part of the change, not a follow-up task
    someone forgets.
@@ -34,7 +34,7 @@ to keep that true as the project grows, not to slow anyone down for its own sake
   surprise nulls where an explicit status is clearer, and a README that states the contract
   plainly enough that an agent reading only that file could use the feature correctly.
 - **Don't reach into another feature's internals.** If Visualizer needs something Explorer already
-  computes, that logic belongs in `@opentrace/core` (or a new shared package), not borrowed
+  computes, that logic belongs in `@osstrace/core` (or a new shared package), not borrowed
   directly from `packages/features/explorer/src/`.
 - **Be a good citizen on shared external resources.** If a feature fans out multiple calls per
   request to a public RPC or a rate-limited API, say so in its README (expected call volume per

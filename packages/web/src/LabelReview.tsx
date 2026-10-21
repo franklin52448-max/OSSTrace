@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ChainId } from "@opentrace/core";
+import type { ChainId } from "@osstrace/core";
 import { apiCall, COMMUNITY_LABELS_URL, useSession } from "./session.ts";
 
 /**

@@ -36,7 +36,7 @@ function emptyFile(): AccountsFile {
 }
 
 /**
- * File-backed JSON account store — the same tradeoff as `JsonFileLabelStore` in `@opentrace/core`:
+ * File-backed JSON account store — the same tradeoff as `JsonFileLabelStore` in `@osstrace/core`:
  * a first-time contributor can run the whole system without standing up a database, and swapping
  * this for one later is a same-interface change. Where it deliberately differs from the label
  * store, because this file holds credentials rather than public seed data:

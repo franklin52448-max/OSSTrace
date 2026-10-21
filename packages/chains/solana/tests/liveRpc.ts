@@ -1,6 +1,6 @@
 import type { TestContext } from "node:test";
 import { Connection } from "@solana/web3.js";
-import type { TransactionsResult } from "@opentrace/core";
+import type { TransactionsResult } from "@osstrace/core";
 
 // Shared by the live-network tests in this folder (not itself a test file). Same rule as every
 // live test in this repo: an endpoint we can't use skips the test, it doesn't fail the suite.

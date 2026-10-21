@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { buildAccountService } from "@opentrace/accounts";
+import { buildAccountService } from "@osstrace/accounts";
 import { createLabelSubmissionsHandler } from "./http.ts";
 import { communityLabelsPath } from "./paths.ts";
 import { LabelSubmissionService } from "./service.ts";

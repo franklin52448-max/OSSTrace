@@ -1,4 +1,4 @@
-import type { ChainId } from "@opentrace/core";
+import type { ChainId } from "@osstrace/core";
 
 export const SUPPORTED_CHAINS: readonly ChainId[] = ["ethereum", "solana"];
 

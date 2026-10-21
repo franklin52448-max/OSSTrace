@@ -1,5 +1,5 @@
 {
-  "name": "@opentrace/chain-solana",
+  "name": "@osstrace/chain-solana",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
-    "@opentrace/core": "*",
+    "@osstrace/core": "*",
     "@solana/web3.js": "^1.99.0"
   },
   "devDependencies": {

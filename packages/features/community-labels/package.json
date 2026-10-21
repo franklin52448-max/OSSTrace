@@ -1,5 +1,5 @@
 {
-  "name": "@opentrace/community-labels",
+  "name": "@osstrace/community-labels",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,8 +10,8 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
-    "@opentrace/core": "*",
-    "@opentrace/accounts": "*"
+    "@osstrace/core": "*",
+    "@osstrace/accounts": "*"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

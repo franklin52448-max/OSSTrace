@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { bearerToken } from "@opentrace/accounts";
+import { bearerToken } from "@osstrace/accounts";
 import type { LabelSubmissionService } from "./service.ts";
 import type { SubmissionErrorCode, SubmissionResult } from "./types.ts";
 

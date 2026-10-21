@@ -1,4 +1,4 @@
-import type { TokenTransfer, TransactionSummary, TransferDirection } from "@opentrace/core";
+import type { TokenTransfer, TransactionSummary, TransferDirection } from "@osstrace/core";
 import { formatUnits } from "./units.ts";
 
 /**

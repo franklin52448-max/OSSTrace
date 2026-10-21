@@ -1,4 +1,4 @@
-import { addressKey, type Address, type Cache, type ChainAdapter, type LabelStore } from "@opentrace/core";
+import { addressKey, type Address, type Cache, type ChainAdapter, type LabelStore } from "@osstrace/core";
 import { lookupAddress, type AddressReport } from "./lookup.ts";
 
 /** Short on purpose — this is "recent activity" data, not something that needs to be perfectly live. */

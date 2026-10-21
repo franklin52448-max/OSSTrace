@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AccountService, JsonFileAccountStore } from "@opentrace/accounts";
+import { AccountService, JsonFileAccountStore } from "@osstrace/accounts";
 import { PrivateLabelService } from "./service.ts";
 import { JsonFilePrivateLabelStore } from "./store.ts";
 
@@ -35,7 +35,7 @@ export function privateLabelsStorePath(): string {
  * The accounts file to authenticate sessions against. Must be the same file the accounts API
  * writes, so it honours the same `ACCOUNTS_STORE_PATH` variable with the same default as
  * `packages/features/accounts/src/bootstrap.ts`. (That resolver isn't part of
- * `@opentrace/accounts`' public API, so it's mirrored here rather than imported from its source.)
+ * `@osstrace/accounts`' public API, so it's mirrored here rather than imported from its source.)
  * This server only ever *reads* the accounts file — `authenticate()` never writes — so running it
  * next to the accounts server doesn't break that store's one-writer assumption.
  */

@@ -3,7 +3,7 @@ import { signIn, signOut, useSession } from "./session.ts";
 
 const inputClass = "rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm";
 
-/** Log in / sign up / log out, against the real accounts API (`@opentrace/accounts`). */
+/** Log in / sign up / log out, against the real accounts API (`@osstrace/accounts`). */
 export default function AccountPanel() {
   const session = useSession();
   const [open, setOpen] = useState(false);

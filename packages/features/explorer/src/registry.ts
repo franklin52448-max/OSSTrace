@@ -1,6 +1,6 @@
-import type { ChainAdapter, ChainId } from "@opentrace/core";
-import { EthereumAdapter } from "@opentrace/chain-ethereum";
-import { SolanaAdapter } from "@opentrace/chain-solana";
+import type { ChainAdapter, ChainId } from "@osstrace/core";
+import { EthereumAdapter } from "@osstrace/chain-ethereum";
+import { SolanaAdapter } from "@osstrace/chain-solana";
 
 export interface RegistryConfig {
   ethRpcUrl: string;

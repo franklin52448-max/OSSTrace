@@ -1,4 +1,4 @@
-# @opentrace/chain-solana
+# @osstrace/chain-solana
 
 Implements `ChainAdapter` for Solana mainnet-beta.
 
@@ -44,7 +44,7 @@ never mix: top-level `valueNative` is always SOL, token amounts only ever appear
 every SPL Token **and Token-2022** `transfer` / `transferChecked` instruction, top-level and inner,
 in execution order, and keeps the ones whose source or destination — the token account itself,
 or that account's owner — is the queried address. Each becomes a `TokenTransfer` (type in
-`@opentrace/core`) with:
+`@osstrace/core`) with:
 
 - `token` — the mint. `transferChecked` states it; a plain `transfer` doesn't, so it comes from
   the transaction's own `pre/postTokenBalances` for the accounts involved.

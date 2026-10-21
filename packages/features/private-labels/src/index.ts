@@ -1,5 +1,5 @@
 /**
- * Public API of @opentrace/private-labels. Import from here only — never from individual source files.
+ * Public API of @osstrace/private-labels. Import from here only — never from individual source files.
  */
 export * from "./types.ts";
 export * from "./store.ts";

@@ -11,7 +11,7 @@ const sourceA = { description: "Source A", url: "https://example.org/a", addedAt
 const sourceB = { description: "Source B", url: "https://example.org/b", addedAt: "2026-10-21" };
 
 async function withTwoStores(run: (a: JsonFileLabelStore, b: JsonFileLabelStore) => Promise<void>): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), "opentrace-composite-test-"));
+  const dir = await mkdtemp(join(tmpdir(), "osstrace-composite-test-"));
   try {
     const labelA: Label = { address: addr, name: "From A", confidence: "verified", source: sourceA };
     const labelB: Label = { address: addr, name: "From B", confidence: "verified", source: sourceB };

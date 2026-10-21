@@ -1,6 +1,6 @@
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { ChainId } from "@opentrace/core";
+import type { ChainId } from "@osstrace/core";
 import { PRIVATE_LABELS_PER_USER_LIMIT, type StoredPrivateLabel } from "./types.ts";
 
 export type SetPrivateLabelOutcome =
@@ -47,7 +47,7 @@ function matches(entry: StoredPrivateLabel, userId: string, chain: ChainId, addr
 
 /**
  * File-backed JSON store, built to the same bar as `JsonFileAccountStore` in
- * `@opentrace/accounts` (this file is per-user private data, not public seed data, so the
+ * `@osstrace/accounts` (this file is per-user private data, not public seed data, so the
  * stricter rules apply rather than `JsonFileLabelStore`'s cache-forever approach):
  *
  * - **Re-reads the file on every call**, so two store instances on one file (or a second process)

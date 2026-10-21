@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { bearerToken } from "@opentrace/accounts";
+import { bearerToken } from "@osstrace/accounts";
 import type { PrivateLabelService } from "./service.ts";
 import type { PrivateLabelErrorCode, PrivateLabelResult } from "./types.ts";
 

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { CompositeLabelStore, isSubmittedLabel, JsonFileLabelStore, type Address } from "@opentrace/core";
+import { CompositeLabelStore, isSubmittedLabel, JsonFileLabelStore, type Address } from "@osstrace/core";
 import { CommunityLabelReader } from "../src/reader.ts";
 import { JsonFileSubmissionStore } from "../src/store.ts";
 import { ETH_ADDRESS, validBody, withEnv } from "./helpers.ts";

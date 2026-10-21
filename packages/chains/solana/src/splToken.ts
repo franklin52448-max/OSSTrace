@@ -1,5 +1,5 @@
 import type { ParsedInstruction, ParsedTransactionWithMeta, PartiallyDecodedInstruction } from "@solana/web3.js";
-import type { TokenTransfer, TransferDirection } from "@opentrace/core";
+import type { TokenTransfer, TransferDirection } from "@osstrace/core";
 import { formatTokenAmount } from "./units.ts";
 
 /**

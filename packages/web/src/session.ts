@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * The browser side of `@opentrace/accounts`: one shared login session for every component.
+ * The browser side of `@osstrace/accounts`: one shared login session for every component.
  *
  * The session token is kept in localStorage (so a reload stays logged in) and sent as
  * `Authorization: Bearer …` — never a cookie, so there's no CSRF surface (ADR 0006). The user's
@@ -13,7 +13,7 @@ export const ACCOUNTS_URL: string = import.meta.env["VITE_ACCOUNTS_URL"] ?? "htt
 export const COMMUNITY_LABELS_URL: string = import.meta.env["VITE_COMMUNITY_LABELS_URL"] ?? "http://localhost:5311";
 export const PRIVATE_LABELS_URL: string = import.meta.env["VITE_PRIVATE_LABELS_URL"] ?? "http://localhost:5312";
 
-const STORAGE_KEY = "opentrace.session";
+const STORAGE_KEY = "osstrace.session";
 
 export type Role = "user" | "moderator" | "admin";
 

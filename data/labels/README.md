@@ -1,7 +1,7 @@
 # Label data
 
 This is where real, sourced labels live. See [ADR 0002](../../docs/adr/0002-labels-require-a-cited-source.md)
-for why every entry here has a `source`, enforced by `@opentrace/core`'s types — there is no
+for why every entry here has a `source`, enforced by `@osstrace/core`'s types — there is no
 code path that writes a `Label` or `Tag` without one.
 
 ## What's here today

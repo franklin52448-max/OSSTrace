@@ -1,4 +1,4 @@
-import type { Balance, ChainAdapter, TransactionsResult } from "@opentrace/core";
+import type { Balance, ChainAdapter, TransactionsResult } from "@osstrace/core";
 import { mergeHistory, type EtherscanTokenTx, type EtherscanTx } from "./etherscan.ts";
 import { formatUnits } from "./units.ts";
 

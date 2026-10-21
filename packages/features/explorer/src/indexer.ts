@@ -1,4 +1,4 @@
-import type { Address, ChainId } from "@opentrace/core";
+import type { Address, ChainId } from "@osstrace/core";
 import { buildCache, buildLabelStore, buildRegistryFromEnv, loadRootEnv } from "./bootstrap.ts";
 import { DEFAULT_TX_LIMIT, LOOKUP_POPULARITY_TOPIC, reportCacheKey } from "./cachedLookup.ts";
 import { lookupAddress } from "./lookup.ts";

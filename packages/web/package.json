@@ -1,5 +1,5 @@
 {
-  "name": "@opentrace/web",
+  "name": "@osstrace/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@opentrace/core": "*",
+    "@osstrace/core": "*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

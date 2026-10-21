@@ -10,7 +10,7 @@ import {
   type Balance,
   type ChainAdapter,
   type TransactionsResult,
-} from "@opentrace/core";
+} from "@osstrace/core";
 import { cachedLookupAddress, DEFAULT_TX_LIMIT, LOOKUP_POPULARITY_TOPIC, reportCacheKey } from "../src/cachedLookup.ts";
 
 /** Counts how many times getBalance/getRecentTransactions are actually called, to prove caching works. */

@@ -1,4 +1,4 @@
-import type { Address, ChainAdapter, Entity, Label, LabelStore, Tag, TokenTransfer, TransactionSummary } from "@opentrace/core";
+import type { Address, ChainAdapter, Entity, Label, LabelStore, Tag, TokenTransfer, TransactionSummary } from "@osstrace/core";
 import { canonicalAddress, isRealAddress } from "./addressFormat.ts";
 import { addDecimal, isDecimalString } from "./decimal.ts";
 

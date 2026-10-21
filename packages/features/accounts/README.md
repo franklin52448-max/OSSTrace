@@ -1,4 +1,4 @@
-# @opentrace/accounts
+# @osstrace/accounts
 
 Real user accounts: email + password signup/login, server-side sessions, and roles
 (`user` < `moderator` < `admin`). It's the prerequisite for ADR 0004's Confirmed label tier and
@@ -65,10 +65,10 @@ over 16 KiB). A wrong password and an unknown email both return the same
 
 ## Using it from another package (Wave 2)
 
-Import from `@opentrace/accounts` only. Don't import its individual source files.
+Import from `@osstrace/accounts` only. Don't import its individual source files.
 
 ```ts
-import { AccountService, JsonFileAccountStore, bearerToken } from "@opentrace/accounts";
+import { AccountService, JsonFileAccountStore, bearerToken } from "@osstrace/accounts";
 
 const accounts = new AccountService(new JsonFileAccountStore(path));
 

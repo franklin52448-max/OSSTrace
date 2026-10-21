@@ -1,10 +1,10 @@
 import { createServer, type ServerResponse } from "node:http";
-import type { Address, ChainId } from "@opentrace/core";
+import type { Address, ChainId } from "@osstrace/core";
 // Chain wiring + label store are reused from Explorer's bootstrap rather than duplicated, so a new
 // chain (one line in explorer/src/registry.ts) or a new label file shows up here automatically.
 // This is a deliberate, documented exception to "don't reach into another feature's internals" —
 // see this package's README, "How it plugs in".
-import { buildLabelStore, buildRegistryFromEnv, loadRootEnv } from "@opentrace/explorer/src/bootstrap.ts";
+import { buildLabelStore, buildRegistryFromEnv, loadRootEnv } from "@osstrace/explorer/src/bootstrap.ts";
 import { canonicalAddress, isRealAddress } from "./addressFormat.ts";
 import { buildGraph } from "./graph.ts";
 

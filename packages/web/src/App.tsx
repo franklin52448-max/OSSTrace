@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ChainId } from "@opentrace/core";
+import type { ChainId } from "@osstrace/core";
 import GraphView from "./GraphView.tsx";
 import PrivateLabelPanel from "./PrivateLabelPanel.tsx";
 import AccountPanel from "./AccountPanel.tsx";
@@ -82,7 +82,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 px-4 py-10">
       <div className={view === "graph" ? "mx-auto max-w-6xl" : "mx-auto max-w-2xl"}>
-        <h1 className="text-2xl font-semibold">OpenTraceIntelligence</h1>
+        <h1 className="text-2xl font-semibold">OSSTrace</h1>
         <p className="mt-1 text-sm text-neutral-400">
           Open-source on-chain lookup — real data, sourced labels. No affiliation with any proprietary platform.
         </p>

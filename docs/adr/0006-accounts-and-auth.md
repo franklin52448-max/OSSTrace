@@ -123,7 +123,7 @@ not a code decision — deferred below.
 
 ### 7. Packaging: `packages/features/accounts/`, not `packages/core`
 
-Accounts are a feature package (`@opentrace/accounts`) with a public API (`src/index.ts`) that
+Accounts are a feature package (`@osstrace/accounts`) with a public API (`src/index.ts`) that
 Wave 2 packages import. It's not in `core` because `core` is the chain-intelligence data model
 (Address/Label/Tag/Entity) and has no runtime dependencies; accounts bring a native dependency
 (argon2), file-system persistence and HTTP routes, none of which every chain adapter should carry.

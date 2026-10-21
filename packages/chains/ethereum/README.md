@@ -1,4 +1,4 @@
-# @opentrace/chain-ethereum
+# @osstrace/chain-ethereum
 
 Implements `ChainAdapter` for Ethereum mainnet.
 
@@ -20,7 +20,7 @@ tier's per-second rate limit is shared across both.
 
 ## How ERC-20 transfers are reported
 
-`TransactionSummary` (in `@opentrace/core`) has an optional `tokenTransfers: TokenTransfer[]`.
+`TransactionSummary` (in `@osstrace/core`) has an optional `tokenTransfers: TokenTransfer[]`.
 Decoding and merging live in `src/etherscan.ts` (pure, no network) and work like this:
 
 - **One entry per transaction hash.** `txlist` and `tokentx` are each fetched newest-first with

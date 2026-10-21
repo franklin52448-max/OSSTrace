@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import type { Address, ChainId } from "@opentrace/core";
+import type { Address, ChainId } from "@osstrace/core";
 import { buildCache, buildLabelStore, buildRegistryFromEnv, loadRootEnv } from "./bootstrap.ts";
 import { cachedLookupAddress, DEFAULT_TX_LIMIT } from "./cachedLookup.ts";
 

@@ -1,5 +1,5 @@
 {
-  "name": "open-trace-intelligence",
+  "name": "osstrace",
   "private": true,
   "description": "Open-source, multi-chain on-chain intelligence platform: address/entity lookup, sourced labels, and pluggable chain + feature modules.",
   "license": "AGPL-3.0-only",

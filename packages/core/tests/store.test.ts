@@ -7,7 +7,7 @@ import { JsonFileLabelStore } from "../src/store.ts";
 import type { Address, Label, Tag } from "../src/types.ts";
 
 async function withTempStore(run: (store: JsonFileLabelStore) => Promise<void>): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), "opentrace-store-test-"));
+  const dir = await mkdtemp(join(tmpdir(), "osstrace-store-test-"));
   const path = join(dir, "labels.json");
   try {
     await run(new JsonFileLabelStore(path));
@@ -63,7 +63,7 @@ test("addTag accumulates multiple tags for the same address", async () => {
 });
 
 test("a store persists across separate instances pointed at the same file", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "opentrace-store-test-"));
+  const dir = await mkdtemp(join(tmpdir(), "osstrace-store-test-"));
   const path = join(dir, "labels.json");
   try {
     const label: Label = {

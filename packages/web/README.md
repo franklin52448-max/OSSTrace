@@ -1,4 +1,4 @@
-# @opentrace/web
+# @osstrace/web
 
 Minimal React + Vite + Tailwind UI for the Explorer and Visualizer APIs. Paste a chain + address,
 see its balance, recent transactions, and any sourced label/tags — or switch to the **Graph** tab
@@ -31,7 +31,7 @@ router library.
 
 - **Account** (`src/AccountPanel.tsx`, `src/session.ts`): an email + password log in / sign up form
   backed by the real accounts API. The session token is kept in `localStorage`
-  (`opentrace.session`) and sent as a bearer header. On load the page asks `/accounts/me` who the
+  (`osstrace.session`) and sent as a bearer header. On load the page asks `/accounts/me` who the
   token belongs to, because a role is never trusted from storage. Log out revokes the session
   server-side.
 - **Lookup**: a chain selector, an address input, and a results panel (balance, transactions,

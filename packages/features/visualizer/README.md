@@ -1,4 +1,4 @@
-# @opentrace/visualizer
+# @osstrace/visualizer
 
 Given a chain and an address, returns its recent transactions as a graph. The queried address is
 the center node, each distinct counterparty is its own node, and each real transfer is an edge
@@ -26,7 +26,7 @@ The web UI calls it at `VITE_VISUALIZER_URL` (default `http://localhost:5302`).
 
 ## How it plugs in
 
-- **Chain data:** `ChainAdapter.getRecentTransactions` from `@opentrace/core`. This is exactly one
+- **Chain data:** `ChainAdapter.getRecentTransactions` from `@osstrace/core`. This is exactly one
   call per request. No new chain-level work was needed.
 - **Chain wiring and labels:** reused from Explorer's `bootstrap.ts`
   (`buildRegistryFromEnv`, `buildLabelStore`, `loadRootEnv`) instead of a second copy. This
@@ -36,7 +36,7 @@ The web UI calls it at `VITE_VISUALIZER_URL` (default `http://localhost:5302`).
   `registry.ts` and `bootstrap.ts` into a shared package. That wasn't done here because it
   rewrites Explorer while other branches are changing it, so it's left as a follow-up.
 - **The only chain-aware code here** is the address-shape check, which now lives in
-  `@opentrace/core` (`packages/core/src/addressFormat.ts`, re-exported by this package's
+  `@osstrace/core` (`packages/core/src/addressFormat.ts`, re-exported by this package's
   `src/addressFormat.ts`) because community label submissions need the same check. Ethereum
   addresses are lowercased so a checksummed and a lowercase form become one node. There is also an
   "is this a real address for this chain" check (see below). A third chain needs one line there.

@@ -1,0 +1,26 @@
+{
+  "name": "open-trace-intelligence",
+  "private": true,
+  "description": "Open-source, multi-chain on-chain intelligence platform: address/entity lookup, sourced labels, and pluggable chain + feature modules.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "workspaces": [
+    "packages/core",
+    "packages/chains/*",
+    "packages/features/*",
+    "packages/web"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "tsc -b tsconfig.json",
+    "test": "node --experimental-strip-types --test packages/*/tests/*.test.ts packages/*/*/tests/*.test.ts",
+    "check": "npm run typecheck && npm run test",
+    "ingest:ofac": "node --experimental-strip-types scripts/ingest-ofac-sdn.ts",
+    "dev:explorer": "npm run dev --workspace packages/features/explorer",
+    "dev:web": "npm run dev --workspace packages/web"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^24.9.1"
+  }
+}

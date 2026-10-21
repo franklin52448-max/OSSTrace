@@ -13,6 +13,9 @@ directly from Explorer's source.
 
 ## Adding a feature
 
+Read [`../../FEATURE_GUIDELINES.md`](../../FEATURE_GUIDELINES.md) first — the hard rules and house
+style. Then:
+
 1. `mkdir packages/features/<feature-name>` with the same shape as `explorer/`.
 2. Consume `@opentrace/core` (types, `LabelStore`) and the chain registry pattern from
    `explorer/src/registry.ts` — don't reinvent chain wiring per feature.

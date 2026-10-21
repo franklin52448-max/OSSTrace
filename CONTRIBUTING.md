@@ -6,7 +6,9 @@ needing to understand the whole system first.
 ## Before you start
 
 1. Read [`ARCHITECTURE.md`](ARCHITECTURE.md) — it's short, and explains the plugin boundaries.
-2. Read the `README.md` inside whichever folder you're about to touch — `packages/chains/README.md`
+2. Read [`FEATURE_GUIDELINES.md`](FEATURE_GUIDELINES.md) if you're adding or changing a feature —
+   the hard rules and the house style for keeping this easy for the next contributor to extend.
+3. Read the `README.md` inside whichever folder you're about to touch — `packages/chains/README.md`
    if you're adding a chain, `packages/features/README.md` if you're adding a feature, etc.
 3. If what you want to do doesn't fit either pattern, open an issue/discussion first rather than
    bending the architecture around a one-off — or propose the change as an ADR (see below).

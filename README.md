@@ -8,12 +8,21 @@ proprietary platforms. Nothing here is a copy of any specific product, its name,
 its data — it's an independent, from-scratch build of the same *idea*: on-chain transparency
 tooling, open for anyone to run, audit, or extend.
 
-## The one rule everything else follows
+## The two rules everything else follows
 
-**A label without a cited, public source is not a label — it's a guess, and it doesn't go in.**
+**1. A label without a cited, public source is not a label — it's a guess, and it doesn't go in.**
 Every entry in the label dataset carries a `source` field (a URL or a named public document) and
 a `addedAt` date. There is no "trust us" data in this project. See
 [`data/labels/README.md`](data/labels/README.md).
+
+**2. This project's primary design goal is that outside contributors — human or an AI coding
+agent — can extend it without reading the whole codebase first.** Not a nice-to-have, the main
+thing: every architectural choice here (chains and features as self-contained plugins, a README
+in every folder, ADRs instead of tribal knowledge) exists to serve this. If a change would make
+the project faster to extend but structurally messier, that tradeoff is usually worth taking. If
+a change would make one feature slightly more convenient at the cost of making the architecture
+harder for the next contributor to understand, it probably isn't. See
+[`ARCHITECTURE.md`](ARCHITECTURE.md) and [`FEATURE_GUIDELINES.md`](FEATURE_GUIDELINES.md).
 
 ## What exists today
 

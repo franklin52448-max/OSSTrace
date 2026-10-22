@@ -4,6 +4,7 @@ import GraphView from "./GraphView.tsx";
 import TracerView from "./TracerView.tsx";
 import BountiesView from "./BountiesView.tsx";
 import CasesView from "./CasesView.tsx";
+import WorkbenchView from "./WorkbenchView.tsx";
 import PrivateLabelPanel from "./PrivateLabelPanel.tsx";
 import RiskPanel from "./RiskPanel.tsx";
 import AccountPanel from "./AccountPanel.tsx";
@@ -107,7 +108,7 @@ const EXPLORERS: Record<ChainId, { name: string; tx: string; address: string }> 
    `#graph/<chain>/<address>` and `#trace/<chain>/<address>` open the Visualizer / Tracer on that
    address, and the other views are a bare `#<view>`. Every address in the UI links to its own report, so lookups are shareable. */
 
-type View = "lookup" | "graph" | "trace" | "cases" | "bounties" | "moderation";
+type View = "lookup" | "graph" | "trace" | "cases" | "bounties" | "moderation" | "workbench";
 interface Route {
   view: View;
   target: { chain: ChainId; address: string } | null;
@@ -120,7 +121,7 @@ function routeFromHash(): Route {
   if (head === "address") return { view: "lookup", target };
   if (head === "graph") return { view: "graph", target };
   if (head === "trace") return { view: "trace", target };
-  if (head === "cases" || head === "bounties" || head === "moderation") return { view: head, target: null };
+  if (head === "cases" || head === "bounties" || head === "moderation" || head === "workbench") return { view: head, target: null };
   return { view: "lookup", target: null };
 }
 
@@ -133,6 +134,7 @@ const NAV: readonly { id: View; label: string; href: string }[] = [
   { id: "trace", label: "Tracer", href: "#trace" },
   { id: "cases", label: "Cases", href: "#cases" },
   { id: "bounties", label: "Bounties", href: "#bounties" },
+  { id: "workbench", label: "Workbench", href: "#workbench" },
   { id: "moderation", label: "Moderation", href: "#moderation" },
 ];
 
@@ -213,6 +215,8 @@ export default function App() {
             <CasesView />
           ) : route.view === "bounties" ? (
             <BountiesView />
+          ) : route.view === "workbench" ? (
+            <WorkbenchView />
           ) : route.view === "moderation" ? (
             <ModerationView />
           ) : route.target ? (

@@ -2,8 +2,9 @@
 
 OSSTrace's unified backend: one Fastify server with its own SQLite store, replacing the original
 nine per-feature services. See [ADR 0022](../../docs/adr/0022-unified-server-replaces-the-per-feature-services.md)
-for why, what's landed, and what's still outstanding — **as of this package's first chunk,
-nothing talks to it yet**; the old services and `packages/web` are untouched.
+for why, what's landed, and what's still outstanding. As of this chunk, `packages/web`'s
+**Workbench** tab is wired to it for real (sign up/log in, look up an address, real balances and
+transfers) — Explorer/Visualizer/Tracer themselves still run on the old services, not this one yet.
 
 ## Running it
 
@@ -33,6 +34,12 @@ curl http://127.0.0.1:5320/api/health
 - **`src/routes/`** — the real REST contract from `@osstrace/contract`'s `api.ts`.
 - **`src/lib/ssrf.ts`** — guards every outbound webhook URL (loopback/private/link-local/CGNAT/
   metadata addresses blocked, DNS-rebinding checked at connect time too, no redirects followed).
+- **CORS** (`app.ts`'s `onRequest` hook) — the session is a cookie, not a bearer token, so a
+  cross-origin browser client only gets to send or read it with real
+  `Access-Control-Allow-Origin`/`-Credentials` headers and a handled preflight `OPTIONS`, which
+  this server didn't have at first (its own original frontend used a same-origin dev proxy and
+  never needed this). Reuses the same `ALLOWED_ORIGINS` allowlist the CSRF check already used;
+  never reflects an origin that isn't on it, never `*`. See `tests/cors.test.ts`.
 
 ## Tests
 

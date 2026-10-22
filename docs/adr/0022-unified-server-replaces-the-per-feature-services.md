@@ -1,10 +1,14 @@
 # ADR 0022 — A single unified server replaces the per-feature microservices
 
-Status: In progress. First chunk decided and landed 2026-10-22: `packages/contract` and
-`packages/server` exist, fully typecheck and test green (115 tests), run live on port 5320, and
-have been smoke-tested against real on-chain data. **Not yet wired to anything** — the existing
-web UI (`packages/web`) and the nine original per-feature services (`packages/features/*`) are
-untouched and still serve the live site. This ADR will be updated as later chunks land.
+Status: In progress. First chunk landed 2026-10-22: `packages/contract` and `packages/server`
+exist, fully typecheck and test green. Second chunk landed the same day: `packages/web` now has a
+real, working connection to the new server — a **Workbench** tab (`src/WorkbenchView.tsx` +
+`src/serverSession.ts`) where signing up/logging in (its own cookie session, separate from the
+rest of the site's) and looking up a real address shows real balances and real transfers, straight
+from `packages/server`, over real cross-origin requests (which needed real CORS added to the
+server — see §6). This is additive, next to the existing nav, not a replacement of it: Explorer,
+Visualizer, Tracer and the nine original per-feature services are all still untouched and still
+serve the rest of the live site. This ADR will be updated as later chunks land.
 
 ## Context
 
@@ -106,11 +110,43 @@ to OSSTrace's real web dev port (5301), not the design's own. `SERVER_DB` and `S
 (renamed from their equivalents) follow OSSTrace's existing short-prefix-per-feature env var
 convention (`ACCOUNTS_PORT`, `BOUNTIES_PATH`, etc.), not a project-wide prefix.
 
+### 6. Real CORS, added once something actually needed it: a cookie session, cross-origin
+
+The server's own original frontend reached it through a same-origin Vite dev-server proxy, so it
+was never built to answer a genuinely cross-origin browser request — `app.ts`'s only Origin
+handling was the CSRF check (refuse a mutating request from an unlisted Origin), never the
+`Access-Control-Allow-Origin`/`-Credentials` response headers a browser requires before it will
+even send (let alone let the page read) a cookie-carried session across origins, and there was no
+preflight `OPTIONS` handling at all (it fell through to the 404 handler). `packages/web` calls
+this server directly, cross-origin, exactly like it already calls the nine old services — so this
+had to be added for the Workbench wiring (§ below) to work at all, not optional polish. Reuses the
+same `ALLOWED_ORIGINS` allowlist the CSRF check already has; never reflects a disallowed origin,
+never `*` (a credentialed response can't use `*` by spec anyway). See `tests/cors.test.ts`.
+
+### 7. Workbench: the first thing actually wired to it
+
+`packages/web` gets a new nav tab, **Workbench** (`src/WorkbenchView.tsx`), not a replacement of
+Explorer/Visualizer/Tracer but genuinely additive next to them. It has its own session
+(`src/serverSession.ts`) — a cookie, not a bearer token like `session.ts`'s (the old accounts
+API's) — because the two backends authenticate completely differently; a visitor may need to be
+signed in to both during the migration, which is expected and temporary, not a bug. Signing up,
+logging in, and looking up a real address (balances sorted and capped to the top 20 by USD value —
+a busy wallet can hold hundreds of mostly-spam tokens, so showing all of them isn't usable; recent
+transfers with an honest `sync` status chip when the server hasn't finished covering an address)
+all go through the real server, verified against real on-chain data via headless Chromium, not
+just curl. `packages/server/tests/cors.test.ts` and `packages/web/tests/serverSession.test.ts`
+cover the auth/CORS plumbing; `WorkbenchView.tsx` itself has no automated DOM-level test yet, since
+its balances/transfers fetch needs either a live network call or a fake chain provider
+`@osstrace/server` doesn't currently expose publicly — see `packages/web/README.md`'s Tests section
+for the honest account of what is and isn't covered, including why a session surviving a page
+reload could only be verified in a real browser (Node's own `fetch`, what the `node --test` harness
+uses, has no cookie jar at all).
+
 ## What this chunk does not do (future chunks, per the agreed plan)
 
-- **Nothing points at it yet.** `packages/web` still talks to the nine old services. Wiring it to
-  `packages/server` instead, one area at a time (Explorer and Visualizer first — straight swaps),
-  is the next chunk.
+- **Explorer/Visualizer/Tracer themselves are not wired yet.** Workbench proves the connection
+  works end to end on a smaller surface; replacing Explorer/Visualizer's own tabs (straight swaps,
+  per the agreed plan) is still a later chunk.
 - **No auto-search inside the canvas yet.** OSSTrace's own multi-hop path-finding and cross-chain
   (Wormhole) tracing are not ported. The canvas (full ownership of "Tracer" going forward) ships as-is
   first; the auto-search becomes an action inside it later, once the canvas itself is live.

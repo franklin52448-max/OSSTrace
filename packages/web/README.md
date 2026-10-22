@@ -24,6 +24,30 @@ label submission/moderation also need the accounts API (`npm run dev:accounts`,
 (`npm run dev:community-labels`, `VITE_COMMUNITY_LABELS_URL`, default `http://localhost:5311`).
 Lookups and the graph work without either of them.
 
+The **Workbench** tab talks to the new unified server instead (`npm run dev:server`,
+`VITE_SERVER_URL`, default `http://localhost:5320` — see ADR 0022). It's a separate, cookie-based
+session from the rest of the site (`src/serverSession.ts`, not `src/session.ts`); during the
+migration you may need to be signed in to both at once, which is expected, not a bug.
+
+## Workbench
+
+`src/WorkbenchView.tsx` + `src/serverSession.ts` (`#workbench`): the first real, working
+connection between this frontend and the new unified server (ADR 0022) — sign up or log in (its
+own real account, separate from the rest of the site's), then look up any Ethereum or Solana
+address and see its real balances and real recent transfers, straight from the new server. Added
+alongside Explorer/Visualizer/Tracer, not in place of them — those still run on the old services
+until they're actually cut over in a later chunk.
+
+Balances are shown top-20 by USD value (the server itself already sorts that way; a wallet can
+hold hundreds of mostly-spam tokens, so showing all of them isn't usable — see the commit that
+added the cap for the before/after). Transfers show a `sync` status chip (`partial`, etc.)
+whenever the server is honest that it hasn't finished covering the address yet, never silently.
+
+Needs `VITE_SERVER_URL` pointed at a reachable new server — same-origin isn't assumed, so the new
+server needs real CORS (`Access-Control-Allow-Origin`/`-Credentials`, handled preflight), added to
+`packages/server/src/app.ts` as part of this wiring (its own original frontend used a same-origin
+dev proxy instead and never needed this).
+
 ## Tests
 
 ```sh
@@ -71,6 +95,17 @@ What's covered so far:
   from garbage in `localStorage`. `tests/themeCustomizer.test.ts`: the toggle and the popover
   (open/close on click, Escape, outside pointerdown; editing and resetting a token; presets;
   "reset all"; a choice surviving into a freshly rendered pair of controls).
+- `tests/serverSession.test.ts`: signup/login/logout against a real, in-memory-SQLite
+  `@osstrace/server` instance booted for the test (`tests/harness/newServer.ts`) — real CORS
+  headers, real CSRF-origin refusal, real "wrong password and unknown user give the same 401"
+  check. **Not covered here**: a session surviving a fresh page load. Node's own `fetch` (what
+  these tests get, see `env.ts`) has no cookie jar at all, unlike a real browser, so that round
+  trip can't be driven this way — it was instead verified by driving the real `WorkbenchView` UI
+  in headless Chromium against a real server (sign up, look up a real address, real balances and
+  transfers render, no console errors). `WorkbenchView.tsx` itself has no automated DOM-level
+  tests yet for the same practical reason one of its three real data fetches (balances/transfers
+  for a real address) needs either a live network call or a hand-written fake chain provider not
+  currently exposed by `@osstrace/server`'s own public surface.
 
 Each test file runs in its own process (`node --test` does that), and the hook only applies there,
 so the harness never affects the Vite dev server or build.

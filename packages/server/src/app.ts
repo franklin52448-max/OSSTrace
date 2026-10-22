@@ -153,8 +153,27 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
   const globalLimiter = new WindowLimiter(600, 60_000);
   const allowed = new Set(config.allowedOrigins);
 
+  // CORS: the session is a cookie, not a bearer token, so a cross-origin browser client (this
+  // server and the web UI are different origins/ports, unlike the design this server's own
+  // frontend used, which proxied /api through its own dev server and so never needed this) needs
+  // real Access-Control-Allow-Origin/-Credentials headers, or the browser refuses to send or read
+  // the cookie at all -- the Origin allowlist below is the same one the CSRF check already uses.
   app.addHook("onRequest", async (req, reply) => {
     if (!req.url.startsWith("/api/")) return;
+    const origin = req.headers.origin;
+    if (typeof origin === "string" && allowed.has(origin)) {
+      reply.header("access-control-allow-origin", origin);
+      reply.header("access-control-allow-credentials", "true");
+      reply.header("vary", "Origin");
+      // Not CORS-safelisted response headers, so the web UI can't read them unless exposed.
+      reply.header("access-control-expose-headers", "retry-after");
+    }
+    if (req.method === "OPTIONS") {
+      reply.header("access-control-allow-methods", "GET, POST, PATCH, DELETE, OPTIONS");
+      reply.header("access-control-allow-headers", "content-type");
+      reply.header("access-control-max-age", "600");
+      return reply.status(204).send();
+    }
     const wait = globalLimiter.hit(req.ip);
     if (wait !== null) {
       reply.header("retry-after", String(wait));

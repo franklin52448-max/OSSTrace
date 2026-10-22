@@ -29,6 +29,8 @@
     "@osstrace/risk-scoring": "*",
     "@osstrace/tracer": "*",
     "@osstrace/visualizer": "*",
+    "@osstrace/contract": "*",
+    "@osstrace/server": "*",
     "@tailwindcss/vite": "^4.3.3",
     "@types/jsdom": "^30.0.0",
     "@types/react": "^19.3.0",

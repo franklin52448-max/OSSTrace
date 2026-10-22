@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { buildCache, buildEventBus, buildLabelStore, buildRegistryFromEnv, loadRootEnv } from "./bootstrap.ts";
+import { allowedOriginsFromEnv, buildCache, buildEventBus, buildLabelStore, buildRegistryFromEnv, loadRootEnv } from "./bootstrap.ts";
 import { createExplorerHandler } from "./http.ts";
 import { Indexer, indexerSettingsFromEnv } from "./indexing.ts";
 import { attachStream, STREAM_PATH, StreamHub } from "./stream.ts";
@@ -13,7 +13,8 @@ const store = buildLabelStore();
 const cache = buildCache();
 const bus = buildEventBus();
 
-const handle = createExplorerHandler({ registry, store, cache });
+const allowedOrigins = allowedOriginsFromEnv();
+const handle = createExplorerHandler({ registry, store, cache, allowedOrigins });
 
 const server = createServer((req, res) => {
   void handle(req, res);
@@ -35,6 +36,7 @@ if (process.env["EXPLORER_EMBEDDED_INDEXER"] === "1") {
 
 server.listen(PORT, () => {
   console.log(`Explorer API listening on http://localhost:${PORT}`);
+  console.log(`Browser origins allowed (CORS): ${allowedOrigins.join(", ")}`);
   console.log(`Live updates: ws://localhost:${PORT}${STREAM_PATH}`);
   console.log(`Try: curl http://localhost:${PORT}/address/ethereum/0x0000000000000000000000000000000000000000`);
 });

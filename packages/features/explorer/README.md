@@ -13,7 +13,7 @@ npm run dev:explorer
 ```
 
 Reads `.env` from the repo root (`ETH_RPC_URL`, `ETHERSCAN_API_KEY`, `SOLANA_RPC_URL`, `PORT`,
-`REDIS_URL`) — see the root `.env.example`. Listens on `PORT` (default 5300, this project's
+`REDIS_URL`, `EXPLORER_ALLOWED_ORIGINS`) — see the root `.env.example`. Listens on `PORT` (default 5300, this project's
 assigned port block).
 
 ## Caching and the background indexer
@@ -215,13 +215,47 @@ keeps warm. Each `limit` + cursor pair is its own cache entry. Design:
 
 `GET /health` — `{ "ok": true }`.
 
+### CORS
+
+Browsers may call the API only from origins on an exact allowlist, the same pattern as the
+accounts API. Never `*`. An allowed `Origin` is reflected back in `Access-Control-Allow-Origin`.
+Any other origin gets no CORS header, so the browser blocks the page from reading the response.
+Every response carries `Vary: Origin`, and an `OPTIONS` preflight gets a `204`. Set
+`EXPLORER_ALLOWED_ORIGINS` (comma-separated). If it's unset or empty, the Explorer uses
+`ACCOUNTS_ALLOWED_ORIGINS`, and if that's also unset, the web UI's dev server,
+`http://localhost:5301`. The server logs the list it's using at startup. In code:
+`createExplorerHandler({ ..., allowedOrigins })`, with `allowedOriginsFromEnv()` in
+`src/bootstrap.ts`. CORS only governs browsers. `curl` and server-side callers aren't affected.
+
+## Running the indexer as a long-lived service
+
+`deploy/` has two ready-to-use configs for the background indexer. Both run the repo's own
+`npm run indexer --workspace packages/features/explorer` (the same thing `npm run dev:indexer`
+runs), restart it when it crashes but not after a clean exit, and read the repo root `.env`. Pick
+one:
+
+- **systemd**: [`deploy/osstrace-indexer.service`](deploy/osstrace-indexer.service). Assumes a
+  checkout at `/opt/osstrace` running as an `osstrace` system user, with
+  `EnvironmentFile=-/opt/osstrace/.env`, `Restart=on-failure` and `KillMode=control-group`, so
+  stopping it stops the node child too, not just npm. The install steps are in the file's header.
+  Change the three `/opt/osstrace` paths if your checkout lives elsewhere. Logs go to
+  `journalctl -u osstrace-indexer`.
+- **pm2**: [`deploy/ecosystem.config.cjs`](deploy/ecosystem.config.cjs). Finds the repo root from
+  its own location, so `pm2 start packages/features/explorer/deploy/ecosystem.config.cjs` works
+  from anywhere. Settings: `stop_exit_codes: [0]` (the on-failure policy), `treekill`, and one
+  instance.
+
+Either way, set `REDIS_URL` in `.env` to the same Redis the API server uses. Without it, the
+indexer warms only its own in-memory cache, which no API server can see, and says so at startup.
+Run exactly one indexer per Redis. Two would double RPC load and duplicate every live push.
+
 ## What's not built here yet
 
 - The web UI doesn't page yet. It shows the first page only; `?before=` is API-only for now.
-- CORS is wide open (`*`) — correct for a local dev tool talking to a local web UI, wrong for any
-  public deployment. Flagging this explicitly so it isn't carried forward by accident.
-- No deployment story for the indexer as a long-running process (systemd/pm2/a Fly machine) —
-  today it's just a script you run in a terminal.
+- The websocket (`/stream`) has no `Origin` check of its own yet (see Real-time streaming →
+  Limitations). The CORS allowlist above covers the HTTP API only.
+- No deploy config for the Explorer API server itself or for a hosted platform (e.g. a Fly
+  machine). `deploy/` covers the indexer, on a machine you run.
 
 ## Testing
 

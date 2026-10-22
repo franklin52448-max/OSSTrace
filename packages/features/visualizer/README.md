@@ -169,8 +169,9 @@ selector (5 / 10 / 25 / 50) for this reason.
 - **No caching.** Explorer caches lookups and Visualizer doesn't yet. Each request reaches the
   chain adapter.
 - **No pagination or time window.** You get only "the most recent `limit` transactions".
-- **CORS is wide open (`*`)**, same as Explorer. That's fine for a local tool and wrong for a
-  public deployment.
+- **CORS is wide open (`*`)**. That's fine for a local tool and wrong for a public deployment.
+  The Explorer now uses an origin allowlist (`EXPLORER_ALLOWED_ORIGINS`, see its README), and
+  the same treatment would fit here.
 - **Label/tag lookups are one store call per node.** That's fine for the local JSON file. A real
   database-backed store would want a batch lookup.
 

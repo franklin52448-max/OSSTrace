@@ -1,0 +1,53 @@
+# systemd unit for the Explorer's background indexer (packages/features/explorer/src/indexer.ts),
+# run as a long-lived service instead of a terminal session.
+#
+# Install (as root), assuming the repo is checked out at /opt/osstrace and `npm ci` has been run
+# there. If your checkout lives elsewhere, change the three /opt/osstrace paths below:
+#
+#   useradd --system --home-dir /opt/osstrace --shell /usr/sbin/nologin osstrace
+#   chown -R osstrace:osstrace /opt/osstrace
+#   cp /opt/osstrace/packages/features/explorer/deploy/osstrace-indexer.service /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now osstrace-indexer
+#   journalctl -u osstrace-indexer -f
+#
+# The indexer only does useful work when it shares a cache with the API server, which means
+# REDIS_URL must be set in /opt/osstrace/.env to the same Redis the API server uses (see the
+# Explorer README, "Caching and the background indexer"). Run exactly one indexer per Redis.
+
+[Unit]
+Description=OSSTrace Explorer background indexer
+Documentation=file:///opt/osstrace/packages/features/explorer/README.md
+After=network-online.target redis-server.service redis.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=osstrace
+Group=osstrace
+WorkingDirectory=/opt/osstrace
+# The repo root .env (ETH_RPC_URL, ETHERSCAN_API_KEY, SOLANA_RPC_URL, REDIS_URL,
+# INDEXER_INTERVAL_MS, INDEXER_TOP_N). The leading "-" means a missing file isn't an error: the
+# indexer also reads this same file itself on startup, and falls back to public endpoints without it.
+EnvironmentFile=-/opt/osstrace/.env
+# Needs Node 24+ (for --experimental-strip-types). `command -v npm` shows the right path if
+# Node was installed somewhere other than /usr/bin (nvm, /usr/local/bin, ...).
+ExecStart=/usr/bin/npm run indexer --workspace packages/features/explorer
+Restart=on-failure
+RestartSec=5
+# npm starts node as a child process. control-group (the default, stated explicitly) stops the
+# whole group on `systemctl stop`; stopping only npm would leave the node process running.
+KillMode=control-group
+# Keep npm's cache and logs out of the checkout, and skip its update check on every start.
+Environment=npm_config_cache=/tmp/npm-cache
+Environment=npm_config_update_notifier=false
+
+# Light hardening that doesn't get in the indexer's way: it makes outbound calls (RPC, Etherscan,
+# Redis) and reads the repo's label data.
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

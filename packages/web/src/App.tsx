@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { ChainId } from "@osstrace/core";
+import { AlertsRoute } from "./alerts/index.ts";
 import { TracerRoute } from "./tracer/index.ts";
 import TracerView from "./TracerView.tsx";
 import { VisualizerRoute } from "./visualizer/index.ts";
@@ -114,7 +115,7 @@ const EXPLORERS: Record<ChainId, { name: string; tx: string; address: string }> 
    notes this gets folded back into the canvas as a feature later, rather than staying a separate
    page for good. */
 
-type View = "lookup" | "graph" | "trace" | "pathfind" | "bounties" | "moderation" | "workbench";
+type View = "lookup" | "graph" | "trace" | "pathfind" | "alerts" | "bounties" | "moderation" | "workbench";
 interface Route {
   view: View;
   target: { chain: ChainId; address: string } | null;
@@ -128,7 +129,7 @@ function routeFromHash(): Route {
   if (head === "graph") return { view: "graph", target };
   if (head === "trace") return { view: "trace", target: null };
   if (head === "pathfind") return { view: "pathfind", target };
-  if (head === "bounties" || head === "moderation" || head === "workbench") return { view: head, target: null };
+  if (head === "alerts" || head === "bounties" || head === "moderation" || head === "workbench") return { view: head, target: null };
   return { view: "lookup", target: null };
 }
 
@@ -139,6 +140,7 @@ const NAV: readonly { id: View; label: string; href: string }[] = [
   { id: "lookup", label: "Explorer", href: "#" },
   { id: "graph", label: "Visualizer", href: "#graph" },
   { id: "trace", label: "Tracer", href: "#trace" },
+  { id: "alerts", label: "Alerts", href: "#alerts" },
   { id: "bounties", label: "Bounties", href: "#bounties" },
   { id: "workbench", label: "Workbench", href: "#workbench" },
   { id: "moderation", label: "Moderation", href: "#moderation" },
@@ -235,7 +237,9 @@ export default function App() {
         </div>
       ) : (
         <main className="mx-auto w-full max-w-[96rem] px-4 py-6 sm:px-6 lg:py-8">
-          {route.view === "bounties" ? (
+          {route.view === "alerts" ? (
+            <AlertsRoute />
+          ) : route.view === "bounties" ? (
             <BountiesView />
           ) : route.view === "workbench" ? (
             <WorkbenchView />

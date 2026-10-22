@@ -34,6 +34,17 @@ import { Indexer } from "@osstrace/explorer/src/indexing.ts";
 import { attachStream, StreamHub } from "@osstrace/explorer/src/stream.ts";
 // --- end ---
 import { WEB_ORIGIN } from "./env.ts";
+// --- BEGIN view backends (bounties, cases, risk, tracer, visualizer): imports -----------------
+import type { TransactionSummary } from "@osstrace/core";
+import { BountyService, JsonFileBountyStore, createBountiesHandler } from "@osstrace/bounties";
+import { CaseService, JsonFileCaseStore, createCasesHandler } from "@osstrace/case-management";
+// risk-scoring, tracer and visualizer have no index.ts (their package "main" is server.ts, which
+// listens on import): import their real handlers the way their own server.ts files do.
+import { createRiskScoringHandler } from "@osstrace/risk-scoring/src/http.ts";
+import { WormholescanResolver } from "@osstrace/tracer/src/bridges/wormhole.ts";
+import { createTracerHandler } from "@osstrace/tracer/src/http.ts";
+import { createVisualizerHandler } from "@osstrace/visualizer/src/http.ts";
+// --- END view backends: imports ---------------------------------------------------------------
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => Promise<void> | void;
 
@@ -118,6 +129,34 @@ export class FixedBalanceAdapter implements ChainAdapter {
   }
 }
 
+// --- BEGIN view backends: chain-history stand-in ---------------------------------------------
+/**
+ * `FixedBalanceAdapter` plus a fixed transaction history per address, for the views that walk
+ * transactions (Visualizer, Tracer, Risk scoring's hop search). Same idea as those packages' own
+ * tests' adapters: a real `ChainAdapter` with configured data, never a mocking framework. An
+ * address with no configured history gets an empty (but available) history: "no activity".
+ */
+export class FixedHistoryAdapter implements ChainAdapter {
+  readonly chain: ChainId;
+  readonly #balances: FixedBalanceAdapter;
+  readonly #history: Map<string, TransactionSummary[]>;
+
+  constructor(chain: ChainId, balances: Record<string, string>, history: Record<string, TransactionSummary[]>) {
+    this.chain = chain;
+    this.#balances = new FixedBalanceAdapter(chain, balances);
+    this.#history = new Map(Object.entries(history).map(([address, txs]) => [address.toLowerCase(), txs]));
+  }
+
+  getBalance(address: string): Promise<Balance> {
+    return this.#balances.getBalance(address);
+  }
+
+  async getRecentTransactions(address: string, limit = 25): Promise<TransactionsResult> {
+    return { available: true, transactions: (this.#history.get(address.toLowerCase()) ?? []).slice(0, limit) };
+  }
+}
+// --- END view backends: chain-history stand-in ------------------------------------------------
+
 export interface Stack {
   /** Accounts + community-label submission routes on one server, as their own tests mount them. */
   accounts: Running;
@@ -129,6 +168,29 @@ export interface Stack {
   /** The real private-labels API (ADR 0004), on its own port, authenticating against `accountService`. */
   privateLabels: Running;
   // --- end private-labels ---
+  // --- BEGIN view backends: Stack fields ------------------------------------------------------
+  /** The label store every chain-reading API here shares (writes go to its labels.json). */
+  labelStore: CompositeLabelStore;
+  /** Bounties API (BountiesView), sharing `accountService`. */
+  bounties: Running;
+  /** Case-management API (CasesView), sharing `accountService`. */
+  cases: Running;
+  /** Risk scoring API (RiskPanel), over the stack's adapter + `labelStore`. */
+  risk: Running;
+  /** The path of every request the risk API has received, in order (scoring is expensive: tests check when it's asked). */
+  riskRequests: string[];
+  /** Tracer API (TracerView), over the stack's adapter + `labelStore`, Wormhole following wired to `wormholescan`. */
+  tracer: Running;
+  /** Visualizer API (GraphView), over the stack's adapter + `labelStore`. */
+  visualizer: Running;
+  /**
+   * The Wormholescan API the Tracer's real `WormholescanResolver` calls, served locally (the real
+   * one is a third party a test can't depend on). A test puts a recorded real response body under
+   * an address; any other address gets `{ operations: [] }`, Wormholescan's own "nothing found".
+   */
+  wormholescan: Running;
+  wormholescanResponses: Map<string, unknown>;
+  // --- END view backends: Stack fields --------------------------------------------------------
   close(): Promise<void>;
 }
 
@@ -188,14 +250,90 @@ export async function startStack(adapter: ChainAdapter): Promise<Stack> {
   // port on this machine that might happen to be running something.
   process.env["VITE_RISK_SCORING_URL"] = accounts.url;
 
+  // --- BEGIN view backends: servers -----------------------------------------------------------
+  // Each is wired the way its own src/server.ts wires it, over this stack's temp dir, accounts
+  // service, chain adapter and label store. Set after the placeholders above, so these win.
+
+  // Bounties (packages/features/bounties/src/server.ts).
+  const bountyService = new BountyService(new JsonFileBountyStore(join(dir, "bounties.json")), accountService);
+  const bountiesHandler = createBountiesHandler(bountyService, { allowedOrigins: [WEB_ORIGIN] });
+  const bounties = await listen(async (req, res) => {
+    if (await bountiesHandler(req, res)) return;
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "not_found", message: "not found" }));
+  });
+  process.env["VITE_BOUNTIES_URL"] = bounties.url;
+
+  // Case management (packages/features/case-management/src/server.ts).
+  const caseService = new CaseService(accountService, new JsonFileCaseStore(join(dir, "cases.json")));
+  const casesHandler = createCasesHandler(caseService, { allowedOrigins: [WEB_ORIGIN] });
+  const cases = await listen(async (req, res) => {
+    if (await casesHandler(req, res)) return;
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "not_found", message: "not found" }));
+  });
+  process.env["VITE_CASES_URL"] = cases.url;
+
+  // Risk scoring (packages/features/risk-scoring/src/server.ts).
+  const chainRegistry = new Map([[adapter.chain, adapter]]);
+  const riskHandler = createRiskScoringHandler({ registry: chainRegistry, store: labelStore });
+  const riskRequests: string[] = [];
+  const risk = await listen((req, res) => {
+    riskRequests.push(req.url ?? "/");
+    return riskHandler(req, res);
+  });
+  process.env["VITE_RISK_SCORING_URL"] = risk.url;
+
+  // Tracer (packages/features/tracer/src/server.ts), its real WormholescanResolver pointed at a
+  // local stand-in for api.wormholescan.io that serves whatever the test recorded.
+  const wormholescanResponses = new Map<string, unknown>();
+  const wormholescan = await listen((req, res) => {
+    const url = new URL(req.url ?? "/", "http://localhost");
+    if (url.pathname !== "/api/v1/operations") {
+      res.writeHead(404, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "not found" }));
+      return;
+    }
+    const body = wormholescanResponses.get(url.searchParams.get("address") ?? "") ?? { operations: [] };
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(body));
+  });
+  const tracer = await listen(
+    createTracerHandler({
+      registry: chainRegistry,
+      store: labelStore,
+      wormhole: { resolver: new WormholescanResolver({ baseUrl: wormholescan.url }), adapters: chainRegistry },
+    }),
+  );
+  process.env["VITE_TRACER_URL"] = tracer.url;
+
+  // Visualizer (packages/features/visualizer/src/server.ts).
+  const visualizer = await listen(createVisualizerHandler({ registry: chainRegistry, store: labelStore }));
+  process.env["VITE_VISUALIZER_URL"] = visualizer.url;
+  // --- END view backends: servers -------------------------------------------------------------
+
   return {
     accounts,
     accountService,
     explorer,
     nextExplorerRequest: gate.next,
     privateLabels, // private-labels
+    // --- BEGIN view backends: Stack values --------------------------------------------------
+    labelStore,
+    bounties,
+    cases,
+    risk,
+    riskRequests,
+    tracer,
+    visualizer,
+    wormholescan,
+    wormholescanResponses,
+    // --- END view backends: Stack values ----------------------------------------------------
     async close() {
       await privateLabels.close(); // private-labels
+      // --- BEGIN view backends: close -------------------------------------------------------
+      for (const server of [visualizer, tracer, wormholescan, risk, cases, bounties]) await server.close();
+      // --- END view backends: close ---------------------------------------------------------
       await explorer.close();
       await accounts.close();
       await rm(dir, { recursive: true, force: true });

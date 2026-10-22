@@ -189,11 +189,35 @@ hides the other, and never hides the label/tags/entity, which are local reads. T
 read). A report with a failed balance isn't cached, so the next lookup retries right away.
 Reasoning: [ADR 0014](../../../docs/adr/0014-explorer-reports-balance-failure-without-hiding-the-rest.md).
 
+### Paging back through history: `?before=`
+
+When there may be older history, `transactions` carries a `nextCursor`. Pass it back unchanged as
+`?before=` (with the same `?limit=`, or a different one) for the next-older page. It never
+overlaps the page it came from and never skips anything between them. No `nextCursor` means
+that page reached the end. A page that was exactly full at the end can still carry one, whose
+next page is empty.
+
+```
+curl 'http://localhost:5300/address/solana/<address>?limit=10'
+# → "transactions": { "available": true, "transactions": [...], "nextCursor": "4Nd1m..." }
+curl 'http://localhost:5300/address/solana/<address>?limit=10&before=4Nd1m...'
+```
+
+The cursor is each chain's own native one, built by the chain adapter: a transaction signature on
+Solana (`getSignaturesForAddress`'s `before`), and a block position on Ethereum (Etherscan's
+`endblock`, see the [Ethereum README](../../chains/ethereum/README.md)). Treat it as opaque. A
+`?before=` that can't be any chain's cursor (characters other than letters, digits and `:`, or
+over 128 characters) is a `400`. A well-formed one the chain's adapter can't use comes back as
+`transactions: { "available": false, "reason": "..." }`, with a reason saying so. Without
+`?before=`, nothing changes: same request to the chain, same cache entry, the one the indexer
+keeps warm. Each `limit` + cursor pair is its own cache entry. Design:
+[ADR 0018](../../../docs/adr/0018-cursor-pagination-uses-each-chains-native-cursor.md).
+
 `GET /health` — `{ "ok": true }`.
 
 ## What's not built here yet
 
-- No pagination beyond a `?limit=` query param on transactions.
+- The web UI doesn't page yet. It shows the first page only; `?before=` is API-only for now.
 - CORS is wide open (`*`) — correct for a local dev tool talking to a local web UI, wrong for any
   public deployment. Flagging this explicitly so it isn't carried forward by accident.
 - No deployment story for the indexer as a long-running process (systemd/pm2/a Fly machine) —
@@ -202,7 +226,11 @@ Reasoning: [ADR 0014](../../../docs/adr/0014-explorer-reports-balance-failure-wi
 ## Testing
 
 `tests/http.test.ts` runs the real request handler behind a real HTTP server: input validation,
-`?limit=` clamping, and that a malformed request can't take the server down.
+`?limit=` clamping, `?before=` validation and cache separation, and that a malformed request
+can't take the server down. `tests/paging.test.ts` pages through `?before=` end to end with the
+real chain adapters. On Ethereum the adapter talks to a local server answering `txlist`/`tokentx`
+from recorded real mainnet rows (no key needed), and the test walks the whole history page by
+page. On Solana it uses the live public RPC and skips if refused.
 
 Streaming tests: `txDiff.test.ts` (the new-transaction rule), `indexing.test.ts` (the real
 `Indexer` publishing events, with adapter call counts proving no extra RPC), `stream.test.ts`

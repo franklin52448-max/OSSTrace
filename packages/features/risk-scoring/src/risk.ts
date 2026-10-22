@@ -1,4 +1,4 @@
-import type { Address, Balance, ChainAdapter, ChainId, Label, LabelReader, Tag, TransactionsResult } from "@osstrace/core";
+import type { Address, Balance, ChainAdapter, ChainId, Label, LabelReader, Tag, TransactionsPageOptions, TransactionsResult } from "@osstrace/core";
 import { canonicalAddress } from "@osstrace/core";
 import type { GraphEdge } from "@osstrace/visualizer/src/graph.ts";
 import { clampTraceOptions, traceGraph, type FrontierReason, type TraceGraphResult, type TraceOptions } from "@osstrace/tracer/src/trace.ts";
@@ -348,8 +348,8 @@ export class RecordingAdapter implements ChainAdapter {
     return this.#inner.getBalance(address);
   }
 
-  async getRecentTransactions(address: string, limit: number): Promise<TransactionsResult> {
-    const result = await this.#inner.getRecentTransactions(address, limit);
+  async getRecentTransactions(address: string, limit: number, options?: TransactionsPageOptions): Promise<TransactionsResult> {
+    const result = await this.#inner.getRecentTransactions(address, limit, options);
     const id = canonicalAddress(this.chain, address);
     if (result.available) this.fetchedCountById.set(id, result.transactions.length);
     else this.unavailableReasonById.set(id, result.reason);

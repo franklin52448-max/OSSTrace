@@ -29,13 +29,15 @@ export async function lookupAddress(
   adapter: ChainAdapter,
   store: LabelStore,
   txLimit = 25,
+  /** A `nextCursor` from a previous report's `transactions`, for the next-older page (ADR 0018). */
+  before?: string,
 ): Promise<AddressReport> {
   const balancePromise: Promise<BalanceResult> = adapter.getBalance(address.value).then(
     (balance): BalanceResult => ({ available: true, balance }),
     (cause: unknown): BalanceResult => ({ available: false, reason: reasonOf(cause) }),
   );
   const transactionsPromise: Promise<TransactionsResult> = adapter
-    .getRecentTransactions(address.value, txLimit)
+    .getRecentTransactions(address.value, txLimit, before === undefined ? undefined : { before })
     .catch((cause: unknown): TransactionsResult => ({ available: false, reason: reasonOf(cause) }));
 
   const [balance, transactions, label, tags, entity] = await Promise.all([

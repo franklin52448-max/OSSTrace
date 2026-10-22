@@ -206,5 +206,24 @@ export interface TransactionSummary {
  * never silently return an empty list for the latter.
  */
 export type TransactionsResult =
-  | { available: true; transactions: TransactionSummary[] }
+  | {
+      available: true;
+      transactions: TransactionSummary[];
+      /**
+       * Present when there may be older history than this page: pass it back as
+       * `TransactionsPageOptions.before` to get the next page (older, never overlapping this one).
+       * Absent means this page reached the end of the address's history. An opaque string built
+       * from the chain's own native cursor — see ADR 0018; callers must not parse it.
+       */
+      nextCursor?: string;
+    }
   | { available: false; reason: string };
+
+/** Optional paging for `ChainAdapter.getRecentTransactions` (ADR 0018). */
+export interface TransactionsPageOptions {
+  /**
+   * A `nextCursor` from a previous page of the SAME address on the SAME chain: return only
+   * history strictly older than that page. Omitted → the most recent page, exactly as before.
+   */
+  before?: string;
+}

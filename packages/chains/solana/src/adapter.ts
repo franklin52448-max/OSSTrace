@@ -1,5 +1,5 @@
 import { Connection, PublicKey, type ConfirmedSignatureInfo, type ParsedInstruction, type ParsedTransactionWithMeta } from "@solana/web3.js";
-import type { Balance, ChainAdapter, TransactionSummary, TransactionsResult } from "@osstrace/core";
+import type { Balance, ChainAdapter, TransactionsPageOptions, TransactionSummary, TransactionsResult } from "@osstrace/core";
 import { decodeSplTransfers } from "./splToken.ts";
 import { lamportsToSol } from "./units.ts";
 
@@ -125,6 +125,9 @@ export function matchTransactionsToSignatures(
   return signatures.map((signature) => bySignature.get(signature) ?? null);
 }
 
+/** A base58 transaction signature (64 bytes, so at most 88 characters). Anything else can't be a `before` cursor. */
+const SIGNATURE_FORMAT = /^[1-9A-HJ-NP-Za-km-z]{32,88}$/;
+
 export class SolanaAdapter implements ChainAdapter {
   readonly chain = "solana" as const;
   readonly #connection: Connection;
@@ -143,12 +146,27 @@ export class SolanaAdapter implements ChainAdapter {
     };
   }
 
-  async getRecentTransactions(address: string, limit: number): Promise<TransactionsResult> {
+  /**
+   * Paging (ADR 0018) is Solana's own cursor: `getSignaturesForAddress`'s `before` takes a
+   * transaction signature and returns only signatures older than it (exclusive). So `nextCursor`
+   * is the oldest signature on this page, set whenever the page came back full (`limit`
+   * signatures, so there may be more). A shorter page is the end of the history.
+   */
+  async getRecentTransactions(address: string, limit: number, options: TransactionsPageOptions = {}): Promise<TransactionsResult> {
+    if (options.before !== undefined && !SIGNATURE_FORMAT.test(options.before)) {
+      return {
+        available: false,
+        reason: "invalid `before` cursor for solana — pass the nextCursor (a transaction signature) from a previous page unchanged",
+      };
+    }
     const pubkey = new PublicKey(address);
     let signatures: ConfirmedSignatureInfo[];
     let parsedTxs: (ParsedTransactionWithMeta | null)[];
     try {
-      signatures = await this.#connection.getSignaturesForAddress(pubkey, { limit });
+      signatures = await this.#connection.getSignaturesForAddress(pubkey, {
+        limit,
+        ...(options.before !== undefined ? { before: options.before } : {}),
+      });
       if (signatures.length === 0) {
         return { available: true, transactions: [] };
       }
@@ -177,6 +195,7 @@ export class SolanaAdapter implements ChainAdapter {
       parsedTxs,
     );
     const transactions = signatures.map((sigInfo, i) => summarizeTransaction(sigInfo, matched[i] ?? null, address));
-    return { available: true, transactions };
+    const oldest = signatures.at(-1)?.signature;
+    return { available: true, transactions, ...(signatures.length >= limit && oldest ? { nextCursor: oldest } : {}) };
   }
 }

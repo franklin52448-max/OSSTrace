@@ -31,6 +31,29 @@ export function parseTxLimit(raw: string | null): number {
   return Math.min(n, MAX_TX_LIMIT);
 }
 
+/**
+ * Upper bound on a `?before=` cursor's length. Every cursor a chain adapter hands out is far
+ * shorter (an Ethereum `block:txIndex:n:n`, a Solana signature of at most 88 characters); the
+ * bound keeps an arbitrary string out of the cache key space.
+ */
+export const MAX_CURSOR_LENGTH = 128;
+const CURSOR_CHARS = /^[A-Za-z0-9:]+$/;
+
+/**
+ * `?before=` → the cursor to pass to the chain adapter (ADR 0018), `undefined` when absent or
+ * empty (the most recent page, exactly as without it), or `null` when it can't be any adapter's
+ * cursor (wrong characters or too long) and the request should get a 400. Whether a well-formed
+ * cursor is valid for its chain is the adapter's call; one it can't use comes back as
+ * `transactions: { available: false, reason }`.
+ */
+export function parseBeforeCursor(raw: string | null): string | undefined | null {
+  if (raw === null) return undefined;
+  const trimmed = raw.trim();
+  if (trimmed === "") return undefined;
+  if (trimmed.length > MAX_CURSOR_LENGTH || !CURSOR_CHARS.test(trimmed)) return null;
+  return trimmed;
+}
+
 export interface ExplorerDeps {
   registry: ReadonlyMap<ChainId, ChainAdapter>;
   store: LabelStore;
@@ -94,12 +117,17 @@ export function createExplorerHandler(deps: ExplorerDeps): (req: IncomingMessage
       }
       const address: Address = { chain: chainRaw, value: canonicalAddress(chainRaw, decoded) };
       const limit = parseTxLimit(url.searchParams.get("limit"));
+      const before = parseBeforeCursor(url.searchParams.get("before"));
+      if (before === null) {
+        sendJson(res, 400, { error: "malformed ?before= cursor — pass transactions.nextCursor from a previous response unchanged" });
+        return;
+      }
       // A failed balance or transactions call is NOT a 502: it comes back inside a 200 report as
       // `{ available: false, reason }` on that one field, next to everything that did work
       // (ADR 0014). A 502 here now means only that the lookup as a whole failed — e.g. the label
       // store or the cache couldn't be read.
       try {
-        sendJson(res, 200, await cachedLookupAddress(address, adapter, deps.store, deps.cache, limit));
+        sendJson(res, 200, await cachedLookupAddress(address, adapter, deps.store, deps.cache, limit, before));
       } catch (cause) {
         sendJson(res, 502, { error: cause instanceof Error ? cause.message : String(cause) });
       }

@@ -9,7 +9,7 @@ Each subfolder here is a self-contained chain integration implementing `ChainAda
 interface ChainAdapter {
   readonly chain: ChainId;
   getBalance(address: string): Promise<Balance>;
-  getRecentTransactions(address: string, limit: number): Promise<TransactionsResult>;
+  getRecentTransactions(address: string, limit: number, options?: { before?: string }): Promise<TransactionsResult>;
 }
 ```
 
@@ -18,6 +18,11 @@ interface ChainAdapter {
 - `getRecentTransactions` returns `{ available: false, reason }` (not an empty array, not a
   thrown error) when the data genuinely can't be fetched — e.g. a required API key isn't
   configured. Callers need to tell "nothing happened" apart from "we couldn't check."
+- Paging (ADR 0018): when there may be older history than the page you returned, set
+  `nextCursor` on the result, built from your chain's own native cursor (not an invented offset).
+  Given it back as `options.before`, return the next-older page with no overlap and no gap. Omit
+  `nextCursor` once you know you've reached the end. A cursor you can't parse is
+  `{ available: false, reason }`.
 - Don't invent fields. If a chain's data source can't give you a `from`/`to` for some transaction
   shape (e.g. a Solana instruction this adapter doesn't decode), say so in the adapter's own
   README rather than guessing.

@@ -16,9 +16,14 @@ export const DEFAULT_TX_LIMIT = 25;
  * addresses are in demand" is a per-address question. The background indexer refreshes hot
  * addresses at `DEFAULT_TX_LIMIT` through this same function, so its writes land on exactly the
  * key the API server's default lookups read.
+ *
+ * A paged lookup (`?before=`, ADR 0018) is a different transaction list again, so the cursor is
+ * part of the key too. It's appended only when present: a lookup without one keeps exactly the
+ * key it always had, which is the one the indexer warms.
  */
-export function reportCacheKey(address: Address, txLimit: number): string {
-  return `${addressKey(address)}|limit=${txLimit}`;
+export function reportCacheKey(address: Address, txLimit: number, before?: string): string {
+  const base = `${addressKey(address)}|limit=${txLimit}`;
+  return before === undefined ? base : `${base}|before=${before}`;
 }
 
 /**
@@ -38,10 +43,11 @@ export async function cachedLookupAddress(
   store: LabelStore,
   cache: Cache,
   txLimit = DEFAULT_TX_LIMIT,
+  before?: string,
 ): Promise<AddressReport> {
   await cache.recordHit(LOOKUP_POPULARITY_TOPIC, addressKey(address));
 
-  const key = reportCacheKey(address, txLimit);
+  const key = reportCacheKey(address, txLimit, before);
   const cached = await cache.get(key);
   if (cached) {
     const report = JSON.parse(cached) as AddressReport;
@@ -49,7 +55,7 @@ export async function cachedLookupAddress(
     return { ...report, label, tags, entity };
   }
 
-  const report = await lookupAddress(address, adapter, store, txLimit);
+  const report = await lookupAddress(address, adapter, store, txLimit, before);
   if (isCacheableReport(report)) await cache.set(key, JSON.stringify(report), REPORT_TTL_SECONDS);
   return report;
 }

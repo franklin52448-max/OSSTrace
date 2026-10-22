@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useCreateTag, useDeleteTag, useLabels, useTags, useUpdateTag } from "./api.ts";
 import { isApiError } from "../kit/api.ts";
 import { useDocumentTitle } from "../kit/hooks.ts";
-import { Button, IconButton } from "../kit/Button.tsx";
+import { Button } from "../kit/Button.tsx";
 import { ConfirmDialog } from "../kit/ConfirmDialog.tsx";
 import { Dialog } from "../kit/Dialog.tsx";
 import { Field, Input } from "../kit/Field.tsx";
@@ -46,9 +46,9 @@ export function TagsPage() {
       <aside aria-label="Tags" className="kit-panel flex shrink-0 flex-col md:sticky md:top-4 md:max-h-[calc(100dvh-var(--trace-topbar-h)-140px)] md:w-[var(--trace-sidebar-w)]">
         <div className="kit-panel-head">
           <h2 className="kit-panel-title">Tags</h2>
-          <IconButton size="sm" label="New tag" onClick={() => setCreating(true)}>
-            <Plus aria-hidden className="size-4" />
-          </IconButton>
+          <Button size="sm" variant="primary" icon={<Plus aria-hidden className="size-3.5" />} onClick={() => setCreating(true)}>
+            New tag
+          </Button>
         </div>
         <div className="p-2">
           <div className="relative">

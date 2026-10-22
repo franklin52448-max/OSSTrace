@@ -1,8 +1,10 @@
 import type { Entity } from "@osstrace/contract";
+import * as Popover from "@radix-ui/react-popover";
 import { useEffect, useState, type FormEvent } from "react";
 import { useCreateEntity, useTags, useUpdateEntity } from "./api.ts";
 import { isApiError } from "../kit/api.ts";
 import { Button } from "../kit/Button.tsx";
+import { cn } from "../kit/cn.ts";
 import { Dialog } from "../kit/Dialog.tsx";
 import { Field, Input, Textarea } from "../kit/Field.tsx";
 import { ErrorText } from "../kit/QueryState.tsx";
@@ -93,17 +95,8 @@ export function EntityDialog({ open, onOpenChange, entity, onSaved }: { open: bo
         <Field label="Name" error={errors.name ?? (conflict ? "An entity with this name already exists." : null)}>
           {(p) => <Input {...p} autoFocus value={form.name} onChange={(e) => set("name", e.target.value)} />}
         </Field>
-        <Field label="Type" optional error={errors.type} help="Free text. Pick a suggestion or write your own.">
-          {(p) => (
-            <>
-              <Input {...p} list="entity-type-options" value={form.type} onChange={(e) => set("type", e.target.value)} />
-              <datalist id="entity-type-options">
-                {ENTITY_TYPES.map((t) => (
-                  <option key={t} value={t} />
-                ))}
-              </datalist>
-            </>
-          )}
+        <Field label="Type" optional error={errors.type} help="Type anything, or pick a suggestion below.">
+          {(p) => <EntityTypeInput {...p} value={form.type} onChange={(v) => set("type", v)} />}
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Website" optional error={errors.website}>
@@ -125,6 +118,62 @@ export function EntityDialog({ open, onOpenChange, entity, onSaved }: { open: bo
         {m.isError && !conflict ? <ErrorText error={m.error} /> : null}
       </form>
     </Dialog>
+  );
+}
+
+/**
+ * Free-text input with a styled suggestion dropdown (replaces a native <input list>/<datalist>,
+ * which renders with unstyled browser chrome and can overlap neighbouring fields). Typing always
+ * wins -- the list only ever offers to fill the field, never constrains what can be typed.
+ */
+function EntityTypeInput({
+  value,
+  onChange,
+  ...fieldProps
+}: { value: string; onChange: (v: string) => void } & { id: string; "aria-describedby"?: string; "aria-invalid"?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const matches = ENTITY_TYPES.filter((t) => t.toLowerCase().includes(value.trim().toLowerCase()));
+  return (
+    <Popover.Root open={open && matches.length > 0} onOpenChange={setOpen}>
+      <Popover.Anchor asChild>
+        <Input
+          {...fieldProps}
+          value={value}
+          autoComplete="off"
+          onChange={(e) => {
+            onChange(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setOpen(false);
+          }}
+        />
+      </Popover.Anchor>
+      <Popover.Portal>
+        <Popover.Content
+          align="start"
+          sideOffset={4}
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          className="kit-overlay z-[70] max-h-56 w-[var(--radix-popover-trigger-width)] overflow-y-auto p-1 text-[13px]"
+        >
+          {matches.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={cn("kit-fade flex h-8 w-full items-center rounded-sm px-2.5 text-left hover:bg-surface-2", t === value && "bg-accent-soft text-accent")}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onChange(t);
+                setOpen(false);
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 

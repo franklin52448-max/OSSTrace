@@ -92,6 +92,8 @@ looking at an address has already made one lookup to get the report it's showing
 the `ws` npm package (MIT, no service, no API key). Protocol:
 
 ```
+client → { "auth":        { "token": "ots_..." } }      (first message; added in §6)
+server → { "event": "authenticated" }
 client → { "subscribe":   { "chain": "ethereum", "address": "0x..." } }
 client → { "unsubscribe": { "chain": "ethereum", "address": "0x..." } }
 server → { "event": "subscribed", "chain", "address", "live": true }
@@ -125,6 +127,86 @@ Pub/sub is fire-and-forget. An event published while no API server is listening 
 acceptable: a push only means something to a client connected at that moment, and a reconnecting
 client re-reads current state over HTTP.
 
+### 6. Who may connect: Origin allowlist, per-IP cap, then an accounts session (added 2026-10-22)
+
+The first version shipped with no auth, no `Origin` check and no connection limit, and said so.
+These three were added before any public deployment. This is a section of this ADR rather than a
+new one: it changes who may open the stream, not how pushes are produced or what they cost, and
+every rule in §1–§5 stands unchanged. The gates run in this order, cheapest first.
+
+**6.1 `Origin` allowlist, checked on the upgrade request.** A browser always sends `Origin` on a
+websocket upgrade, and websockets aren't covered by CORS, so without this check any web page a
+user visits could open the stream from their browser (cross-site websocket hijacking). An `Origin`
+that isn't in the list gets an HTTP `403` and the websocket is never created. The list is exact
+string matches, the same pattern `@osstrace/accounts` uses for CORS: `EXPLORER_STREAM_ALLOWED_ORIGINS`,
+falling back to `ACCOUNTS_ALLOWED_ORIGINS` (as the bounties server does), then
+`http://localhost:5301`. The literal origin `null` (sandboxed iframes, `file://`) is refused
+unless someone lists it.
+
+An upgrade with **no** `Origin` header is **allowed**. This matches the accounts package, which
+never refuses a request for lacking `Origin` (its allowlist only decides which browsers get CORS
+headers). It's also right for this endpoint on its own terms: the header's only job is to say
+which page a browser is acting for. A request without it comes from a script, a bot or a server,
+which is a normal consumer of a public read-only API, and which could put any value in the header
+anyway. Refusing it would block legitimate clients and stop no one. Those clients still have to
+pass 6.2 and 6.3.
+
+**6.2 At most 8 concurrent connections per remote address** (`MAX_CONNECTIONS_PER_IP`), counted in
+`StreamHub` on `req.socket.remoteAddress` (IPv4-mapped IPv6 folded to IPv4). Every open socket
+counts, authenticated or not, so one address can never hold more than 8 sockets waiting on the
+10s auth timeout, or more than 8 × 25 = 200 subscriptions. Over the cap, the new connection gets
+an `error` event and a close with code `1013` (try again later). An existing connection is never
+evicted to make room, since that would let a newcomer knock off someone already watching.
+
+Why 8: the web UI opens one socket per address report on screen, so a single person with a few
+tabs open needs several. A small office or household behind one NAT shares one address. Memory per
+idle socket is small, and the cap is about keeping one actor from multiplying itself, not about
+rationing normal use. 5 would already pinch a person with a handful of tabs. More than about 10
+starts to make a single address's ceiling (subscriptions, auth-pending sockets) large for no real
+user's benefit.
+
+The over-cap connection completes the websocket handshake and is then closed, instead of being
+refused with a `429` at the HTTP level. That costs one handshake, but a browser's `WebSocket` API
+can't see an HTTP status on a failed upgrade, while it does see the close code and reason.
+
+**Known limit, not solved here:** behind a reverse proxy, `remoteAddress` is the proxy, so every
+client would share one cap. `X-Forwarded-For` is deliberately not read. Any client can send that
+header, and trusting it unconditionally would let anyone dodge the cap by making up a new address
+on each connection. A proxied deployment needs trusted-proxy handling (honor the header only when
+the TCP peer is a configured proxy), which is future work.
+
+**6.3 A session from `@osstrace/accounts`, sent as the first message.** There's no second auth
+system: the hub takes anything with `AccountService.authenticate()` (in the server, the real
+service on the same accounts file, so a token from `POST /accounts/login` works here). The first
+client message must be `{ "auth": { "token": "ots_..." } }`. The hub answers
+`{ "event": "authenticated" }`, then handles subscribes. A first message that isn't `auth`, a
+token that's invalid, expired or logged out, or no `auth` within 10s each get an `error` event and
+a close with code `1008` (policy violation). The web UI treats `1008` as "don't retry with this
+token". Subscribes sent right behind the `auth` message, without waiting for the ack, are queued
+(up to 30) and handled in order once the session checks out, so a client doesn't need an extra
+round trip.
+
+Why the first message and not `?token=` on the URL: the browser `WebSocket` API can't set an
+`Authorization` header, and a token in a query string ends up in access logs, proxy logs and
+browser history. In a frame, it's handled exactly like the `Authorization: Bearer` header every
+other API here uses.
+
+Why require a session rather than allow anonymous connections with a tighter limit: the earlier
+line in Consequences ("no auth on the stream... read-only public chain data") explained why the
+first version could ship without auth. It didn't say anonymous access was a goal, and the README's
+own list of what to add before a public deployment included auth. Requiring a session is the
+simpler rule: one path, no second tier of limits to tune. It also lets the web UI identify itself
+on a public server. The HTTP API stays open, because a one-shot request costs the server nothing
+once it's answered, while a websocket is a resource someone holds open indefinitely.
+
+To be clear about what this does and doesn't do: signups are free, so auth gives accountability
+and identification, but it isn't flood protection by itself. The per-IP cap in 6.2 is the flood
+protection. There's no per-account connection cap.
+
+The session is checked once, at connect. A logout or expiry doesn't close a stream that's already
+open; the next connection with that token is refused. Re-checking on every heartbeat would mean an
+accounts-file read per socket every 30s, which isn't worth it for read-only public data.
+
 ## Consequences
 
 - RPC cost of streaming: **zero** new calls. A cycle's adapter calls are identical with or without
@@ -140,6 +222,7 @@ client re-reads current state over HTTP.
   doubles RPC load and duplicates pushes. Run one.
 - Baselines aren't persisted. After an indexer restart, the first cycle re-baselines silently, so a
   transaction landing during the restart window is never pushed (it still shows up over HTTP).
-- No auth on the stream. It's read-only public chain data, the same as the open HTTP API. The
-  Explorer README's CORS caveat (open by design for local dev) applies here too: before a public
-  deployment, add an `Origin` check and per-IP connection limits.
+- ~~No auth on the stream.~~ Superseded by §6: the stream now requires an accounts session, an
+  allowed `Origin` (or none), and stays within 8 connections per remote address. Live updates in
+  the web UI therefore need a signed-in user; the HTTP report doesn't. Behind a reverse proxy the
+  per-IP cap needs trusted-proxy handling that isn't built (§6.2).

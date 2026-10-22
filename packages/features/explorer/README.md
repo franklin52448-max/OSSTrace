@@ -80,14 +80,46 @@ The indexer logic lives in `src/indexing.ts` (`Indexer`, with a `runCycle()` tes
 address and you're pushed each real new transaction the background indexer finds for it. Design
 and the reasoning behind every rule below: [ADR 0013](../../../docs/adr/0013-real-time-streaming-rides-the-indexer.md).
 
+### Who can connect
+
+Three gates, in this order (ADR 0013 §6):
+
+1. **`Origin` allowlist, at the upgrade.** A browser upgrade whose `Origin` isn't listed gets a
+   plain `403` and no websocket. The list is `EXPLORER_STREAM_ALLOWED_ORIGINS`, falling back to
+   `ACCOUNTS_ALLOWED_ORIGINS`, then `http://localhost:5301` (comma-separated, exact match). An
+   upgrade with **no** `Origin` header is allowed: browsers always send one, so a missing header
+   means a script or server-side consumer, and it still has to pass gates 2 and 3.
+2. **At most 8 concurrent connections per remote address** (`MAX_CONNECTIONS_PER_IP`), counted by
+   the TCP peer address, authenticated or not. The 9th gets
+   `{ "event": "error", "message": "too many connections from this address (at most 8 at once)" }`
+   and a close with code `1013` (try again later). Existing connections are never evicted.
+3. **A session from `@osstrace/accounts`.** The first message must be
+   `{ "auth": { "token": "ots_..." } }`, the same token `POST /accounts/login` returns. The
+   Explorer checks it against the same accounts file (`ACCOUNTS_STORE_PATH`). A first message that
+   isn't `auth`, a bad/expired/logged-out token, or no `auth` within 10s gets an `error` event and
+   a close with code `1008`. Subscribes may be sent right behind the `auth` message without
+   waiting; they're handled, in order, once the session checks out.
+
+```sh
+# get a token from the accounts server (prints ots_...)
+curl -s localhost:5310/accounts/login -H 'content-type: application/json' \
+  -d '{"email":"you@example.com","password":"..."}' | jq -r .session.token
+# then connect with websocat (or any websocket client) and type:
+websocat ws://localhost:5300/stream
+{"auth":{"token":"ots_..."}}
+{"subscribe":{"chain":"solana","address":"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"}}
+```
+
 ### Protocol
 
 ```jsonc
 // client → server
+{ "auth":        { "token": "ots_..." } }    // first message, always
 { "subscribe":   { "chain": "solana", "address": "EPjF..." } }
 { "unsubscribe": { "chain": "solana", "address": "EPjF..." } }
 
 // server → client
+{ "event": "authenticated" }          // the session checked out; subscribes are accepted
 { "event": "subscribed", "chain": "solana", "address": "EPjF...", "live": true }
 { "event": "subscribed", "chain": "solana", "address": "EPjF...", "live": false,
   "cause": "not_indexed", "reason": "This address isn't among the 20 most-looked-up ..." }
@@ -97,7 +129,8 @@ and the reasoning behind every rule below: [ADR 0013](../../../docs/adr/0013-rea
   "detectedAt": "2026-10-22T01:00:44.533Z" }
 { "event": "possible_gap", ... }      // a full window of new txs: more may have happened; re-fetch over HTTP
 { "event": "unsubscribed", "chain": "solana", "address": "EPjF..." }
-{ "event": "error", "message": "..." } // bad JSON, unsupported chain, too many subscriptions
+{ "event": "error", "message": "..." } // bad JSON, unsupported chain, too many subscriptions;
+                                       // before a close: auth refused, too many connections
 ```
 
 `cause` when not live: `no_indexer_cycle` (no indexer has reported to this server — not running,
@@ -137,8 +170,16 @@ count as a lookup and never adds an address to the indexer's list.
 - After an indexer restart its first cycle re-baselines silently; a transaction landing in that
   window isn't pushed (it's still in the HTTP response).
 - Run one indexer per Redis — two would double RPC load and duplicate every push.
-- No auth, no `Origin` check, no per-IP connection limit (25 subscriptions per connection, 4 KB
-  frames, 30s heartbeat). Fine for local dev; add those before any public deployment.
+- **Behind a reverse proxy, the per-IP cap sees only the proxy's address**, so every client shares
+  one cap of 8. `X-Forwarded-For` is deliberately not read: anyone can send that header, and
+  trusting it unconditionally would let any client dodge the cap. A proxied deployment needs
+  trusted-proxy handling (read the header only when the TCP peer is a known proxy), which isn't
+  built yet.
+- **The session is checked once, at connect.** Logging out (or a session expiring) doesn't close
+  a stream that's already open; the next connection with that token is refused.
+- **Signups are free**, so auth gives accountability and lets the web UI identify itself, but on
+  its own it isn't flood protection; the per-IP cap is. There's no per-account connection cap.
+- Other bounds: 25 subscriptions per connection, 4 KB frames, 10s to authenticate, 30s heartbeat.
 
 Verified live, not just in tests: with `EXPLORER_EMBEDDED_INDEXER=1`, `INDEXER_INTERVAL_MS=10000`,
 a real HTTP lookup of Solana's USDC mint followed by a websocket subscribe got `not_indexed`
@@ -147,9 +188,10 @@ a real HTTP lookup of Solana's USDC mint followed by a websocket subscribe got `
 cycle ending in a `possible_gap`, which is correct for an address that busy. Ethereum without an
 Etherscan key correctly reported `history_unavailable`.
 
-The web UI's Lookup view subscribes automatically while a report is on screen
-(`packages/web/src/LiveStream.tsx`): a `LIVE` / `Not live` chip in the transactions header (with
-the server's reason shown when not live), pushed transactions prepended with a `NEW` chip.
+The web UI's Lookup view subscribes automatically while a report is on screen and you're signed
+in (`packages/web/src/LiveStream.tsx`): a `LIVE` / `Not live` chip in the transactions header (with
+the server's reason shown when not live), pushed transactions prepended with a `NEW` chip. Signed
+out, the chip says `Live: sign in` and no socket is opened; the report itself needs no account.
 
 ## API
 
@@ -201,7 +243,9 @@ Streaming tests: `txDiff.test.ts` (the new-transaction rule), `indexing.test.ts`
 `Indexer` publishing events, with adapter call counts proving no extra RPC), `stream.test.ts`
 (a real HTTP server + real `ws` client end to end; each indexer cycle is triggered with
 `runCycle()` instead of waiting on the timer, against a scripted adapter whose history the test
-edits between cycles), and `redisEventBus.test.ts` (real Redis pub/sub across two connections;
+edits between cycles; every client authenticates with a token from a real `AccountService`
+signup on a temp accounts file, and the auth, `Origin` and per-IP gates are each tested by
+their actual close codes, HTTP statuses and error events), and `redisEventBus.test.ts` (real Redis pub/sub across two connections;
 skips cleanly if no Redis at `REDIS_TEST_URL`, default `redis://127.0.0.1:6379`).
 
 `npm test` also runs `lookup.test.ts` and `cachedLookup.test.ts` against a real temp-file-backed

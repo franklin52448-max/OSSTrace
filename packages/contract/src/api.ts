@@ -1,0 +1,237 @@
+// REST contract for OSSTrace. All routes are under /api, JSON in/out, cookie session (httpOnly, SameSite=Lax).
+// Mutating requests (POST/PUT/PATCH/DELETE) MUST send `Content-Type: application/json` (or no body) and
+// pass an Origin check. Errors: HTTP status + `ApiError` body.
+// Both the server and the web client import these types; changing one means changing both.
+
+import type {
+  AddressInfo,
+  BalancesResponse,
+  Chain,
+  Counterparty,
+  TagRef,
+  Trace,
+  TraceOp,
+  TraceSummary,
+  Transfer,
+  VisualizerOp,
+  VisualizerState,
+  VisualizerView,
+  VisualizerViewSummary,
+} from "./types.ts";
+
+export type ApiError = {
+  error: {
+    code:
+      | "bad_request"
+      | "unauthorized"
+      | "forbidden"
+      | "not_found"
+      | "conflict"
+      | "rate_limited"
+      | "provider_error" // upstream chain data provider failed or is rate limited; never replaced by fake data
+      | "internal";
+    message: string;
+    /** For provider_error: which provider and whether a retry might help. */
+    provider?: { id: string; retryAfterSec?: number };
+  };
+};
+
+// ---------- Auth & account ----------
+export type User = { id: string; username: string; displayName: string; createdAt: string };
+export type SignupRequest = { username: string; password: string; displayName?: string };
+export type LoginRequest = { username: string; password: string };
+export type AuthResponse = { user: User };
+export type ChangePasswordRequest = { currentPassword: string; newPassword: string };
+export type DeleteAccountRequest = { password: string };
+export type SessionInfo = { id: string; createdAt: string; lastSeenAt: string; userAgent: string | null; current: boolean };
+// POST /api/auth/signup | /login -> AuthResponse (sets cookie); POST /api/auth/logout -> 204
+// GET /api/auth/me -> AuthResponse | 401; POST /api/auth/change-password -> 204 (other sessions revoked)
+// GET /api/auth/sessions -> SessionInfo[]; DELETE /api/auth/sessions/:id -> 204; DELETE /api/auth/account -> 204
+// Status rules: 401 only for a failed login or a missing/expired session. A wrong CURRENT password on an authenticated
+// re-auth step (change-password, delete account) is 400 `bad_request` with a clear message, never 401 (a 401 makes clients
+// treat the session as expired).
+// Rules: username 3-32 chars [a-z0-9_.-] case-insensitive unique; password >= 10 chars; login throttled per
+// (ip, username); signup can be disabled with ALLOW_SIGNUP=false.
+
+// ---------- Settings ----------
+export type Preferences = {
+  theme: "dark" | "light";
+  defaultChain: Chain;
+  defaultUsdGte: number; // default USD floor for transfers/counterparties (default 1)
+  defaultTimeLast: "1d" | "7d" | "30d" | "90d" | "1y" | "all";
+  flowDots: boolean;
+  timezone: string; // IANA
+};
+export type Settings = { user: User; preferences: Preferences };
+export type UpdateSettingsRequest = { displayName?: string; preferences?: Partial<Preferences> };
+// GET /api/settings -> Settings; PATCH /api/settings -> Settings
+
+export type NotificationMethod =
+  | { id: string; kind: "webhook"; name: string; url: string; enabled: boolean; createdAt: string; lastStatus?: string | null }
+  | { id: string; kind: "in_app"; name: string; enabled: boolean; createdAt: string };
+export type CreateNotificationMethod = { kind: "webhook"; name: string; url: string; secret?: string };
+export type WebhookTestResult = { ok: boolean; status: number | null; detail: string };
+// GET /api/settings/notification-methods -> NotificationMethod[] (in_app one always exists, cannot be deleted)
+// POST -> NotificationMethod; PATCH /:id {name?, enabled?, url?}; DELETE /:id -> 204; POST /:id/test -> WebhookTestResult
+// Webhook URLs must be http(s) and must NOT resolve to loopback/private/link-local addresses (SSRF guard).
+
+// ---------- Chains, search, address data ----------
+export type ChainStatus = { id: Chain; name: string; provider: string; ok: boolean; note?: string };
+export type SearchHit =
+  | { type: "address"; chain: Chain; address: string; info: AddressInfo }
+  | { type: "label"; id: string; chain: Chain; address: string; name: string }
+  | { type: "entity"; id: string; name: string; addressCount: number };
+// GET /api/chains -> ChainStatus[]
+// GET /api/search?q=&limit= -> { hits: SearchHit[] } (address detection by format + user's labels/entities)
+// GET /api/address/:chain/:address -> AddressInfo
+// GET /api/address/:chain/:address/balances -> BalancesResponse
+
+export type CounterpartiesQuery = { flow?: "in" | "out" | "all"; limit?: number; timeLast?: string; timeGte?: string; timeLte?: string; usdGte?: number };
+// GET /api/address/:chain/:address/counterparties -> { counterparties: Counterparty[]; sync: SyncStatus }
+
+export type SyncStatus = {
+  state: "ready" | "syncing" | "partial" | "error";
+  /** Oldest transaction time covered by the local cache for the queried addresses (ISO) or null. */
+  coveredFrom: string | null;
+  provider: string;
+  message?: string;
+};
+
+export type TransfersQuery = {
+  /** repeatable `chain:address` (also accepts bare address with detectable chain) */
+  base?: string[];
+  counterparties?: string[];
+  flow?: "in" | "out" | "all" | "self";
+  usdGte?: number;
+  usdLte?: number;
+  valueGte?: number;
+  valueLte?: number;
+  tokens?: string[];
+  chain?: Chain;
+  timeLast?: string; // 1h 12h 1d 7d 30d 1y
+  timeGte?: string;
+  timeLte?: string;
+  sortKey?: "time" | "value" | "usd";
+  sortDir?: "asc" | "desc";
+  limit?: number; // default 20, max 1000
+  cursor?: string; // opaque keyset cursor
+};
+export type TransfersResponse = {
+  transfers: Transfer[];
+  nextCursor: string | null;
+  /** Count of rows matching in the local cache; `capped` when over 10,000. */
+  count: { value: number; capped: boolean };
+  sync: SyncStatus;
+};
+// GET /api/transfers -> TransfersResponse
+
+// ---------- Tracer ----------
+// POST /api/traces {initialAddress?, initialChain?} -> { id } (server creates the root node with a deterministic id)
+// GET /api/traces -> TraceSummary[] (updatedAt desc); GET /api/traces/:id -> Trace (labels re-joined at read time)
+// DELETE /api/traces/:id -> 204
+// POST /api/traces/:id/batch {ops} -> BatchResult (<= 500 ops, atomic, idempotent)
+// POST /api/traces/:id/aggregate-summary {fromNodeID, toNodeID} -> AggregateSummaryResponse (not persisted)
+// POST /api/traces/:id/edges/:edgeId/refresh -> Trace edge (recomputes cached aggregate)
+// GET /api/public/traces/:id -> Trace (only when shareable; isOwner=false; 404 otherwise)
+export type CreateTraceRequest = { initialAddress?: string; initialChain?: Chain; title?: string };
+export type BatchRequest<O> = { ops: O[] };
+export type BatchResult = { updatedAt: string; applied: number; skipped: number };
+export type TraceBatchRequest = BatchRequest<TraceOp>;
+export type AggregateSummaryRequest = { fromNodeID: string; toNodeID: string };
+export type AggregateSummaryResponse = {
+  cachedUSDIn: number;
+  cachedTransactionCountIn: number;
+  cachedUSDOut: number;
+  cachedTransactionCountOut: number;
+  cachedAt: string;
+  sync: SyncStatus;
+};
+
+// ---------- Visualizer ----------
+// POST /api/views {name, state} -> { id }; GET /api/views -> VisualizerViewSummary[]; GET /api/views/:id -> VisualizerView
+// POST /api/views/:id/batch {ops} -> BatchResult; DELETE /api/views/:id -> 204
+// GET /api/public/views/:id -> VisualizerView (only when shareable)
+// POST /api/views/:id/send-to-tracer {nodeIDs?} -> { traceId }   (server builds neighbourhood from state, optional)
+export type CreateViewRequest = { name: string; state: VisualizerState };
+export type ViewBatchRequest = BatchRequest<VisualizerOp>;
+export type ViewListItem = VisualizerViewSummary;
+
+// ---------- Labels, entities, tags (all private to the user; the only label source in v1) ----------
+export type Label = {
+  id: string;
+  chain: Chain;
+  address: string;
+  name: string;
+  note: string | null;
+  entityId: string | null;
+  tagIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+export type Entity = {
+  id: string;
+  name: string;
+  type: string | null; // free text: exchange, fund, individual, protocol...
+  note: string | null;
+  website: string | null;
+  twitter: string | null;
+  tagIds: string[];
+  addressCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+export type Tag = TagRef & { createdAt: string; usageCount: number };
+export type CreateLabel = { chain: Chain; address: string; name: string; note?: string; entityId?: string | null; tagIds?: string[] };
+export type CreateEntity = { name: string; type?: string; note?: string; website?: string; twitter?: string; tagIds?: string[] };
+export type CreateTag = { name: string; color?: string };
+export type LabelsQuery = { chain?: Chain; q?: string; entityId?: string; tagId?: string; limit?: number; cursor?: string };
+export type LabelsResponse = { labels: Label[]; nextCursor: string | null; total: number };
+/** `skipped[].row`: CSV = line number in the file (header is line 1, so the first data row is 2); JSON = 1-based array index. */
+export type ImportResult = { created: number; updated: number; skipped: { row: number; reason: string }[] };
+// GET /api/labels (LabelsQuery) -> LabelsResponse; POST /api/labels -> Label; PATCH /api/labels/:id; DELETE /api/labels/:id
+// POST /api/labels/import {format:"csv"|"json", data:string, onConflict:"update"|"skip"} -> ImportResult
+//   CSV columns: chain,address,name,note,entity,tags(semicolon-separated)  (entity/tags created if missing)
+// GET /api/labels/export?format=csv|json -> file download
+// GET/POST /api/entities, GET/PATCH/DELETE /api/entities/:id (GET includes `addresses: Label[]`)
+// GET/POST /api/tags, PATCH/DELETE /api/tags/:id
+
+// ---------- Alerts ----------
+export type AlertTarget = { type: "address"; chain: Chain; address: string } | { type: "entity"; entityId: string };
+export type AlertRule = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  targets: AlertTarget[];
+  direction: "in" | "out" | "both";
+  minUsd: number | null;
+  tokens: string[] | null; // tokenIds; null = any
+  methodIds: string[]; // notification methods; in_app is implied
+  createdAt: string;
+  updatedAt: string;
+  lastTriggeredAt: string | null;
+  eventCount: number;
+};
+export type CreateAlertRule = Omit<AlertRule, "id" | "createdAt" | "updatedAt" | "lastTriggeredAt" | "eventCount">;
+export type AlertEvent = {
+  id: string;
+  alertId: string;
+  alertName: string;
+  transfer: Transfer;
+  matchedTarget: AlertTarget;
+  createdAt: string;
+  deliveries: { methodId: string; status: "sent" | "failed" | "skipped"; detail?: string }[];
+};
+export type Notification = { id: string; eventId: string; alertId?: string; alertName: string; transfer: Transfer; createdAt: string; read: boolean };
+export type AlertLimits = { maxRules: number; maxTargetsPerRule: number; pollIntervalSec: number };
+// GET/POST /api/alerts; GET/PATCH/DELETE /api/alerts/:id; GET /api/alerts/:id/events?limit&cursor -> {events, nextCursor}
+// GET /api/alerts/limits -> AlertLimits
+// GET /api/notifications?unread=1&limit&cursor -> {notifications, nextCursor, unreadCount}
+// POST /api/notifications/read {ids?: string[], all?: boolean} -> 204
+// Semantics: the worker polls watched addresses every pollIntervalSec; an alert only fires for transfers with
+// blockTimestamp AFTER the rule's creation/enable time (no backfill spam); each (rule, transfer) fires once.
+
+export type HealthResponse = { ok: true; version: string; chains: ChainStatus[]; /** false when ALLOW_SIGNUP=false; clients treat undefined as true */ allowSignup?: boolean };
+// GET /api/health -> HealthResponse (no auth)
+
+// Re-exports so consumers can import everything API-related from one place
+export type { AddressInfo, BalancesResponse, Counterparty, Trace, TraceSummary, Transfer, VisualizerView };

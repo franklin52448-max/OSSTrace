@@ -1,0 +1,17 @@
+{
+ "_recorded": {
+  "date": "2026-10-22",
+  "source": "https://api.mainnet-beta.solana.com getBalance(9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM)"
+ },
+ "response": {
+  "jsonrpc": "2.0",
+  "result": {
+   "context": {
+    "apiVersion": "4.3.2",
+    "slot": 459997849
+   },
+   "value": 11175975344465202
+  },
+  "id": 1
+ }
+}

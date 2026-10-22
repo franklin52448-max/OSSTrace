@@ -1,0 +1,249 @@
+{
+ "_recorded": {
+  "date": "2026-10-22",
+  "source": "https://eth.blockscout.com/api/v2/addresses/0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045/token-balances",
+  "note": "Live response; items trimmed to the first N and third-party 'metadata' tag blobs removed (the server never uses third-party labels). The live list had 8160 entries (mostly spam tokens)."
+ },
+ "response": [
+  {
+   "token": {
+    "address_hash": "0x9cdf242Ef7975D8c68D5C1F5B6905801699b1940",
+    "circulating_market_cap": "0",
+    "circulating_supply": null,
+    "decimals": "18",
+    "exchange_rate": "0.00003251",
+    "holders_count": "24823",
+    "icon_url": "https://assets.coingecko.com/coins/images/52513/small/logo_%2827%29.png?1733497755",
+    "name": "WhiteRock",
+    "reputation": "ok",
+    "symbol": "WHITE",
+    "total_supply": "1000000000000000000000000000000",
+    "type": "ERC-20",
+    "volume_24h": "44.592441007808716"
+   },
+   "token_id": null,
+   "token_instance": null,
+   "value": "10000000000000000000000000000"
+  },
+  {
+   "token": {
+    "address_hash": "0xdd974D5C2e2928deA5F71b9825b8b646686BD200",
+    "circulating_market_cap": "1628083.9036047915",
+    "circulating_supply": null,
+    "decimals": "18",
+    "exchange_rate": "0.150497",
+    "holders_count": "89704",
+    "icon_url": "https://assets.coingecko.com/coins/images/947/small/logo-kncl.png?1696502063",
+    "name": "Kyber Network Crystal Legacy",
+    "reputation": "ok",
+    "symbol": "KNCL",
+    "total_supply": "11248689358279348470850369",
+    "type": "ERC-20",
+    "volume_24h": "5.01656923231072"
+   },
+   "token_id": null,
+   "token_instance": null,
+   "value": "700008531373791941118514"
+  },
+  {
+   "token": {
+    "address_hash": "0x4E67DB19044549fF420860834c91b45BaD298722",
+    "circulating_market_cap": "2135952.3608926986",
+    "circulating_supply": null,
+    "decimals": "18",
+    "exchange_rate": "0.0024068",
+    "holders_count": "5438",
+    "icon_url": "https://assets.coingecko.com/coins/images/102178898/small/IMG_0096.png?1790654746",
+    "name": "Zip coin",
+    "reputation": "ok",
+    "symbol": "ZC",
+    "total_supply": "1000000000000000000000000000",
+    "type": "ERC-20",
+    "volume_24h": "1581374.8242746314"
+   },
+   "token_id": null,
+   "token_instance": null,
+   "value": "40420022437366533223263279"
+  },
+  {
+   "token": {
+    "address_hash": "0x28561B8A2360F463011c16b6Cc0B0cbEF8dbBcad",
+    "circulating_market_cap": "1331930.7156203417",
+    "circulating_supply": null,
+    "decimals": "9",
+    "exchange_rate": "0.00000317",
+    "holders_count": "44868",
+    "icon_url": "https://assets.coingecko.com/coins/images/50348/small/1000000612.jpg?1727248974",
+    "name": "MOO DENG",
+    "reputation": "ok",
+    "symbol": "MOODENG",
+    "total_supply": "420690000000000000000",
+    "type": "ERC-20",
+    "volume_24h": "99390.68116453795"
+   },
+   "token_id": null,
+   "token_instance": null,
+   "value": "30002309255968834506"
+  },
+  {
+   "token": {
+    "address_hash": "0xE172e9B6cfBeeB5593bDcE3f077356FDb33af904",
+    "circulating_market_cap": "15757237.35664628",
+    "circulating_supply": null,
+    "decimals": "18",
+    "exchange_rate": "0.04684985",
+    "holders_count": "3521",
+    "icon_url": "https://assets.coingecko.com/coins/images/102174402/small/fold.jpg?1783586823",
+    "name": "The Interfold",
+    "reputation": "ok",
+    "symbol": "FOLD",
+    "total_supply": "1200000000000000000000000000",
+    "type": "ERC-20",
+    "volume_24h": "2713189.9613214727"
+   },
+   "token_id": null,
+   "token_instance": null,
+   "value": "240000000000000000000000"
+  },
+  {
+   "token": {
+    "address_hash": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
+    "circulating_market_cap": "235180265.68628523",
+    "circulating_supply": null,
+    "decimals": "18",
+    "exchange_rate": "5.56",
+    "holders_count": "73043",
+    "icon_url": "https://assets.coingecko.com/coins/images/19785/small/ENS.jpg?1727872989",
+    "name": "Ethereum Name Service",
+    "reputation": "ok",
+    "symbol": "ENS",
+    "total_supply": "100000000000000000000000000",
+    "type": "ERC-20",
+    "volume_24h": "9713533.697391834"
+   },
+   "token_id": null,
+   "token_instance": null,
+   "value": "1144036076063671431479"
+  },
+  {
+   "token": {
+    "address_hash": "0xd26114cd6EE289AccF82350c8d8487fedB8A0C07",
+    "circulating_market_cap": "6934206.027049607",
+    "circulating_supply": null,
+    "decimals": "18",
+    "exchange_rate": "0.04944338",
+    "holders_count": "655361",
+    "icon_url": "https://assets.coingecko.com/coins/images/776/small/OMG_Network.jpg?1696501928",
+    "name": "OMG Network",
+    "reputation": "ok",
+    "symbol": "OMG",
+    "total_supply": "140245398245132780789239631",
+    "type": "ERC-20",
+    "volume_24h": "716394.2627880661"
+   },
+   "token_id": null,
+   "token_instance": null,
+   "value": "123647030428532080615067"
+  },
+  {
+   "token": {
+    "address_hash": "0x712F3378CD1a0476b53f0E29B1a9586E00D78683",
+    "circulating_market_cap": "169025.82390468832",
+    "circulating_supply": null,
+    "decimals": "9",
+    "exchange_rate": "0.00016901",
+    "holders_count": "623",
+    "icon_url": "https://assets.coingecko.com/coins/images/102175870/small/333853.jpg?1787819740",
+    "name": "Tsutsuji the Cate",
+    "reputation": "ok",
+    "symbol": "CATE",
+    "total_supply": "1000000000000000000",
+    "type": "ERC-20",
+    "volume_24h": "3321.967126403824"
+   },
+   "token_id": null,
+   "token_instance": null,
+   "value": "30002848000000000"
+  },
+  {
+   "token": {
+    "address_hash": "0xAe0207C757Aa2B4019Ad96edD0092ddc63EF0c50",
+    "circulating_market_cap": null,
+    "circulating_supply": null,
+    "decimals": "6",
+    "exchange_rate": null,
+    "holders_count": "8802",
+    "icon_url": null,
+    "name": "Confidential USDT",
+    "reputation": "ok",
+    "symbol": "cUSDT",
+    "total_supply": "22539948758843",
+    "type": "ERC-7984",
+    "volume_24h": null
+   },
+   "token_id": null,
+   "token_instance": null,
+   "value": null
+  },
+  {
+   "token": {
+    "address_hash": "0x0027449Bf0887ca3E431D263FFDeFb244D95b555",
+    "circulating_market_cap": null,
+    "circulating_supply": null,
+    "decimals": "18",
+    "exchange_rate": null,
+    "holders_count": "1648",
+    "icon_url": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0x0027449Bf0887ca3E431D263FFDeFb244D95b555/logo.png",
+    "name": "Not",
+    "reputation": "ok",
+    "symbol": "NOT",
+    "total_supply": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+    "type": "ERC-20",
+    "volume_24h": null
+   },
+   "token_id": null,
+   "token_instance": null,
+   "value": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+  },
+  {
+   "token": {
+    "address_hash": "0x96228bA6b17C36a26E2A42d4Ad2256e755e4e726",
+    "circulating_market_cap": null,
+    "circulating_supply": null,
+    "decimals": "18",
+    "exchange_rate": null,
+    "holders_count": "20253",
+    "icon_url": null,
+    "name": "Token",
+    "reputation": "ok",
+    "symbol": "ERC20",
+    "total_supply": "14474011154664524427946373126085988481658748083205070504932198000989141204991",
+    "type": "ERC-20",
+    "volume_24h": null
+   },
+   "token_id": null,
+   "token_instance": null,
+   "value": "7938921780222771994795489831492988899995909371408935534272991238114671687882"
+  },
+  {
+   "token": {
+    "address_hash": "0x2160b3F4B6b3363Ba3006AC6BF57498DA7194aE6",
+    "circulating_market_cap": null,
+    "circulating_supply": null,
+    "decimals": "18",
+    "exchange_rate": null,
+    "holders_count": "15",
+    "icon_url": null,
+    "name": "MOCO",
+    "reputation": "ok",
+    "symbol": "MOCO",
+    "total_supply": "4206900000000000000000000000000000000000000000000000000000",
+    "type": "ERC-20",
+    "volume_24h": null
+   },
+   "token_id": null,
+   "token_instance": null,
+   "value": "4206899999999999999999998587184858718633505814276971012073"
+  }
+ ]
+}

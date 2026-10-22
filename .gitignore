@@ -27,3 +27,5 @@ data/community/
 data/bounties/
 # A local Redis server's own snapshot, written if one is ever started with this folder as its cwd -- never repo data.
 dump.rdb
+# @osstrace/server's own SQLite store (accounts, traces, labels, transfers cache, ...). Runtime data, not repo seed data -- see ADR 0022.
+packages/server/data/

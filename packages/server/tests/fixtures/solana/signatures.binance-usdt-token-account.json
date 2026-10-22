@@ -1,0 +1,103 @@
+{
+ "_recorded": {
+  "date": "2026-10-22",
+  "source": "https://api.mainnet-beta.solana.com getSignaturesForAddress(TB5FCqbNsnuLQgEjUuPaT9qtVPTT4U1A8rvi7qzEj2M, limit=10)",
+  "note": "USDT token account owned by the Binance hot wallet"
+ },
+ "response": {
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": [
+   {
+    "blockTime": 1792537290,
+    "confirmationStatus": "finalized",
+    "err": null,
+    "memo": null,
+    "signature": "2YoZFbyqsntsbMbprq7NnL3p9Fq8n3cpGLbD2dKHh2U1DgSsb2TGxeStfaDUUtLtApjei3DsDW2Wr8KfqRpnHPQA",
+    "slot": 459405127,
+    "transactionIndex": 38
+   },
+   {
+    "blockTime": 1792496542,
+    "confirmationStatus": "finalized",
+    "err": null,
+    "memo": null,
+    "signature": "5y1AV6AfgKhGaE7jRixafFyrnBYPgAKJ1A2gmFm1GFKNE7afHsw4NPVz6wkC8tF7x3tMUST9epPmyayicoeiHiK5",
+    "slot": 459217391,
+    "transactionIndex": 229
+   },
+   {
+    "blockTime": 1792486270,
+    "confirmationStatus": "finalized",
+    "err": null,
+    "memo": null,
+    "signature": "3kPiKqNyCeuUX16KQqQ2adRpyU3rCz61B1WaNW4sx9BwyNciMXGP6WJwxpPrgugTw9821rWB54jKLVu6u1zcX3B4",
+    "slot": 459170157,
+    "transactionIndex": 229
+   },
+   {
+    "blockTime": 1792486205,
+    "confirmationStatus": "finalized",
+    "err": null,
+    "memo": null,
+    "signature": "3SWPhQYgdJ9aBubvvG9atY5hCtW61kAqr2ktzJoVT8vTsJZRv3HvUF8N9kLFS3ZHVc6DYQcq9Drx38p1qx73Htth",
+    "slot": 459169863,
+    "transactionIndex": 1170
+   },
+   {
+    "blockTime": 1792486172,
+    "confirmationStatus": "finalized",
+    "err": null,
+    "memo": null,
+    "signature": "KfwKnx7N6mBB9W5BN4ZzzsidUVGQrxpgkxAFoZ9ZkpSi19RVo4etPqW8UR4LGhQ4Wdsu91wQLSQ2Swnd5dNnmqa",
+    "slot": 459169708,
+    "transactionIndex": 51
+   },
+   {
+    "blockTime": 1792485085,
+    "confirmationStatus": "finalized",
+    "err": null,
+    "memo": null,
+    "signature": "DMm85Fftc3UuG2UV7n7pwMdwizKySrCAPimTHCxVBkrJepQLsbk9UbYfaaFSW93e5gWxD1GPJH3vPJyywLtQyqg",
+    "slot": 459164694,
+    "transactionIndex": 156
+   },
+   {
+    "blockTime": 1792484452,
+    "confirmationStatus": "finalized",
+    "err": null,
+    "memo": null,
+    "signature": "3hpqmc5CJeAjBEcTeTcFNoSAqz9YTDkycznUo8mHTViuT6LvQHdvixSHvTBY5znsFiVqoB3dvxzjdVGeJgn12CNr",
+    "slot": 459161797,
+    "transactionIndex": 555
+   },
+   {
+    "blockTime": 1791817290,
+    "confirmationStatus": "finalized",
+    "err": null,
+    "memo": null,
+    "signature": "2bhWDhhxEaQmLnAsXgjMrXFEbgecVTr9Rk8RU5ynf4riuaKGCinw7AcB782NxXfi5XKePy34VtPBnVYRZTyUZ1NR",
+    "slot": 456088821,
+    "transactionIndex": 763
+   },
+   {
+    "blockTime": 1791182628,
+    "confirmationStatus": "finalized",
+    "err": null,
+    "memo": null,
+    "signature": "4w6q5THnXbVP7jWEArFM3QEpAuMiWBuTyANRB93RGKJ4tYLN6AENEHH1QpBoVGvfXvZJkiNHy69eNfD12Syzzgi9",
+    "slot": 453501834,
+    "transactionIndex": 509
+   },
+   {
+    "blockTime": 1790822602,
+    "confirmationStatus": "finalized",
+    "err": null,
+    "memo": null,
+    "signature": "4LRmBzSUZXJCy4LU6LjgaFnJH7SdF9vycZt4qRW1HYyPVYEKKHK1TweRqcbgK4E7bWYPZJzAMLMqtDLQjuhnwLK6",
+    "slot": 452156096,
+    "transactionIndex": 988
+   }
+  ]
+ }
+}

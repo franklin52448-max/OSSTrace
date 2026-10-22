@@ -6,15 +6,19 @@
   "type": "module",
   "workspaces": [
     "packages/core",
+    "packages/contract",
+    "packages/server",
     "packages/chains/*",
     "packages/features/*",
     "packages/web"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p packages/web && tsc --noEmit -p packages/web/tests",
-    "test": "node --experimental-strip-types --test packages/*/tests/*.test.ts packages/*/*/tests/*.test.ts scripts/tests/*.test.ts",
-    "check": "npm run typecheck && npm run test",
+    "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p packages/web && tsc --noEmit -p packages/web/tests && tsc --noEmit -p packages/contract/tests && tsc --noEmit -p packages/server/tests",
+    "test": "find packages scripts -path '*/node_modules' -prune -o -regex '.*/tests/[^/]*\\.test\\.ts' -print | grep -vE '^packages/(contract|server)/' | xargs node --experimental-strip-types --test",
+    "test:server": "npm run test --workspace packages/contract --workspace packages/server",
+    "check": "npm run typecheck && npm run test && npm run test:server",
+    "dev:server": "npm run dev --workspace packages/server",
     "ingest:ofac": "node --experimental-strip-types scripts/ingest-ofac-sdn.ts",
     "ingest:uk": "node --experimental-strip-types scripts/ingest-uk-sanctions.ts",
     "ingest:safe": "node --experimental-strip-types scripts/ingest-safe-deployments.ts",

@@ -1,0 +1,170 @@
+{
+ "_recorded": {
+  "date": "2026-10-22",
+  "source": "https://api.mainnet-beta.solana.com getTransaction(2Mk95GmvAhLKy4LoeUHLihZAwAJH9X7YVuVuLH9a6hjzFRYotHt83sJHWX1N8uPFU63AHectJYbEsWqNSTT3YKKp, jsonParsed, maxSupportedTransactionVersion=0)"
+ },
+ "response": {
+  "blockTime": 1792529958,
+  "meta": {
+   "computeUnitsConsumed": 35631,
+   "costUnits": 37611,
+   "err": null,
+   "fee": 5088,
+   "innerInstructions": [],
+   "logMessages": [
+    "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+    "Program ComputeBudget111111111111111111111111111111 success",
+    "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+    "Program ComputeBudget111111111111111111111111111111 success",
+    "Program 11111111111111111111111111111111 invoke [1]",
+    "Program 11111111111111111111111111111111 success",
+    "Program 11111111111111111111111111111111 invoke [1]",
+    "Program 11111111111111111111111111111111 success",
+    "Program 11111111111111111111111111111111 invoke [1]",
+    "Program 11111111111111111111111111111111 success",
+    "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr invoke [1]",
+    "Program log: Memo (len 94): \"Hi! Please send 1 SOL to this wallet: 3uxuYqjuxm2A8ovMoJU1QfCD9nKWxA4m3nQXJCnr6QSH. Thank you!\"",
+    "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr consumed 34881 of 43250 compute units",
+    "Program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr success"
+   ],
+   "postBalances": [
+    141271544,
+    11267650856649,
+    1403061592958079,
+    11175975344469535,
+    1,
+    1,
+    523015235
+   ],
+   "postTokenBalances": [],
+   "preBalances": [
+    141276635,
+    11267650856648,
+    1403061592958078,
+    11175975344469534,
+    1,
+    1,
+    523015235
+   ],
+   "preTokenBalances": [],
+   "rewards": [],
+   "status": {
+    "Ok": null
+   }
+  },
+  "slot": 459371243,
+  "transaction": {
+   "message": {
+    "accountKeys": [
+     {
+      "pubkey": "3uxuYqjuxm2A8ovMoJU1QfCD9nKWxA4m3nQXJCnr6QSH",
+      "signer": true,
+      "source": "transaction",
+      "writable": true
+     },
+     {
+      "pubkey": "3V11R3pEGSt5XeRaoLDcCdkAB8zVSaKRCm8y3uKBgnsr",
+      "signer": false,
+      "source": "transaction",
+      "writable": true
+     },
+     {
+      "pubkey": "5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9",
+      "signer": false,
+      "source": "transaction",
+      "writable": true
+     },
+     {
+      "pubkey": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+      "signer": false,
+      "source": "transaction",
+      "writable": true
+     },
+     {
+      "pubkey": "11111111111111111111111111111111",
+      "signer": false,
+      "source": "transaction",
+      "writable": false
+     },
+     {
+      "pubkey": "ComputeBudget111111111111111111111111111111",
+      "signer": false,
+      "source": "transaction",
+      "writable": false
+     },
+     {
+      "pubkey": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
+      "signer": false,
+      "source": "transaction",
+      "writable": false
+     }
+    ],
+    "instructions": [
+     {
+      "accounts": [],
+      "data": "Kq9Km1",
+      "programId": "ComputeBudget111111111111111111111111111111",
+      "stackHeight": 1
+     },
+     {
+      "accounts": [],
+      "data": "3pFgtwwZBtC7",
+      "programId": "ComputeBudget111111111111111111111111111111",
+      "stackHeight": 1
+     },
+     {
+      "parsed": {
+       "info": {
+        "destination": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+        "lamports": 1,
+        "source": "3uxuYqjuxm2A8ovMoJU1QfCD9nKWxA4m3nQXJCnr6QSH"
+       },
+       "type": "transfer"
+      },
+      "program": "system",
+      "programId": "11111111111111111111111111111111",
+      "stackHeight": 1
+     },
+     {
+      "parsed": {
+       "info": {
+        "destination": "5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9",
+        "lamports": 1,
+        "source": "3uxuYqjuxm2A8ovMoJU1QfCD9nKWxA4m3nQXJCnr6QSH"
+       },
+       "type": "transfer"
+      },
+      "program": "system",
+      "programId": "11111111111111111111111111111111",
+      "stackHeight": 1
+     },
+     {
+      "parsed": {
+       "info": {
+        "destination": "3V11R3pEGSt5XeRaoLDcCdkAB8zVSaKRCm8y3uKBgnsr",
+        "lamports": 1,
+        "source": "3uxuYqjuxm2A8ovMoJU1QfCD9nKWxA4m3nQXJCnr6QSH"
+       },
+       "type": "transfer"
+      },
+      "program": "system",
+      "programId": "11111111111111111111111111111111",
+      "stackHeight": 1
+     },
+     {
+      "parsed": "Hi! Please send 1 SOL to this wallet: 3uxuYqjuxm2A8ovMoJU1QfCD9nKWxA4m3nQXJCnr6QSH. Thank you!",
+      "program": "spl-memo",
+      "programId": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
+      "stackHeight": 1
+     }
+    ],
+    "recentBlockhash": "EYT1gUcAFVDfenqDYjw4sDwrhe4woCneNVDbDvuYHA7n"
+   },
+   "signatures": [
+    "2Mk95GmvAhLKy4LoeUHLihZAwAJH9X7YVuVuLH9a6hjzFRYotHt83sJHWX1N8uPFU63AHectJYbEsWqNSTT3YKKp"
+   ]
+  },
+  "transactionIndex": 7,
+  "version": "legacy"
+ }
+}

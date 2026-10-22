@@ -1,0 +1,26 @@
+{
+  "name": "@osstrace/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/main.ts",
+  "scripts": {
+    "dev": "node --experimental-strip-types src/main.ts",
+    "start": "node --experimental-strip-types src/main.ts",
+    "test": "vitest run",
+    "test:live": "vitest run -c vitest.live.config.ts"
+  },
+  "dependencies": {
+    "@osstrace/contract": "*",
+    "@fastify/cookie": "^11.0.0",
+    "csv-parse": "^5.6.0",
+    "csv-stringify": "^6.5.0",
+    "fastify": "^5.4.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.0"
+  }
+}

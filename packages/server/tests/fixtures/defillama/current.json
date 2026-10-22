@@ -1,0 +1,29 @@
+{
+ "_recorded": {
+  "date": "2026-10-22",
+  "source": "https://coins.llama.fi/prices/current/coingecko:ethereum,coingecko:solana,ethereum:0x6B175474E89094C44Da98b954EedeAC495271d0F,solana:EPjFWdd5AufqSSqeM2qVSDzLtq7dc5ECW45tVf2YQDdW"
+ },
+ "response": {
+  "coins": {
+   "coingecko:ethereum": {
+    "price": 2406.8805431165133,
+    "symbol": "ETH",
+    "timestamp": 1792664100,
+    "confidence": 0.99
+   },
+   "coingecko:solana": {
+    "price": 104.42076383051149,
+    "symbol": "SOL",
+    "timestamp": 1792664100,
+    "confidence": 0.99
+   },
+   "ethereum:0x6B175474E89094C44Da98b954EedeAC495271d0F": {
+    "decimals": 18,
+    "symbol": "DAI",
+    "price": 0.9994444291694953,
+    "timestamp": 1792663921,
+    "confidence": 0.99
+   }
+  }
+ }
+}

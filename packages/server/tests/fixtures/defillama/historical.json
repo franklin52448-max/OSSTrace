@@ -1,0 +1,23 @@
+{
+ "_recorded": {
+  "date": "2026-10-22",
+  "source": "https://coins.llama.fi/prices/historical/1792539697/coingecko:ethereum,solana:So11111111111111111111111111111111111111112"
+ },
+ "response": {
+  "coins": {
+   "coingecko:ethereum": {
+    "symbol": "ETH",
+    "price": 2445.572775686787,
+    "timestamp": 1792539715,
+    "confidence": 0.99
+   },
+   "solana:So11111111111111111111111111111111111111112": {
+    "decimals": 9,
+    "symbol": "SOL",
+    "price": 106.26122958701306,
+    "timestamp": 1792539715,
+    "confidence": 0.99
+   }
+  }
+ }
+}

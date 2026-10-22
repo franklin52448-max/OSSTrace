@@ -1,0 +1,35 @@
+{
+ "_recorded": {
+  "date": "2026-10-22",
+  "source": "https://coins.llama.fi/batchHistorical?coins=%7B%22coingecko%3Aethereum%22%3A%20%5B1792539697%2C%201792630647%5D%2C%20%22ethereum%3A0x6B175474E89094C44Da98b954EedeAC495271d0F%22%3A%20%5B1792539697%5D%2C%20%22ethereum%3A0x53EDeacdA5167731d830F6e9FC17d365F5070060%22%3A%20%5B1792539697%5D%7D&searchWidth=600"
+ },
+ "response": {
+  "coins": {
+   "coingecko:ethereum": {
+    "symbol": "ETH",
+    "prices": [
+     {
+      "timestamp": 1792539715,
+      "price": 2445.572775686787,
+      "confidence": 0.99
+     },
+     {
+      "timestamp": 1792630617,
+      "price": 2475.0182998003925,
+      "confidence": 0.99
+     }
+    ]
+   },
+   "ethereum:0x6B175474E89094C44Da98b954EedeAC495271d0F": {
+    "symbol": "DAI",
+    "prices": [
+     {
+      "timestamp": 1792539715,
+      "price": 1.000033502905283,
+      "confidence": 0.99
+     }
+    ]
+   }
+  }
+ }
+}

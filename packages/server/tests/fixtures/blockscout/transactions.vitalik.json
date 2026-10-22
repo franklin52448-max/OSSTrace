@@ -1,0 +1,959 @@
+{
+ "_recorded": {
+  "date": "2026-10-22",
+  "source": "https://eth.blockscout.com/api/v2/addresses/0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045/transactions",
+  "note": "Live response; items trimmed to the first N and third-party 'metadata' tag blobs removed (the server never uses third-party labels)."
+ },
+ "response": {
+  "items": [
+   {
+    "priority_fee": null,
+    "raw_input": "0x",
+    "is_pending_update": false,
+    "result": "out of gas",
+    "hash": "0x22ad700579b47179ba1c23bf175bc33d9ed89b8333ddc722574a2c5399b47f29",
+    "max_fee_per_gas": null,
+    "revert_reason": null,
+    "confirmation_duration": [
+     0,
+     12121.0
+    ],
+    "transaction_burnt_fee": null,
+    "type": 0,
+    "token_transfers_overflow": null,
+    "confirmations": 678,
+    "position": 220,
+    "max_priority_fee_per_gas": null,
+    "transaction_tag": null,
+    "created_contract": null,
+    "value": "1000000000000000",
+    "from": {
+     "ens_domain_name": null,
+     "hash": "0x8ab822f1243a285bAFCb575De468f2c6642c9191",
+     "implementations": [],
+     "is_contract": false,
+     "is_scam": false,
+     "is_verified": false,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "gas_used": "21000",
+    "status": "error",
+    "to": {
+     "ens_domain_name": "vitalik.eth",
+     "hash": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+     "implementations": [
+      {
+       "address_hash": "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
+       "name": "AmbireAccount7702"
+      }
+     ],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": "eip7702",
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "authorization_list": [],
+    "method": null,
+    "fee": {
+     "type": "actual",
+     "value": "2423503026000"
+    },
+    "gas_limit": "21000",
+    "gas_price": "115404906",
+    "decoded_input": null,
+    "fhe_operations_count": 0,
+    "token_transfers": null,
+    "base_fee_per_gas": "113861704",
+    "timestamp": "2026-10-22T07:50:11.000000Z",
+    "nonce": 6,
+    "historic_exchange_rate": null,
+    "transaction_types": [
+     "coin_transfer",
+     "contract_call"
+    ],
+    "exchange_rate": "2406.06",
+    "block_number": 26246771,
+    "has_error_in_internal_transactions": false
+   },
+   {
+    "priority_fee": "210620000000",
+    "raw_input": "0x",
+    "is_pending_update": false,
+    "result": "success",
+    "hash": "0x34db29dbb4d75439583de53ea954133a12ec9a92347dca4037c3c809ab4e0158",
+    "max_fee_per_gas": "56182553",
+    "revert_reason": null,
+    "confirmation_duration": [
+     0,
+     12121.0
+    ],
+    "transaction_burnt_fee": "805730179920",
+    "type": 2,
+    "token_transfers_overflow": null,
+    "confirmations": 15014,
+    "position": 55,
+    "max_priority_fee_per_gas": "10000000",
+    "transaction_tag": null,
+    "created_contract": null,
+    "value": "73604354161448",
+    "from": {
+     "ens_domain_name": null,
+     "hash": "0xB0bAc44173a65f79932F6D550Df605Eb235C628E",
+     "implementations": [],
+     "is_contract": false,
+     "is_scam": false,
+     "is_verified": false,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "gas_used": "21062",
+    "status": "ok",
+    "to": {
+     "ens_domain_name": "vitalik.eth",
+     "hash": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+     "implementations": [
+      {
+       "address_hash": "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
+       "name": "AmbireAccount7702"
+      }
+     ],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": "eip7702",
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "authorization_list": [],
+    "method": null,
+    "fee": {
+     "type": "actual",
+     "value": "1016350179920"
+    },
+    "gas_limit": "25472",
+    "gas_price": "48255160",
+    "decoded_input": null,
+    "fhe_operations_count": 0,
+    "token_transfers": null,
+    "base_fee_per_gas": "38255160",
+    "timestamp": "2026-10-20T07:55:11.000000Z",
+    "nonce": 1,
+    "historic_exchange_rate": "2446.4878553971676",
+    "transaction_types": [
+     "coin_transfer",
+     "contract_call"
+    ],
+    "exchange_rate": "2406.06",
+    "block_number": 26232435,
+    "has_error_in_internal_transactions": false
+   },
+   {
+    "priority_fee": "58720000000000",
+    "raw_input": "0x56e7a59ee5a4a7e593a520e8bf99e4b8aae4bba3e5b881e59088e7baa6307862366564353738666633333530656261613861323937306537636533633639646236633635383139e8b79fe4bda0e5b08fe8afb4e9878ce79a84454d4552414c44e69585e4ba8be698afe4bda0e5b08fe8afb4e9878ce79a84e79c9fe5ae9ee8bf98e58e9fe4b98820e58fa6e5a496e68891e99984e98081e4ba86e4b880e4ba9be8bf99e4b8aae4bba3e5b881e8b79fe4bb96e79a844e4654e7bb99e4bda0e79599e4bd9ce7baaae5bfb520e8b0a2e8b0a2",
+    "is_pending_update": false,
+    "result": "success",
+    "hash": "0xd917e0a6f79617474064e6dd78e45cf61acc819943c3976f7e9d44f38d8572ab",
+    "max_fee_per_gas": "3060403901",
+    "revert_reason": null,
+    "confirmation_duration": [
+     0,
+     12121.0
+    ],
+    "transaction_burnt_fee": "4011207445520",
+    "type": 2,
+    "token_transfers_overflow": null,
+    "confirmations": 16496,
+    "position": 41,
+    "max_priority_fee_per_gas": "2000000000",
+    "transaction_tag": null,
+    "created_contract": null,
+    "value": "560000000000000",
+    "from": {
+     "ens_domain_name": null,
+     "hash": "0xbdd9f6D35C7B8C9D53cC2C3060E8cbf3823Bb731",
+     "implementations": [],
+     "is_contract": false,
+     "is_scam": false,
+     "is_verified": false,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "gas_used": "29360",
+    "status": "ok",
+    "to": {
+     "ens_domain_name": "vitalik.eth",
+     "hash": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+     "implementations": [
+      {
+       "address_hash": "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
+       "name": "AmbireAccount7702"
+      }
+     ],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": "eip7702",
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "authorization_list": [],
+    "method": "0x56e7a59e",
+    "fee": {
+     "type": "actual",
+     "value": "62731207445520"
+    },
+    "gas_limit": "29709",
+    "gas_price": "2136621507",
+    "decoded_input": null,
+    "fhe_operations_count": 0,
+    "token_transfers": null,
+    "base_fee_per_gas": "136621507",
+    "timestamp": "2026-10-20T02:57:35.000000Z",
+    "nonce": 263,
+    "historic_exchange_rate": "2446.4878553971676",
+    "transaction_types": [
+     "coin_transfer",
+     "contract_call"
+    ],
+    "exchange_rate": "2406.06",
+    "block_number": 26230953,
+    "has_error_in_internal_transactions": false
+   },
+   {
+    "priority_fee": "110709120",
+    "raw_input": "0x1163b2b0000000000000000000000000852e7a62c92abd1b96a24b309e3aed63103a1fda",
+    "is_pending_update": false,
+    "result": "success",
+    "hash": "0x07484e13481eb68b7b5c53530797f61cd2162b3aa83e99a2d85095f31b99587f",
+    "max_fee_per_gas": "51696030",
+    "revert_reason": null,
+    "confirmation_duration": [
+     0,
+     12121.0
+    ],
+    "transaction_burnt_fee": "827190017280",
+    "type": 2,
+    "token_transfers_overflow": null,
+    "confirmations": 25451,
+    "position": 205,
+    "max_priority_fee_per_gas": "5014",
+    "transaction_tag": null,
+    "created_contract": null,
+    "value": "0",
+    "from": {
+     "ens_domain_name": null,
+     "hash": "0x852e7a62C92abD1b96A24B309e3AED63103A1Fda",
+     "implementations": [],
+     "is_contract": false,
+     "is_scam": false,
+     "is_verified": false,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "gas_used": "22080",
+    "status": "ok",
+    "to": {
+     "ens_domain_name": "vitalik.eth",
+     "hash": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+     "implementations": [
+      {
+       "address_hash": "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
+       "name": "AmbireAccount7702"
+      }
+     ],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": "eip7702",
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "authorization_list": [],
+    "method": "0x1163b2b0",
+    "fee": {
+     "type": "actual",
+     "value": "827300726400"
+    },
+    "gas_limit": "22414",
+    "gas_price": "37468330",
+    "decoded_input": null,
+    "fhe_operations_count": 0,
+    "token_transfers": null,
+    "base_fee_per_gas": "37463316",
+    "timestamp": "2026-10-18T20:59:59.000000Z",
+    "nonce": 120,
+    "historic_exchange_rate": "2407.8423723702235",
+    "transaction_types": [
+     "contract_call"
+    ],
+    "exchange_rate": "2406.06",
+    "block_number": 26221998,
+    "has_error_in_internal_transactions": false
+   },
+   {
+    "priority_fee": "118129840",
+    "raw_input": "0xeafaddfd0000000000000000000000006b3595068778dd592e39a122f4f5a5cf09c90fe2000000000000000000000000852e7a62c92abd1b96a24b309e3aed63103a1fda0000000000000000000000000000000000000000000000001bed44739abda99f",
+    "is_pending_update": false,
+    "result": "success",
+    "hash": "0xfbee0bfc72af04e322f8c828a3de84f5d721532421b80e2ad7a3810e407b3c36",
+    "max_fee_per_gas": "52741355",
+    "revert_reason": null,
+    "confirmation_duration": [
+     0,
+     12121.0
+    ],
+    "transaction_burnt_fee": "1014866955320",
+    "type": 2,
+    "token_transfers_overflow": null,
+    "confirmations": 25455,
+    "position": 184,
+    "max_priority_fee_per_gas": "5014",
+    "transaction_tag": null,
+    "created_contract": null,
+    "value": "0",
+    "from": {
+     "ens_domain_name": null,
+     "hash": "0x852e7a62C92abD1b96A24B309e3AED63103A1Fda",
+     "implementations": [],
+     "is_contract": false,
+     "is_scam": false,
+     "is_verified": false,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "gas_used": "23560",
+    "status": "ok",
+    "to": {
+     "ens_domain_name": "vitalik.eth",
+     "hash": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+     "implementations": [
+      {
+       "address_hash": "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
+       "name": "AmbireAccount7702"
+      }
+     ],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": "eip7702",
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "authorization_list": [],
+    "method": "0xeafaddfd",
+    "fee": {
+     "type": "actual",
+     "value": "1014985085160"
+    },
+    "gas_limit": "23897",
+    "gas_price": "43080861",
+    "decoded_input": null,
+    "fhe_operations_count": 0,
+    "token_transfers": null,
+    "base_fee_per_gas": "43075847",
+    "timestamp": "2026-10-18T20:59:11.000000Z",
+    "nonce": 119,
+    "historic_exchange_rate": "2407.8423723702235",
+    "transaction_types": [
+     "contract_call"
+    ],
+    "exchange_rate": "2406.06",
+    "block_number": 26221994,
+    "has_error_in_internal_transactions": false
+   },
+   {
+    "priority_fee": "117979420",
+    "raw_input": "0xeafaddfd0000000000000000000000004c9edd5852cd905f086c759e8383e09bff1e68b3000000000000000000000000852e7a62c92abd1b96a24b309e3aed63103a1fda000000000000000000000000000000000000000000000000cc8e40e905dae000",
+    "is_pending_update": false,
+    "result": "success",
+    "hash": "0x7e13950b4b9828d728c4e0e7818c67f39997d584b95c2b2046f21b7167cbc33f",
+    "max_fee_per_gas": "49437036",
+    "revert_reason": null,
+    "confirmation_duration": [
+     0,
+     12121.0
+    ],
+    "transaction_burnt_fee": "1030638682970",
+    "type": 2,
+    "token_transfers_overflow": null,
+    "confirmations": 25457,
+    "position": 238,
+    "max_priority_fee_per_gas": "5014",
+    "transaction_tag": null,
+    "created_contract": null,
+    "value": "0",
+    "from": {
+     "ens_domain_name": null,
+     "hash": "0x852e7a62C92abD1b96A24B309e3AED63103A1Fda",
+     "implementations": [],
+     "is_contract": false,
+     "is_scam": false,
+     "is_verified": false,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "gas_used": "23530",
+    "status": "ok",
+    "to": {
+     "ens_domain_name": "vitalik.eth",
+     "hash": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+     "implementations": [
+      {
+       "address_hash": "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
+       "name": "AmbireAccount7702"
+      }
+     ],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": "eip7702",
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "authorization_list": [],
+    "method": "0xeafaddfd",
+    "fee": {
+     "type": "actual",
+     "value": "1030756662390"
+    },
+    "gas_limit": "23867",
+    "gas_price": "43806063",
+    "decoded_input": null,
+    "fhe_operations_count": 0,
+    "token_transfers": null,
+    "base_fee_per_gas": "43801049",
+    "timestamp": "2026-10-18T20:58:47.000000Z",
+    "nonce": 118,
+    "historic_exchange_rate": "2407.8423723702235",
+    "transaction_types": [
+     "contract_call"
+    ],
+    "exchange_rate": "2406.06",
+    "block_number": 26221992,
+    "has_error_in_internal_transactions": false
+   },
+   {
+    "priority_fee": "117829000",
+    "raw_input": "0xeafaddfd000000000000000000000000ba100000625a3754423978a60c9317c58a424e3d000000000000000000000000852e7a62c92abd1b96a24b309e3aed63103a1fda0000000000000000000000000000000000000000000000000cf4079c032d1bc5",
+    "is_pending_update": false,
+    "result": "success",
+    "hash": "0x3daa77facf81284265cb83016826beabb5e48b609feccbe1a02b91327e192a42",
+    "max_fee_per_gas": "49307557",
+    "revert_reason": null,
+    "confirmation_duration": [
+     0,
+     12121.0
+    ],
+    "transaction_burnt_fee": "968043772000",
+    "type": 2,
+    "token_transfers_overflow": null,
+    "confirmations": 25467,
+    "position": 111,
+    "max_priority_fee_per_gas": "5014",
+    "transaction_tag": null,
+    "created_contract": null,
+    "value": "0",
+    "from": {
+     "ens_domain_name": null,
+     "hash": "0x852e7a62C92abD1b96A24B309e3AED63103A1Fda",
+     "implementations": [],
+     "is_contract": false,
+     "is_scam": false,
+     "is_verified": false,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "gas_used": "23500",
+    "status": "ok",
+    "to": {
+     "ens_domain_name": "vitalik.eth",
+     "hash": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+     "implementations": [
+      {
+       "address_hash": "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
+       "name": "AmbireAccount7702"
+      }
+     ],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": "eip7702",
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "authorization_list": [],
+    "method": "0xeafaddfd",
+    "fee": {
+     "type": "actual",
+     "value": "968161601000"
+    },
+    "gas_limit": "23837",
+    "gas_price": "41198366",
+    "decoded_input": null,
+    "fhe_operations_count": 0,
+    "token_transfers": null,
+    "base_fee_per_gas": "41193352",
+    "timestamp": "2026-10-18T20:56:47.000000Z",
+    "nonce": 117,
+    "historic_exchange_rate": "2407.8423723702235",
+    "transaction_types": [
+     "contract_call"
+    ],
+    "exchange_rate": "2406.06",
+    "block_number": 26221982,
+    "has_error_in_internal_transactions": false
+   },
+   {
+    "priority_fee": "117678580",
+    "raw_input": "0xeafaddfd0000000000000000000000007fc66500c84a76ad7e9c93437bfc5ac33e2ddae9000000000000000000000000852e7a62c92abd1b96a24b309e3aed63103a1fda00000000000000000000000000000000000000000000000000241140fe15bc00",
+    "is_pending_update": false,
+    "result": "success",
+    "hash": "0xd99b8fe7509d49ebcf1b6dc467b1bca61e037520731a0f757a4ae8b8c873ac85",
+    "max_fee_per_gas": "50975646",
+    "revert_reason": null,
+    "confirmation_duration": [
+     0,
+     12121.0
+    ],
+    "transaction_burnt_fee": "964275581910",
+    "type": 2,
+    "token_transfers_overflow": null,
+    "confirmations": 25468,
+    "position": 302,
+    "max_priority_fee_per_gas": "5014",
+    "transaction_tag": null,
+    "created_contract": null,
+    "value": "0",
+    "from": {
+     "ens_domain_name": null,
+     "hash": "0x852e7a62C92abD1b96A24B309e3AED63103A1Fda",
+     "implementations": [],
+     "is_contract": false,
+     "is_scam": false,
+     "is_verified": false,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "gas_used": "23470",
+    "status": "ok",
+    "to": {
+     "ens_domain_name": "vitalik.eth",
+     "hash": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+     "implementations": [
+      {
+       "address_hash": "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
+       "name": "AmbireAccount7702"
+      }
+     ],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": "eip7702",
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "authorization_list": [],
+    "method": "0xeafaddfd",
+    "fee": {
+     "type": "actual",
+     "value": "964393260490"
+    },
+    "gas_limit": "23807",
+    "gas_price": "41090467",
+    "decoded_input": null,
+    "fhe_operations_count": 0,
+    "token_transfers": null,
+    "base_fee_per_gas": "41085453",
+    "timestamp": "2026-10-18T20:56:35.000000Z",
+    "nonce": 116,
+    "historic_exchange_rate": "2407.8423723702235",
+    "transaction_types": [
+     "contract_call"
+    ],
+    "exchange_rate": "2406.06",
+    "block_number": 26221981,
+    "has_error_in_internal_transactions": false
+   },
+   {
+    "priority_fee": "118129840",
+    "raw_input": "0xeafaddfd0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f000000000000000000000000852e7a62c92abd1b96a24b309e3aed63103a1fda000000000000000000000000000000000000000000000000c773e10b058899b0",
+    "is_pending_update": false,
+    "result": "success",
+    "hash": "0x64b23a34ca8dfb9e0df3ad9ca4585abada00a34a3e0f5a30b396a60af63175c1",
+    "max_fee_per_gas": "52592911",
+    "revert_reason": null,
+    "confirmation_duration": [
+     0,
+     12121.0
+    ],
+    "transaction_burnt_fee": "1000723416120",
+    "type": 2,
+    "token_transfers_overflow": null,
+    "confirmations": 25471,
+    "position": 343,
+    "max_priority_fee_per_gas": "5014",
+    "transaction_tag": null,
+    "created_contract": null,
+    "value": "0",
+    "from": {
+     "ens_domain_name": null,
+     "hash": "0x852e7a62C92abD1b96A24B309e3AED63103A1Fda",
+     "implementations": [],
+     "is_contract": false,
+     "is_scam": false,
+     "is_verified": false,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "gas_used": "23560",
+    "status": "ok",
+    "to": {
+     "ens_domain_name": "vitalik.eth",
+     "hash": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+     "implementations": [
+      {
+       "address_hash": "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
+       "name": "AmbireAccount7702"
+      }
+     ],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": "eip7702",
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "authorization_list": [],
+    "method": "0xeafaddfd",
+    "fee": {
+     "type": "actual",
+     "value": "1000841545960"
+    },
+    "gas_limit": "23897",
+    "gas_price": "42480541",
+    "decoded_input": null,
+    "fhe_operations_count": 0,
+    "token_transfers": null,
+    "base_fee_per_gas": "42475527",
+    "timestamp": "2026-10-18T20:55:59.000000Z",
+    "nonce": 115,
+    "historic_exchange_rate": "2407.8423723702235",
+    "transaction_types": [
+     "contract_call"
+    ],
+    "exchange_rate": "2406.06",
+    "block_number": 26221978,
+    "has_error_in_internal_transactions": false
+   },
+   {
+    "priority_fee": "118280260",
+    "raw_input": "0xeafaddfd0000000000000000000000007d1afa7b718fb893db30a3abc0cfc608aacfebb0000000000000000000000000852e7a62c92abd1b96a24b309e3aed63103a1fda00000000000000000000000000000000000000000000000ba68be6fe8cd611b9",
+    "is_pending_update": false,
+    "result": "success",
+    "hash": "0x8823b2dcad514e17a3951043148089db87c469e6d1addf0a6b866b23be30d242",
+    "max_fee_per_gas": "52989487",
+    "revert_reason": null,
+    "confirmation_duration": [
+     0,
+     12121.0
+    ],
+    "transaction_burnt_fee": "1033790420320",
+    "type": 2,
+    "token_transfers_overflow": null,
+    "confirmations": 25483,
+    "position": 217,
+    "max_priority_fee_per_gas": "5014",
+    "transaction_tag": null,
+    "created_contract": null,
+    "value": "0",
+    "from": {
+     "ens_domain_name": null,
+     "hash": "0x852e7a62C92abD1b96A24B309e3AED63103A1Fda",
+     "implementations": [],
+     "is_contract": false,
+     "is_scam": false,
+     "is_verified": false,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "gas_used": "23590",
+    "status": "ok",
+    "to": {
+     "ens_domain_name": "vitalik.eth",
+     "hash": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+     "implementations": [
+      {
+       "address_hash": "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
+       "name": "AmbireAccount7702"
+      }
+     ],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": "eip7702",
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "authorization_list": [],
+    "method": "0xeafaddfd",
+    "fee": {
+     "type": "actual",
+     "value": "1033908700580"
+    },
+    "gas_limit": "23927",
+    "gas_price": "43828262",
+    "decoded_input": null,
+    "fhe_operations_count": 0,
+    "token_transfers": null,
+    "base_fee_per_gas": "43823248",
+    "timestamp": "2026-10-18T20:53:35.000000Z",
+    "nonce": 114,
+    "historic_exchange_rate": "2407.8423723702235",
+    "transaction_types": [
+     "contract_call"
+    ],
+    "exchange_rate": "2406.06",
+    "block_number": 26221966,
+    "has_error_in_internal_transactions": false
+   },
+   {
+    "priority_fee": "118129840",
+    "raw_input": "0xeafaddfd000000000000000000000000b50721bcf8d664c30412cfbc6cf7a15145234ad1000000000000000000000000852e7a62c92abd1b96a24b309e3aed63103a1fda0000000000000000000000000000000000000000000000004423bcda09325e22",
+    "is_pending_update": false,
+    "result": "success",
+    "hash": "0xff07db604b9165360b53939d3fb535d8504b4f875bf0801b7ca2ec81ed8811e4",
+    "max_fee_per_gas": "50376166",
+    "revert_reason": null,
+    "confirmation_duration": [
+     0,
+     12121.0
+    ],
+    "transaction_burnt_fee": "1086472698400",
+    "type": 2,
+    "token_transfers_overflow": null,
+    "confirmations": 25484,
+    "position": 167,
+    "max_priority_fee_per_gas": "5014",
+    "transaction_tag": null,
+    "created_contract": null,
+    "value": "0",
+    "from": {
+     "ens_domain_name": null,
+     "hash": "0x852e7a62C92abD1b96A24B309e3AED63103A1Fda",
+     "implementations": [],
+     "is_contract": false,
+     "is_scam": false,
+     "is_verified": false,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "gas_used": "23560",
+    "status": "ok",
+    "to": {
+     "ens_domain_name": "vitalik.eth",
+     "hash": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+     "implementations": [
+      {
+       "address_hash": "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
+       "name": "AmbireAccount7702"
+      }
+     ],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": "eip7702",
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "authorization_list": [],
+    "method": "0xeafaddfd",
+    "fee": {
+     "type": "actual",
+     "value": "1086590828240"
+    },
+    "gas_limit": "23897",
+    "gas_price": "46120154",
+    "decoded_input": null,
+    "fhe_operations_count": 0,
+    "token_transfers": null,
+    "base_fee_per_gas": "46115140",
+    "timestamp": "2026-10-18T20:53:23.000000Z",
+    "nonce": 113,
+    "historic_exchange_rate": "2407.8423723702235",
+    "transaction_types": [
+     "contract_call"
+    ],
+    "exchange_rate": "2406.06",
+    "block_number": 26221965,
+    "has_error_in_internal_transactions": false
+   },
+   {
+    "priority_fee": "118129840",
+    "raw_input": "0xeafaddfd000000000000000000000000ec53bf9167f50cdeb3ae105f56099aaab9061f83000000000000000000000000852e7a62c92abd1b96a24b309e3aed63103a1fda0000000000000000000000000000000000000000000000005de357f943b17b48",
+    "is_pending_update": false,
+    "result": "success",
+    "hash": "0x01cb66946fae77564e781b8fc629701c26018dcf919c7453a35c8dd348282811",
+    "max_fee_per_gas": "49432915",
+    "revert_reason": null,
+    "confirmation_duration": [
+     0,
+     12121.0
+    ],
+    "transaction_burnt_fee": "988953617600",
+    "type": 2,
+    "token_transfers_overflow": null,
+    "confirmations": 25488,
+    "position": 190,
+    "max_priority_fee_per_gas": "5014",
+    "transaction_tag": null,
+    "created_contract": null,
+    "value": "0",
+    "from": {
+     "ens_domain_name": null,
+     "hash": "0x852e7a62C92abD1b96A24B309e3AED63103A1Fda",
+     "implementations": [],
+     "is_contract": false,
+     "is_scam": false,
+     "is_verified": false,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "gas_used": "23560",
+    "status": "ok",
+    "to": {
+     "ens_domain_name": "vitalik.eth",
+     "hash": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+     "implementations": [
+      {
+       "address_hash": "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d",
+       "name": "AmbireAccount7702"
+      }
+     ],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "name": null,
+     "private_tags": [],
+     "proxy_type": "eip7702",
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "authorization_list": [],
+    "method": "0xeafaddfd",
+    "fee": {
+     "type": "actual",
+     "value": "989071747440"
+    },
+    "gas_limit": "23897",
+    "gas_price": "41980974",
+    "decoded_input": null,
+    "fhe_operations_count": 0,
+    "token_transfers": null,
+    "base_fee_per_gas": "41975960",
+    "timestamp": "2026-10-18T20:52:35.000000Z",
+    "nonce": 112,
+    "historic_exchange_rate": "2407.8423723702235",
+    "transaction_types": [
+     "contract_call"
+    ],
+    "exchange_rate": "2406.06",
+    "block_number": 26221961,
+    "has_error_in_internal_transactions": false
+   }
+  ],
+  "next_page_params": {
+   "index": 103,
+   "value": "0",
+   "hash": "0x5ada7b3be9e868cc19a13673a2924b68060217b6d07db35becd7253709918e11",
+   "inserted_at": "2026-09-27T10:36:28.063218Z",
+   "block_number": 26068237,
+   "fee": "5485989668216",
+   "items_count": 50
+  }
+ }
+}

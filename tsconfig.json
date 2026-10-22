@@ -2,6 +2,8 @@
   "files": [],
   "references": [
     { "path": "packages/core" },
+    { "path": "packages/contract" },
+    { "path": "packages/server" },
     { "path": "packages/chains/ethereum" },
     { "path": "packages/chains/solana" },
     { "path": "packages/features/explorer" },

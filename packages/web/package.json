@@ -18,6 +18,7 @@
   "devDependencies": {
     "@osstrace/accounts": "*",
     "@osstrace/community-labels": "*",
+    "@osstrace/private-labels": "*",
     "@osstrace/explorer": "*",
     "@tailwindcss/vite": "^4.3.3",
     "@types/jsdom": "^30.0.0",

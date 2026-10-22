@@ -26,6 +26,9 @@ import {
   type TransactionsResult,
 } from "@osstrace/core";
 import { createExplorerHandler } from "@osstrace/explorer/src/http.ts";
+// --- private-labels (imports) ---
+import { JsonFilePrivateLabelStore, PrivateLabelService, createPrivateLabelsHandler } from "@osstrace/private-labels";
+// --- end ---
 import { WEB_ORIGIN } from "./env.ts";
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => Promise<void> | void;
@@ -118,6 +121,10 @@ export interface Stack {
   /** The real Explorer API, every request held until released. */
   explorer: Running;
   nextExplorerRequest(path: string): Promise<HeldRequest>;
+  // --- private-labels ---
+  /** The real private-labels API (ADR 0004), on its own port, authenticating against `accountService`. */
+  privateLabels: Running;
+  // --- end private-labels ---
   close(): Promise<void>;
 }
 
@@ -130,8 +137,25 @@ export interface Stack {
 export async function startStack(adapter: ChainAdapter): Promise<Stack> {
   const dir = await mkdtemp(join(tmpdir(), "osstrace-web-test-"));
   const accountService = new AccountService(new JsonFileAccountStore(join(dir, "accounts.json")));
+
+  // --- private-labels ---
+  // The real private-labels API on the same accounts, and the same service handed to
+  // community-labels as its read-only lookup for "share as Community label" (ADR 0017), exactly
+  // as community-labels' own server.ts wires it.
+  const privateLabelService = new PrivateLabelService(accountService, new JsonFilePrivateLabelStore(join(dir, "private-labels.json")));
+  const privateLabelsHandler = createPrivateLabelsHandler(privateLabelService, { allowedOrigins: [WEB_ORIGIN] });
+  const privateLabels = await listen(async (req, res) => {
+    if (await privateLabelsHandler(req, res)) return;
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "not_found", message: "not found" }));
+  });
+  process.env["VITE_PRIVATE_LABELS_URL"] = privateLabels.url;
+  // --- end private-labels ---
+
   const submissionsPath = join(dir, "submissions.json");
-  const submissions = new LabelSubmissionService(new JsonFileSubmissionStore(submissionsPath), accountService);
+  const submissions = new LabelSubmissionService(new JsonFileSubmissionStore(submissionsPath), accountService, {
+    privateLabels: privateLabelService, // private-labels
+  });
   const accountsHandler = createAccountsHandler(accountService, { allowedOrigins: [WEB_ORIGIN] });
   const labelsHandler = createLabelSubmissionsHandler(submissions, { allowedOrigins: [WEB_ORIGIN] });
   const accounts = await listen(async (req, res) => {
@@ -158,7 +182,6 @@ export async function startStack(adapter: ChainAdapter): Promise<Stack> {
   process.env["VITE_COMMUNITY_LABELS_URL"] = accounts.url;
   // Not exercised by these tests; pointed at a real server that answers 404 rather than at a
   // port on this machine that might happen to be running something.
-  process.env["VITE_PRIVATE_LABELS_URL"] = accounts.url;
   process.env["VITE_RISK_SCORING_URL"] = accounts.url;
 
   return {
@@ -166,7 +189,9 @@ export async function startStack(adapter: ChainAdapter): Promise<Stack> {
     accountService,
     explorer,
     nextExplorerRequest: gate.next,
+    privateLabels, // private-labels
     async close() {
+      await privateLabels.close(); // private-labels
       await explorer.close();
       await accounts.close();
       await rm(dir, { recursive: true, force: true });

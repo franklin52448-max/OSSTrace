@@ -2,7 +2,7 @@ import { addressKey, type Address, type Cache, type ChainAdapter, type ChainId, 
 import { isSupportedChain } from "./address.ts";
 import { DEFAULT_TX_LIMIT, LOOKUP_POPULARITY_TOPIC, reportCacheKey } from "./cachedLookup.ts";
 import type { CycleCompletedEvent, IndexerEventBus } from "./events.ts";
-import { lookupAddress } from "./lookup.ts";
+import { isCacheableReport, lookupAddress } from "./lookup.ts";
 import { diffTransactions } from "./txDiff.ts";
 
 export interface IndexerOptions {
@@ -91,8 +91,14 @@ export class Indexer {
         // Popularity is ranked per address; the warmed report is the default-limit one, written
         // under the same limit-aware key the API server reads for a plain (no `?limit=`) lookup.
         const report = await lookupAddress(address, adapter, store, DEFAULT_TX_LIMIT);
-        await cache.set(reportCacheKey(address, DEFAULT_TX_LIMIT), JSON.stringify(report), this.refreshTtlSeconds);
-        log(`refreshed ${key}`);
+        // A report with a failed balance call isn't written over a good cached one (ADR 0014);
+        // its transactions are still diffed below, since they came back fine on their own.
+        if (isCacheableReport(report)) {
+          await cache.set(reportCacheKey(address, DEFAULT_TX_LIMIT), JSON.stringify(report), this.refreshTtlSeconds);
+          log(`refreshed ${key}`);
+        } else if (!report.balance.available) {
+          log(`refreshed ${key} without caching it: balance unavailable (${report.balance.reason})`);
+        }
 
         if (!report.transactions.available) {
           // Couldn't check this cycle: keep the old baseline, report nothing new, say why.

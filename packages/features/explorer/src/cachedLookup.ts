@@ -1,5 +1,5 @@
 import { addressKey, type Address, type Cache, type ChainAdapter, type LabelStore } from "@osstrace/core";
-import { lookupAddress, type AddressReport } from "./lookup.ts";
+import { isCacheableReport, lookupAddress, type AddressReport } from "./lookup.ts";
 
 /** Short on purpose — this is "recent activity" data, not something that needs to be perfectly live. */
 const REPORT_TTL_SECONDS = 30;
@@ -50,6 +50,6 @@ export async function cachedLookupAddress(
   }
 
   const report = await lookupAddress(address, adapter, store, txLimit);
-  await cache.set(key, JSON.stringify(report), REPORT_TTL_SECONDS);
+  if (isCacheableReport(report)) await cache.set(key, JSON.stringify(report), REPORT_TTL_SECONDS);
   return report;
 }

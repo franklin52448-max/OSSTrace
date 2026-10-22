@@ -19,6 +19,10 @@ interface Balance {
   native: { symbol: string; amount: string; decimals: number };
   asOf: string;
 }
+/** Mirrors core's BalanceResult: a failed balance call is reported, never hides the rest of the report. */
+type BalanceResult = { available: true; balance: Balance } | { available: false; reason: string };
+/** Each chain's native unit, for transaction amounts — known without a successful balance call. */
+const NATIVE_SYMBOL: Record<ChainId, string> = { ethereum: "ETH", solana: "SOL" };
 interface TokenTransfer {
   token: string | null;
   symbol: string | null;
@@ -61,7 +65,7 @@ interface Tag {
 }
 interface AddressReport {
   address: { chain: ChainId; value: string };
-  balance: Balance;
+  balance: BalanceResult;
   transactions: TransactionsResult;
   label: Label | null;
   tags: Tag[];
@@ -368,10 +372,17 @@ function Report({
 
       <section className="card p-4" aria-label="Balance">
         <div className="section-title">Balance</div>
-        <div className="num mt-1.5 font-mono text-2xl font-semibold tracking-tight text-ink">
-          {report.balance.native.amount} <span className="text-base font-medium text-ink-dim">{report.balance.native.symbol}</span>
-        </div>
-        <div className="mt-1 text-xs text-ink-faint">as of {new Date(report.balance.asOf).toLocaleString()}</div>
+        {report.balance.available ? (
+          <>
+            <div className="num mt-1.5 font-mono text-2xl font-semibold tracking-tight text-ink">
+              {report.balance.balance.native.amount}{" "}
+              <span className="text-base font-medium text-ink-dim">{report.balance.balance.native.symbol}</span>
+            </div>
+            <div className="mt-1 text-xs text-ink-faint">as of {new Date(report.balance.balance.asOf).toLocaleString()}</div>
+          </>
+        ) : (
+          <div className="mt-1.5 text-sm text-ink-dim">Unavailable — {report.balance.reason}</div>
+        )}
       </section>
 
       <section className="card overflow-hidden" aria-label="Recent transactions">
@@ -426,7 +437,7 @@ function Report({
                   <div className="shrink-0 text-right">
                     <div className={`num font-mono text-sm font-medium ${amountClass(native)}`}>
                       {native.sign}
-                      {tx.valueNative} <span className="text-xs font-normal text-ink-faint">{report.balance.native.symbol}</span>
+                      {tx.valueNative} <span className="text-xs font-normal text-ink-faint">{NATIVE_SYMBOL[report.address.chain]}</span>
                     </div>
                     {tx.tokenTransfers?.map((t, i) => {
                       const token = amountDisplay(t.direction, tx.status);

@@ -136,6 +136,17 @@ export interface Balance {
   asOf: string;
 }
 
+/**
+ * A balance lookup that may have failed, modelled the same way as `TransactionsResult`: "we
+ * couldn't check" is a value with a reason, never a throw that takes unrelated data down with it.
+ * A report-level consumer (the Explorer's `AddressReport`) uses this so one failed RPC call
+ * doesn't hide the transactions, label, tags or entity it did get — see ADR 0014.
+ *
+ * `ChainAdapter.getBalance` itself still returns a plain `Balance` and throws on failure; the
+ * orchestrating code turns that throw into `{ available: false, reason }`.
+ */
+export type BalanceResult = { available: true; balance: Balance } | { available: false; reason: string };
+
 export type TransferDirection = "in" | "out" | "self";
 
 /**

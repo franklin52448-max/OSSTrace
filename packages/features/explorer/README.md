@@ -170,7 +170,7 @@ Returns an `AddressReport`:
 ```json
 {
   "address": { "chain": "ethereum", "value": "0x..." },
-  "balance": { "chain": "ethereum", "address": "0x...", "native": { "symbol": "ETH", "amount": "1.5", "decimals": 18 }, "asOf": "..." },
+  "balance": { "available": true, "balance": { "chain": "ethereum", "address": "0x...", "native": { "symbol": "ETH", "amount": "1.5", "decimals": 18 }, "asOf": "..." } },
   "transactions": { "available": true, "transactions": [ { "hash": "...", "...": "..." } ] },
   "label": null,
   "tags": [],
@@ -181,6 +181,13 @@ Returns an `AddressReport`:
 `transactions` is `{ "available": false, "reason": "..." }` instead of an empty list when the
 underlying chain adapter couldn't fetch history (e.g. no `ETHERSCAN_API_KEY`) — see
 `packages/chains/README.md`.
+
+`balance` works the same way: `{ "available": false, "reason": "..." }` when the balance call
+failed (the RPC is down, say). The two chain calls are made independently, so one failing never
+hides the other, and never hides the label/tags/entity, which are local reads. That's still a
+`200`. A `502` now only means the lookup as a whole failed (e.g. the label store couldn't be
+read). A report with a failed balance isn't cached, so the next lookup retries right away.
+Reasoning: [ADR 0014](../../../docs/adr/0014-explorer-reports-balance-failure-without-hiding-the-rest.md).
 
 `GET /health` — `{ "ok": true }`.
 

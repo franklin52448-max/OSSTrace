@@ -94,6 +94,10 @@ export function createExplorerHandler(deps: ExplorerDeps): (req: IncomingMessage
       }
       const address: Address = { chain: chainRaw, value: canonicalAddress(chainRaw, decoded) };
       const limit = parseTxLimit(url.searchParams.get("limit"));
+      // A failed balance or transactions call is NOT a 502: it comes back inside a 200 report as
+      // `{ available: false, reason }` on that one field, next to everything that did work
+      // (ADR 0014). A 502 here now means only that the lookup as a whole failed — e.g. the label
+      // store or the cache couldn't be read.
       try {
         sendJson(res, 200, await cachedLookupAddress(address, adapter, deps.store, deps.cache, limit));
       } catch (cause) {

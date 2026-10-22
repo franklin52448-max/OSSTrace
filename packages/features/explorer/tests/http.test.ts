@@ -132,12 +132,31 @@ test("?limit= is clamped to a whole number in [1, MAX_TX_LIMIT] before it reache
   });
 });
 
-test("an adapter failure is a 502, not a crash", async () => {
-  await withExplorer(async ({ base, eth }) => {
+test("a failed balance call is a 200 with balance unavailable, not a 502 that hides the rest", async () => {
+  await withExplorer(async ({ base, eth, store }) => {
+    await store.addLabel({
+      address: { chain: "ethereum", value: VALID_ETH },
+      name: "Local label",
+      confidence: "verified",
+      source: { description: "test source", url: "https://example.org/source", addedAt: "2026-10-22" },
+    });
     eth.failBalance = true;
     const res = await fetch(`${base}/address/ethereum/${VALID_ETH}`);
-    assert.equal(res.status, 502);
-    assert.equal(((await res.json()) as { error: string }).error, "upstream RPC failed");
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      balance: { available: boolean; reason?: string };
+      transactions: { available: boolean };
+      label: { name: string } | null;
+    };
+    assert.deepEqual(body.balance, { available: false, reason: "upstream RPC failed" });
+    assert.equal(body.transactions.available, true, "the successful transactions call is still in the response");
+    assert.equal(body.label?.name, "Local label", "locally stored data has nothing to do with the RPC");
+
+    // Not cached: once the RPC recovers, the very next lookup shows the real balance.
+    eth.failBalance = false;
+    const again = (await (await fetch(`${base}/address/ethereum/${VALID_ETH}`)).json()) as { balance: { available: boolean } };
+    assert.equal(again.balance.available, true);
+    assert.equal(eth.balanceCalls.length, 2);
     assert.equal((await fetch(`${base}/health`)).status, 200);
   });
 });

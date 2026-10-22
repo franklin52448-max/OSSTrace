@@ -10,14 +10,16 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
-    "@osstrace/core": "*",
     "@osstrace/chain-ethereum": "*",
     "@osstrace/chain-solana": "*",
     "@osstrace/community-labels": "*",
-    "ioredis": "^6.0.0"
+    "@osstrace/core": "*",
+    "ioredis": "^6.0.0",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
-    "typescript": "^5.9.3",
-    "@types/node": "^24.9.1"
+    "@types/node": "^24.9.1",
+    "@types/ws": "^8.18.2",
+    "typescript": "^5.9.3"
   }
 }

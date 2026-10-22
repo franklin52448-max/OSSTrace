@@ -126,7 +126,14 @@ folders, separate agents, same plugin architecture that made this possible in th
 
 - [ ] Deployment story for the Explorer API, the background indexer (as a real long-running
       process, not a terminal script), and the web UI's static build
-- [ ] Real-time streaming (websocket) layer
+- [x] Real-time streaming (websocket) layer — `ws://<explorer>/stream`
+      ([ADR 0013](docs/adr/0013-real-time-streaming-rides-the-indexer.md),
+      `packages/features/explorer/README.md`): pushes ride on the background indexer's existing
+      refetches (a tx-hash diff between consecutive fetches), so zero new RPC calls. Web UI Lookup
+      view shows a live badge and pushed transactions.
+  - [ ] Only the indexer's top-N addresses get pushes; a bounded per-subscriber watch list would
+        need its own cost design (ADR 0013 §3 explains why it wasn't done by default)
+  - [ ] Before any public deployment: `Origin` check and per-IP connection limits on the stream
 - [ ] Everything in `SCALING-AND-COSTS.md` (local only, not in this repo) once there's a real
       hosting target to plan against
 

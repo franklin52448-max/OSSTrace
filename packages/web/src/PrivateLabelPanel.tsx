@@ -58,7 +58,7 @@ export default function PrivateLabelPanel({ chain, address }: { chain: ChainId; 
   if (!token) {
     return (
       <div className="flex items-center gap-2 rounded-card border border-dashed border-line-strong px-4 py-2.5 text-xs text-ink-faint">
-        <LockIcon /> Log in (in the sidebar) to add a private label to this address — visible only to you.
+        <LockIcon /> Log in (top right) to add a private label to this address — visible only to you.
       </div>
     );
   }

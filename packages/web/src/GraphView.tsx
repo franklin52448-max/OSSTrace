@@ -82,9 +82,9 @@ function short(address: string): string {
   return address.length > 14 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address;
 }
 
-export default function GraphView() {
-  const [chain, setChain] = useState<ChainId>("ethereum");
-  const [address, setAddress] = useState("");
+export default function GraphView({ initial = null }: { initial?: { chain: ChainId; address: string } | null }) {
+  const [chain, setChain] = useState<ChainId>(initial?.chain ?? "ethereum");
+  const [address, setAddress] = useState(initial?.address ?? "");
   const [limit, setLimit] = useState(10);
   const [state, setState] = useState<GraphState>({ status: "idle" });
 
@@ -103,6 +103,12 @@ export default function GraphView() {
     } catch (cause) {
       setState({ status: "error", message: cause instanceof Error ? cause.message : String(cause) });
     }
+  }, []);
+
+  // Opened from a Lookup report's "Visualize" button: graph that address straight away.
+  useEffect(() => {
+    if (initial) void load(initial.chain, initial.address, limit);
+    // Only on mount: the parent remounts this view (keyed on the address) for a new target.
   }, []);
 
   function handleSubmit(event: React.FormEvent): void {
@@ -274,10 +280,10 @@ function nodeRadius(node: GraphNode): number {
 }
 
 function nodeColor(node: GraphNode): { fill: string; stroke: string } {
-  if (node.tags.some((t) => t.tag === "sanctioned")) return { fill: "#7f1d1d", stroke: "#f87171" };
-  if (node.role === "center") return { fill: "#064e3b", stroke: "#34d399" };
-  if (node.label || node.entity || node.tags.length > 0) return { fill: "#78350f", stroke: "#fbbf24" };
-  return { fill: "#262626", stroke: "#737373" };
+  if (node.tags.some((t) => t.tag === "sanctioned")) return { fill: "#3b1a2a", stroke: "#f47b7b" };
+  if (node.role === "center") return { fill: "#1d2a5d", stroke: "#8ea2ff" };
+  if (node.label || node.entity || node.tags.length > 0) return { fill: "#3a3020", stroke: "#f4c76a" };
+  return { fill: "#18181b", stroke: "#52525b" };
 }
 
 function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; selectedId: string | null; onSelect: (id: string) => void }) {
@@ -343,7 +349,6 @@ function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; se
   // Fit once on first real size measurement (and when the container is resized).
   useEffect(() => {
     fit();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fit on resize only, not on every drag
   }, [size]);
 
   const zoomAt = useCallback((factor: number, cx: number, cy: number) => {
@@ -422,7 +427,7 @@ function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; se
           <defs>
             {(["in", "out"] as const).map((dir) => (
               <marker key={dir} id={`arrow-${dir}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                <path d="M0,0 L10,5 L0,10 z" fill={dir === "in" ? "#34d399" : "#fb923c"} />
+                <path d="M0,0 L10,5 L0,10 z" fill={dir === "in" ? "#4ad6a0" : "#f5a35c"} />
               </marker>
             ))}
           </defs>
@@ -449,7 +454,7 @@ function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; se
               const mx = (x1 + x2) / 2 - uy * bend;
               const my = (y1 + y2) / 2 + ux * bend;
               const dimmed = focusId !== null && focusId !== report.center.value && link.source !== focusId && link.target !== focusId;
-              const color = link.direction === "in" ? "#34d399" : "#fb923c";
+              const color = link.direction === "in" ? "#4ad6a0" : "#f5a35c";
               return (
                 <g key={link.key} opacity={dimmed ? 0.15 : 0.85}>
                   <path
@@ -484,9 +489,9 @@ function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; se
                   onPointerLeave={() => setHoverId(null)}
                 >
                   <title>{`${name ? `${name}\n` : ""}${node.id}\n${node.stats.txCount} transfer(s)`}</title>
-                  {isSelected && <circle r={r + 6} fill="none" stroke="#e5e5e5" strokeWidth={1.5} strokeDasharray="3 3" />}
+                  {isSelected && <circle r={r + 6} fill="none" stroke="#ededef" strokeWidth={1.5} strokeDasharray="3 3" />}
                   <circle r={r} fill={fill} stroke={stroke} strokeWidth={node.role === "center" ? 3 : 2} />
-                  <text y={r + 20} textAnchor="middle" fontSize={11} fill={name ? "#fde68a" : "#a3a3a3"} className="pointer-events-none">
+                  <text y={r + 20} textAnchor="middle" fontSize={11} fill={name ? "#f4d58d" : "#a1a1a8"} className="pointer-events-none">
                     {name ? (name.length > 24 ? `${name.slice(0, 23)}…` : name) : short(node.id)}
                   </text>
                 </g>

@@ -26,16 +26,27 @@ Lookups and the graph work without either of them.
 
 ## What's here
 
-One page (`src/App.tsx`) with tabs, switched by the URL hash (`#graph`, `#moderation`). There's no
-router library.
+The UI is built on a React port of [Helium Prism](https://github.com/imputnet/helium-prism) in
+`src/prism/` (see its README). The layout is an intel-dashboard shell: a sticky top bar holds the
+wordmark, the view links, a global chain + address search and the account menu.
 
-- **Account** (`src/AccountPanel.tsx`, `src/session.ts`): an email + password log in / sign up form
-  backed by the real accounts API. The session token is kept in `localStorage`
+The URL hash is the router (there's no router library). `#address/<chain>/<address>` is a Lookup
+report, and every address in the UI links to its own report, so lookups are shareable.
+`#graph/<chain>/<address>` opens the Visualizer already graphing that address. That's where a
+report's **Visualize** button goes. The other views are `#trace`, `#cases`, `#bounties` and
+`#moderation`.
+
+- **Account** (`src/AccountPanel.tsx`, `src/session.ts`): the top-bar account menu, with an
+  email + password log in / sign up popover backed by the real accounts API. The session token is kept in `localStorage`
   (`osstrace.session`) and sent as a bearer header. On load the page asks `/accounts/me` who the
   token belongs to, because a role is never trusted from storage. Log out revokes the session
   server-side.
-- **Lookup**: a chain selector, an address input, and a results panel (balance, transactions,
-  label/tags, with a "SANCTIONED" badge when the `sanctioned` tag is present). A community label
+- **Lookup**: a home page with the search, and an entity-style report for each address. The
+  report has a header (sourced label or "Unlabeled address", chain, badges, copyable address,
+  Visualize / Trace / block-explorer actions), stat cards (balance, transaction count, sourced
+  tags) and a transactions table (time, tx, from, to, value). The side column holds the risk score,
+  your private label and label suggestions. A "SANCTIONED" badge shows when the `sanctioned` tag is
+  present. A community label
   gets a **✓ CONFIRMED** badge (sky blue) once a moderator confirms it, or a **COMMUNITY ·
   UNREVIEWED** badge before that (`src/LabelReview.tsx`). Ingested labels from official sources get
   neither. Logged-in users see **Suggest a label for this address**, a form that requires a source

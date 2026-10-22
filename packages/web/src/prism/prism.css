@@ -1,0 +1,732 @@
+/* ---------------------------------------------------------------------------------------------
+   Helium Prism styles (https://github.com/imputnet/helium-prism, GPL-3.0-only), ported for the
+   React components in ./components.tsx. Global rules go in @layer base and component rules in
+   @layer components, so Tailwind utilities still win. OSSTrace is dark-first: Prism's dark palette,
+   neutralised to true black and greys (blue kept for accents), is the default here. Two deliberate changes from upstream: the pill button visuals apply only
+   to `.button` (not to every bare <button>, which the existing views use for text links), and the
+   global p/a/li typography is dropped in favour of the Text component.
+   --------------------------------------------------------------------------------------------- */
+
+:root {
+  --font: "Instrument Sans Variable", system-ui, Helvetica, Arial, sans-serif;
+
+  --primary: #ededef;
+  --secondary: #a1a1a8;
+  --tertiary: #75757c;
+  --white: #ffffff;
+
+  --helium-blue: #3450d1;
+  --helium-blue-hover: #3a58db;
+  --helium-blue-press: #304bc2;
+
+  --bg-surface: #000000;
+  --bg-gradient-start: #0a0a0b;
+  --bg-gradient-end: #1c1c1f;
+
+  --background: var(--bg-surface);
+
+  --tooltip-bg: #18181b;
+  --tooltip-shadow: color-mix(in srgb, var(--tooltip-bg) 40%, transparent);
+
+  --helium-elevated: #b4b4bc;
+  --helium-elevated-5: color-mix(in srgb, var(--helium-elevated) 5%, transparent);
+  --helium-elevated-7: color-mix(in srgb, var(--helium-elevated) 7%, transparent);
+  --helium-elevated-10: color-mix(in srgb, var(--helium-elevated) 10%, transparent);
+  --helium-elevated-15: color-mix(in srgb, var(--helium-elevated) 15%, transparent);
+  --helium-elevated-20: color-mix(in srgb, var(--helium-elevated) 20%, transparent);
+  --helium-elevated-25: color-mix(in srgb, var(--helium-elevated) 25%, transparent);
+  --helium-elevated-30: color-mix(in srgb, var(--helium-elevated) 30%, transparent);
+  --helium-elevated-40: color-mix(in srgb, var(--helium-elevated) 40%, transparent);
+  --helium-elevated-50: color-mix(in srgb, var(--helium-elevated) 50%, transparent);
+
+  --gap-1: 6px;
+  --gap-2: 8px;
+  --gap-3: 12px;
+  --gap-4: 20px;
+
+  --mid-border-radius: 12px;
+  --card-border-radius: 20px;
+  --shimmer-size: 350px;
+
+  --glass-filter: blur(12px);
+
+  color-scheme: dark;
+  font-family: var(--font);
+  letter-spacing: -0.01em;
+  color: var(--primary);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html,
+  body {
+    background: var(--background);
+  }
+
+  body {
+    margin: 0;
+    color: var(--primary);
+    font-family: var(--font);
+  }
+
+  ::selection {
+    color: var(--primary);
+    background-color: var(--helium-elevated-30);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-weight: 500;
+    line-height: 120%;
+  }
+
+  strong {
+    font-weight: 600;
+  }
+
+  a {
+    text-underline-offset: 4px;
+  }
+
+  svg,
+  img {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:focus-visible,
+  a:focus-visible {
+    outline: 2px var(--primary) solid;
+    outline-offset: 3px;
+  }
+}
+
+@layer components {
+  .button {
+    --size: 38px;
+
+    color: var(--primary);
+    background-color: var(--helium-elevated-7);
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 120%;
+    min-height: var(--size);
+    padding: 9px 16px;
+    border-radius: calc(var(--size) / 2);
+    transition:
+      0.2s background-color,
+      0.2s transform,
+      0.2s opacity,
+      0.2s color;
+    will-change: transform;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    user-select: none;
+    -webkit-user-select: none;
+    text-decoration: none;
+    white-space: nowrap;
+
+    &.transparent {
+      background-color: transparent;
+    }
+
+    &:active {
+      background-color: var(--helium-elevated-15);
+      transform: scale(0.97);
+    }
+
+    &.primary {
+      color: var(--white);
+      background-color: var(--helium-blue);
+
+      &:active {
+        background-color: var(--helium-blue-press);
+      }
+    }
+
+    &.circle {
+      height: var(--size);
+      width: var(--size);
+      padding: 0;
+    }
+
+    &.small {
+      --size: 30px;
+      font-size: 13px;
+      padding: 6px 12px;
+    }
+
+    &.circle.small {
+      padding: 0;
+    }
+
+    &.card {
+      min-height: 0;
+      width: 100%;
+      justify-content: flex-start;
+      text-align: left;
+      border-radius: 14px;
+      padding: 14px 18px;
+      gap: var(--gap-3);
+      white-space: normal;
+
+      &:active {
+        transform: none;
+      }
+
+      & svg {
+        width: 21px;
+        height: 21px;
+      }
+    }
+
+    &:not(.card):not(.circle):has(> svg:first-child) {
+      padding-inline-start: 13px;
+    }
+
+    &:disabled,
+    &.disabled {
+      color: var(--tertiary);
+      pointer-events: none;
+
+      &:not(.transparent) {
+        background-color: var(--helium-elevated-5);
+      }
+
+      > *:not(svg) {
+        opacity: 0.7;
+      }
+    }
+
+    &.selected {
+      box-shadow:
+        0 0 0 1px var(--primary) inset,
+        0 0 0 1px var(--primary);
+    }
+
+    & svg {
+      flex: 0 0 auto;
+      height: 18px;
+      width: 18px;
+      stroke-width: 1.8px;
+    }
+  }
+
+  @media (hover: hover) {
+    .button:hover {
+      background-color: var(--helium-elevated-10);
+    }
+
+    .button:hover:active {
+      background-color: var(--helium-elevated-15);
+    }
+
+    .button.primary:hover {
+      background-color: var(--helium-blue-hover);
+    }
+
+    .button.primary:hover:active {
+      background-color: var(--helium-blue-press);
+    }
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: var(--gap-1);
+  }
+
+  .card-link {
+    align-items: flex-start;
+  }
+
+  .link-text,
+  .toggle-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  /* Input / Dropdown --------------------------------------------------------------------------- */
+
+  .input-field,
+  .dropdown {
+    color: var(--primary);
+    background-color: var(--helium-elevated-7);
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    transition:
+      0.2s background-color,
+      0.1s outline-color,
+      0.1s box-shadow;
+
+    &:focus-within {
+      background-color: var(--helium-elevated-10);
+      outline: 2px var(--primary) solid;
+      outline-offset: -1px;
+    }
+  }
+
+  @media (hover: hover) {
+    .input-field:hover,
+    .dropdown:hover {
+      background-color: var(--helium-elevated-10);
+    }
+  }
+
+  .input-field {
+    --input-font-size: 15px;
+    --input-icon-size: 18px;
+    --input-padding: 11px 16px;
+
+    gap: 9px;
+    width: 100%;
+    cursor: text;
+    padding: var(--input-padding);
+    min-height: 42px;
+
+    &.small {
+      --input-font-size: 14px;
+      --input-icon-size: 16px;
+      --input-padding: 8px 14px;
+      min-height: 36px;
+    }
+
+    & input {
+      font-size: var(--input-font-size);
+      line-height: 122%;
+      padding: 0;
+    }
+  }
+
+  .input-field input,
+  .dropdown select {
+    appearance: none;
+    min-width: 0;
+    width: 100%;
+    color: inherit;
+    background: none;
+    border: none;
+    outline: none;
+    font: inherit;
+    font-weight: 500;
+    letter-spacing: inherit;
+  }
+
+  .input-field input::placeholder {
+    color: var(--tertiary);
+    font-weight: 500;
+  }
+
+  .input-field.hash input::placeholder {
+    font-family: var(--font);
+  }
+
+  .input-field input[type="search"]::-webkit-search-decoration,
+  .input-field input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+  }
+
+  .input-field.disabled,
+  .dropdown.disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .input-accessory {
+    color: var(--tertiary);
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+
+    & svg {
+      width: var(--input-icon-size);
+      height: var(--input-icon-size);
+      stroke-width: 1.8px;
+    }
+  }
+
+  .input-field:focus-within .input-accessory {
+    color: var(--primary);
+  }
+
+  .search-bar {
+    width: 100%;
+  }
+
+  .dropdown {
+    --dropdown-padding-inline: 14px;
+    --dropdown-icon-size: 16px;
+    --dropdown-height: 42px;
+
+    position: relative;
+    width: fit-content;
+    max-width: 100%;
+    min-height: var(--dropdown-height);
+    cursor: pointer;
+
+    & select {
+      cursor: inherit;
+      font-size: 15px;
+      line-height: 122%;
+      min-height: var(--dropdown-height);
+      padding-inline: var(--dropdown-padding-inline);
+      padding-right: calc(var(--dropdown-padding-inline) + var(--dropdown-icon-size) + 9px);
+      user-select: none;
+    }
+
+    & select.placeholder {
+      color: var(--tertiary);
+    }
+
+    & option,
+    & optgroup {
+      background-color: var(--background);
+    }
+  }
+
+  .dropdown-icon {
+    position: absolute;
+    right: var(--dropdown-padding-inline);
+    display: inline-flex;
+    color: var(--tertiary);
+    pointer-events: none;
+
+    & svg {
+      width: var(--dropdown-icon-size);
+      height: var(--dropdown-icon-size);
+      stroke-width: 1.8px;
+    }
+  }
+
+  .dropdown:focus-within .dropdown-icon {
+    color: var(--primary);
+  }
+
+  /* Checkbox ------------------------------------------------------------------------------------ */
+
+  .checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: fit-content;
+    color: var(--primary);
+    cursor: pointer;
+    user-select: none;
+
+    & input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    &.disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+  }
+
+  .checkbox-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 24px;
+    width: 24px;
+    height: 24px;
+    border-radius: 100%;
+    background-color: var(--helium-elevated-7);
+    box-shadow: 0 0 0 1.5px var(--helium-elevated-5) inset;
+    transition:
+      background-color 0.2s,
+      transform 0.2s;
+
+    & svg {
+      width: 17px;
+      height: 17px;
+      stroke-width: 2px;
+      opacity: 0;
+    }
+  }
+
+  .checkbox.toggling .checkbox-control {
+    transition: transform 0.2s;
+  }
+
+  @media (hover: hover) {
+    .checkbox:hover input:not(:checked) + .checkbox-control {
+      background-color: var(--helium-elevated-10);
+    }
+
+    .checkbox:hover input:checked + .checkbox-control {
+      background-color: var(--helium-blue-hover);
+    }
+  }
+
+  .checkbox:active .checkbox-control {
+    transform: scale(0.97);
+  }
+
+  .checkbox input:checked + .checkbox-control {
+    background-color: var(--helium-blue);
+    color: #ffffff;
+
+    & svg {
+      opacity: 1;
+    }
+  }
+
+  .checkbox input:focus-visible + .checkbox-control {
+    outline: 2px var(--primary) solid;
+    outline-offset: 3px;
+  }
+
+  .checkbox-content {
+    color: var(--secondary);
+    font-size: 14px;
+  }
+
+  /* CopyIcon ------------------------------------------------------------------------------------ */
+
+  .copy-animation {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    height: 16px;
+    width: 16px;
+
+    & svg {
+      width: 16px;
+      height: 16px;
+    }
+  }
+
+  .icon-copy,
+  .icon-check {
+    display: flex;
+    position: absolute;
+    transition:
+      transform 0.25s,
+      opacity 0.25s;
+  }
+
+  .icon-check,
+  .copy-animation.check .icon-copy {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+
+  .copy-animation.check .icon-check {
+    transform: none;
+    opacity: 1;
+  }
+
+  /* Skeleton / Spinner -------------------------------------------------------------------------- */
+
+  .skeleton {
+    height: 100%;
+    width: 100%;
+    background: var(--helium-elevated-10);
+    border-radius: 12px;
+    background-image: linear-gradient(90deg, transparent, var(--helium-elevated-10), transparent);
+    background-repeat: no-repeat;
+    animation: prism-skeleton 1.2s ease-in-out infinite;
+    background-size: var(--shimmer-size) var(--shimmer-size);
+  }
+
+  .spinner {
+    display: flex;
+
+    & svg {
+      width: var(--size);
+      height: var(--size);
+      animation: prism-spinner 1s infinite linear;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton {
+      animation: none;
+      background-image: none;
+    }
+
+    .spinner svg {
+      animation: none;
+    }
+  }
+
+  /* Text ---------------------------------------------------------------------------------------- */
+
+  .text {
+    margin: 0;
+
+    &.center {
+      text-align: center;
+    }
+  }
+
+  h1.text {
+    font-size: 36px;
+    letter-spacing: -0.02em;
+    line-height: 110%;
+  }
+
+  h2.text {
+    font-size: 28px;
+    letter-spacing: -0.02em;
+    line-height: 110%;
+  }
+
+  h3.text {
+    font-size: 22px;
+  }
+
+  h4.text {
+    font-size: 17px;
+  }
+
+  p.text {
+    font-size: 15px;
+    line-height: 122%;
+    color: var(--secondary);
+  }
+
+  .tone-primary {
+    color: var(--primary);
+  }
+
+  .tone-secondary {
+    color: var(--secondary);
+  }
+
+  .tone-tertiary {
+    color: var(--tertiary);
+  }
+
+  .tone-white {
+    color: var(--white);
+  }
+
+  /* Toggle -------------------------------------------------------------------------------------- */
+
+  .toggle {
+    min-width: 44px;
+    width: 44px;
+    height: 26px;
+    border-radius: 50px;
+    background-color: var(--helium-elevated-30);
+    transition:
+      background-color 0.25s,
+      opacity 0.2s;
+
+    & .runner {
+      width: 20px;
+      height: 20px;
+      margin: 3px;
+      background-color: var(--white);
+      border-radius: 50px;
+      transition: translate 0.15s;
+    }
+
+    &.enabled {
+      background-color: var(--helium-blue);
+
+      & .runner {
+        translate: 18px 0;
+      }
+    }
+  }
+
+  /* Tooltip ------------------------------------------------------------------------------------- */
+
+  .tooltip-anchor {
+    display: flex;
+    position: relative;
+    width: fit-content;
+    height: fit-content;
+    gap: var(--gap-1);
+  }
+
+  .tooltip-container {
+    position: fixed;
+    margin: 0;
+    padding: 16px;
+    border: none;
+    background: none;
+    pointer-events: none;
+    opacity: 0;
+    transform: scale(0.8);
+    transform-origin: left;
+    transition:
+      transform 0.15s,
+      opacity 0.15s;
+  }
+
+  .tooltip-container:popover-open {
+    opacity: 1;
+    transform: none;
+    transform-origin: top left;
+  }
+
+  @starting-style {
+    .tooltip-container:popover-open {
+      opacity: 0;
+      transform: scale(0.8);
+    }
+  }
+
+  .tooltip-content {
+    color: var(--primary);
+    background-color: var(--tooltip-bg);
+    outline: 1.5px solid var(--helium-elevated-10);
+    outline-offset: -1.5px;
+    padding: 9px 12px;
+    font-size: 13px;
+    white-space: pre;
+    line-height: 120%;
+    border-radius: 12px;
+    border-top-left-radius: 4px;
+    box-shadow: 4px 4px 10px 0 var(--tooltip-shadow);
+  }
+}
+
+@keyframes prism-skeleton {
+  0% {
+    background-position: -350px 0;
+  }
+  100% {
+    background-position: calc(350px + 100%) 0;
+  }
+}
+
+@keyframes prism-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}

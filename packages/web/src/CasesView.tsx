@@ -67,7 +67,7 @@ export default function CasesView() {
       <div className="mx-auto w-full max-w-4xl space-y-4">
         <Header />
         <div className="flex items-center gap-2 rounded-card border border-dashed border-line-strong px-4 py-2.5 text-xs text-ink-faint">
-          <LockIcon /> Log in (in the sidebar) to open a case. Cases are private — only you can ever see yours.
+          <LockIcon /> Log in (top right) to open a case. Cases are private — only you can ever see yours.
         </div>
       </div>
     );

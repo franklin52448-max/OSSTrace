@@ -123,6 +123,47 @@ test("a subscriber is pushed the real transaction the indexer's next cycle finds
   });
 });
 
+test("mixed-case and whitespace-padded subscribes land on the indexer's lowercase/trimmed key", async () => {
+  // The indexer refreshes whatever the lookup path recorded — normalizeAddress's lowercase,
+  // trimmed form. A subscriber who typed the checksum-cased or padded form must still be live on
+  // exactly that key, and be pushed the indexer's transaction for it.
+  const normalized = "0xabcdef0000000000000000000000000000000001";
+  await withRig(async ({ adapter, cache, indexer, hub, url, token }) => {
+    adapter.history = [tx(1)];
+    await makePopular(cache, `ethereum:${normalized}`);
+    await indexer.runCycle(); // baseline
+
+    const mixed = await TestClient.authed(url, token);
+    const padded = await TestClient.authed(url, token);
+    mixed.send({ subscribe: { chain: "ethereum", address: "0xABCDEF0000000000000000000000000000000001" } });
+    padded.send({ subscribe: { chain: "ethereum", address: "  0xAbCdEf0000000000000000000000000000000001\t\n" } });
+    const live = { event: "subscribed", chain: "ethereum", address: normalized, live: true };
+    assert.deepEqual(await mixed.next(), live);
+    assert.deepEqual(await padded.next(), live);
+    assert.equal(hub.subscribedAddressCount, 1, "both spellings must share one subscription key");
+
+    adapter.land(tx(2));
+    await indexer.runCycle();
+    for (const client of [mixed, padded]) {
+      const pushed = await client.next<{ event: string; address: string; transaction: { hash: string } }>();
+      assert.equal(pushed.event, "new_transaction");
+      assert.equal(pushed.address, normalized);
+      assert.equal(pushed.transaction.hash, "0xtx2");
+    }
+
+    // Unsubscribing with yet another spelling removes that same key.
+    padded.send({ unsubscribe: { chain: "ethereum", address: " 0xABCDEF0000000000000000000000000000000001 " } });
+    assert.deepEqual(await padded.next(), { event: "unsubscribed", chain: "ethereum", address: normalized });
+    adapter.land(tx(3));
+    await indexer.runCycle();
+    assert.equal((await mixed.next()).event, "new_transaction");
+    assert.equal(await padded.silentFor(100), true);
+
+    await mixed.close();
+    await padded.close();
+  });
+});
+
 test("before any indexer cycle, a subscription is honestly not live", async () => {
   await withRig(async ({ url, token }) => {
     const client = await TestClient.authed(url, token);

@@ -37,8 +37,10 @@ Decoding and merging live in `src/etherscan.ts` (pure, no network) and work like
 - **Each `TokenTransfer`** carries the token contract, Etherscan's `tokenSymbol`/`tokenName`, the
   token's real `decimals` (Etherscan's `tokenDecimal`, read from the contract), the exact integer
   `rawAmount`, the scaled decimal `amount`, the transfer's own `from`/`to`, and a `direction`
-  relative to the queried address. If `tokenDecimal` is missing or not an integer, `decimals` and
-  `amount` are `null` and only `rawAmount` is reported — never a guessed 18.
+  relative to the queried address. If `tokenDecimal` is missing, not an integer, or above 255
+  (ERC-20's `decimals()` is a uint8), `decimals` and `amount` are `null` and only `rawAmount` is
+  reported — never a guessed 18. The upper bound matters: a spam token can report any value, and
+  scaling by 10^(millions) used to block the process for minutes.
 
 Note: `tokentx`'s `from`/`to` are the **Transfer event's** from/to, not the transaction's sender —
 Etherscan's own field description says otherwise, so this was checked against a real receipt
@@ -59,8 +61,11 @@ fewer than `limit` transactions even when more history exists.
 - `txlist` only covers "normal" transactions; internal transactions (contract-to-contract calls,
   `txlistinternal`) aren't included yet — so a token-only entry's `valueNative: "0"` doesn't account
   for ETH that moved via an internal call in the same transaction.
-- `isError` isn't consulted: a failed transaction's `valueNative` is still the value it *tried* to
-  send (Etherscan lists failed txs; a failed tx moves no ETH and emits no Transfer events).
+- A failed (reverted) transaction is still listed, with `status: "failed"` (from Etherscan's
+  `isError: "1"`) and a `valueNative` that is the value it *tried* to send. A failed tx moves no
+  ETH and emits no Transfer events, so consumers must check `status` before treating
+  `valueNative` as moved. Token-only entries are always `status: "success"`, because Transfer
+  events only exist on successful transactions.
 - No contract-interaction detail (ABI decoding) — a transaction to a contract shows as a plain
   value transfer with the contract's address as `to`.
 - Token symbols/names are whatever Etherscan reports (taken from the token contract) — they aren't

@@ -24,6 +24,53 @@ label submission/moderation also need the accounts API (`npm run dev:accounts`,
 (`npm run dev:community-labels`, `VITE_COMMUNITY_LABELS_URL`, default `http://localhost:5311`).
 Lookups and the graph work without either of them.
 
+## Tests
+
+```sh
+npm test            # from the repo root: every package's tests, these included
+npm run check       # typecheck (including packages/web/tests) + tests
+node --experimental-strip-types --test packages/web/tests/*.test.ts   # just this package
+```
+
+Plain functions (`src/layout.ts`, `src/txDisplay.ts`) are tested directly. Components are tested
+by rendering the real ones into a real DOM and driving them the way a user does, against the
+real backend APIs. The harness lives in `tests/harness/`:
+
+- **`env.ts`**: puts a [jsdom](https://github.com/jsdom/jsdom) window on `globalThis` and
+  registers a Node module hook that compiles `src/*.ts(x)` with Oxc (`rolldown`'s
+  `transformSync`, the same transformer Vite 8 uses), so a test can `import("../src/App.tsx")`
+  under plain `node --test`. It also builds `import.meta.env` from `process.env`'s `VITE_*`
+  variables, which is what Vite does at build time. `fetch` and `WebSocket` stay Node's own, so
+  every request the UI makes is real HTTP.
+- **`render.ts`**: `render`/`cleanup` over `react-dom/client` + React's `act()`, and a handful of
+  helpers: `type` (sets the value and fires a real `input` event), `click` (real clicks, so a
+  submit button runs the browser's validation and submission steps), `getByLabelText` (finds a
+  control through its `<label>` and `label.control`, the way assistive tech does), `waitFor` and
+  `during` (let real I/O happen inside `act()`). Any `console.error` is collected so tests can
+  assert React reported nothing.
+- **`servers.ts`**: starts the real accounts, community-labels and Explorer handlers on ephemeral
+  ports over temp-file stores, and points the UI's `VITE_*_URL`s at them. The upstream chain is
+  a small fixed-balance `ChainAdapter`, as in the Explorer's own tests. The one thing a test
+  controls is timing: every Explorer request is held at the server until the test releases it,
+  so responses can be made to land in any order.
+
+Why not `@testing-library/react` + Vitest/Jest: the rest of the repo is plain `node --test` with
+real servers and no mocking framework, and these tests only need a few helpers. Adding a second
+test runner and its config to get them wasn't worth it. Every helper here is a thin layer over a
+real DOM API, so swapping in Testing Library later would be a small change if the suite grows.
+
+What's covered so far:
+
+- `tests/lookupRace.test.ts`: a slow lookup of A that lands after B's never replaces B's report.
+  Neither does a label-submission refresh of A that lands after the user looked up B. A slow
+  refresh that nothing has superseded still lands.
+- `tests/accountPanel.test.ts`: the email/password inputs are named by visible `<label>`s in both
+  modes. A failed log in or sign up (real API errors) lands in the form's single `role="alert"`
+  region, which is mounted before the error appears.
+
+Each test file runs in its own process (`node --test` does that), and the hook only applies there,
+so the harness never affects the Vite dev server or build.
+
 ## What's here
 
 One page (`src/App.tsx`) with tabs, switched by the URL hash (`#graph`, `#moderation`). There's no
@@ -39,7 +86,9 @@ router library.
   gets a **✓ CONFIRMED** badge (sky blue) once a moderator confirms it, or a **COMMUNITY ·
   UNREVIEWED** badge before that (`src/LabelReview.tsx`). Ingested labels from official sources get
   neither. Logged-in users see **Suggest a label for this address**, a form that requires a source
-  URL + description and posts to the community labels API.
+  URL + description and posts to the community labels API. Every lookup and refresh is tagged, and
+  a response for an address you've since moved off (a slow earlier lookup, or the refresh after a
+  label submission) is dropped rather than replacing the report on screen.
 - **Moderation** (`src/ModerationView.tsx`, tab shown only to moderators/admins): the queue of
   pending community submissions with their sources. **Confirm** or **Reject…** (with a reason). A
   moderator's own submissions can't be reviewed by them, and the server enforces both rules.
@@ -80,8 +129,8 @@ title and description, close it (read-only) or reopen it, and delete it after a 
 Logged out, the tab shows a one-line hint. Fetched state is tagged with the session token it was
 fetched for, and the detail view is keyed on token + case id. Switching accounts therefore never
 shows the previous user's cases. This was verified by driving the real UI against the real APIs in
-headless Chromium, watching every DOM mutation across an account switch; there's no automated UI
-suite in the repo. The API's isolation guarantees are tested in
+headless Chromium, watching every DOM mutation across an account switch. The automated component
+suite (see **Tests**) doesn't cover this view yet. The API's isolation guarantees are tested in
 `packages/features/case-management/tests/`.
 
 ## Accounts and private labels
@@ -118,7 +167,7 @@ These are optional, and both need APIs running: `npm run dev:accounts` (port 531
   to hosting yet.
 - Account features are minimal: there's no "my submissions" page (the API has
   `GET /labels/submissions/mine`), no password reset, and no role management UI.
-- No component tests for the login, submission and moderation views. They were verified by
+- Component tests cover only the Lookup view's response ordering and the login form's
+  accessibility (see **Tests**). The submission, moderation, cases and graph views were verified by
   driving the real UI against the real APIs in headless Chromium during development, not by an
-  automated suite in this repo. The API behaviour behind them is covered by
-  `packages/features/community-labels/tests/`.
+  automated suite. The API behaviour behind them is covered by each feature package's own tests.

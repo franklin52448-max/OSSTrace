@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import type { ChainId } from "@osstrace/core";
 import GraphView from "./GraphView.tsx";
 import TracerView from "./TracerView.tsx";
@@ -71,7 +71,8 @@ type LookupState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "done"; report: AddressReport; chain: ChainId; address: string };
+  /** `generation` is the lookup this report answers (see `Lookup`), so a refresh can tell it's been superseded. */
+  | { status: "done"; report: AddressReport; chain: ChainId; address: string; generation: number };
 
 type View = "lookup" | "graph" | "trace" | "cases" | "bounties" | "moderation";
 
@@ -242,21 +243,38 @@ function Lookup() {
   const [chain, setChain] = useState<ChainId>("ethereum");
   const [address, setAddress] = useState("");
   const [state, setState] = useState<LookupState>({ status: "idle" });
+  // Responses can land out of order: a slow lookup of A, or a slow refresh of A after a label
+  // submission, can resolve after the user has already looked up B. Every request is tagged, and
+  // a response is applied only if it's still for the newest lookup (`generation`) and no request
+  // started after it has already been applied (`seq`). Anything else is dropped, never shown.
+  const generation = useRef(0);
+  const nextSeq = useRef(0);
+  const appliedSeq = useRef(0);
+
+  function admit(requestGeneration: number, seq: number): boolean {
+    if (requestGeneration !== generation.current || seq < appliedSeq.current) return false;
+    appliedSeq.current = seq;
+    return true;
+  }
 
   async function handleSubmit(event: React.FormEvent): Promise<void> {
     event.preventDefault();
     const trimmed = address.trim();
     if (!trimmed) return;
+    const requestGeneration = ++generation.current;
+    const seq = ++nextSeq.current;
     setState({ status: "loading" });
     try {
       const res = await fetch(`${EXPLORER_URL}/address/${chain}/${encodeURIComponent(trimmed)}`);
       const body = (await res.json()) as AddressReport | { error: string };
+      if (!admit(requestGeneration, seq)) return;
       if (!res.ok || "error" in body) {
         setState({ status: "error", message: "error" in body ? body.error : `HTTP ${res.status}` });
         return;
       }
-      setState({ status: "done", report: body, chain, address: trimmed });
+      setState({ status: "done", report: body, chain, address: trimmed, generation: requestGeneration });
     } catch (cause) {
+      if (!admit(requestGeneration, seq)) return;
       setState({ status: "error", message: cause instanceof Error ? cause.message : String(cause) });
     }
   }
@@ -294,19 +312,30 @@ function Lookup() {
           report={state.report}
           chain={state.chain}
           address={state.address}
-          onLabelSubmitted={() => void refresh(state.report)}
+          onLabelSubmitted={() => void refresh(state.report, state.generation)}
         />
       )}
     </div>
   );
 
-  /** Re-fetch after a label submission, without blanking the report while it loads. */
-  async function refresh(report: AddressReport): Promise<void> {
+  /**
+   * Re-fetch after a label submission, without blanking the report while it loads. It keeps the
+   * generation of the report it refreshes, so if the user has looked up another address since
+   * (even while the label POST was still in flight), this response is dropped.
+   */
+  async function refresh(report: AddressReport, requestGeneration: number): Promise<void> {
+    const seq = ++nextSeq.current;
     try {
       const res = await fetch(`${EXPLORER_URL}/address/${report.address.chain}/${encodeURIComponent(report.address.value)}`);
       const body = (await res.json()) as AddressReport | { error: string };
-      if (res.ok && !("error" in body)) {
-        setState({ status: "done", report: body, chain: report.address.chain, address: report.address.value });
+      if (res.ok && !("error" in body) && admit(requestGeneration, seq)) {
+        setState({
+          status: "done",
+          report: body,
+          chain: report.address.chain,
+          address: report.address.value,
+          generation: requestGeneration,
+        });
       }
     } catch {
       // Keep showing the report we have; the next manual lookup will retry.

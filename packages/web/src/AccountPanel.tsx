@@ -97,29 +97,40 @@ export default function AccountPanel() {
           Cancel
         </button>
       </div>
-      <input
-        type="email"
-        required
-        autoComplete="email"
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        className="ctl w-full"
-      />
-      <input
-        type="password"
-        required
-        autoComplete={mode === "login" ? "current-password" : "new-password"}
-        minLength={mode === "signup" ? 10 : undefined}
-        placeholder={mode === "signup" ? "Password (10+ characters)" : "Password"}
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        className="ctl w-full"
-      />
+      {/* Visible labels wrapping their inputs, the same pattern as LabelSubmitForm. */}
+      <label className="block text-xs font-medium text-ink-dim">
+        Email
+        <input
+          type="email"
+          required
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="ctl mt-1 w-full"
+        />
+      </label>
+      <label className="block text-xs font-medium text-ink-dim">
+        Password
+        {mode === "signup" && <span className="font-normal text-ink-faint"> (10+ characters)</span>}
+        <input
+          type="password"
+          required
+          autoComplete={mode === "login" ? "current-password" : "new-password"}
+          minLength={mode === "signup" ? 10 : undefined}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="ctl mt-1 w-full"
+        />
+      </label>
       <button type="submit" disabled={busy} className="btn-accent w-full">
         {busy ? "…" : mode === "login" ? "Log in" : "Create account"}
       </button>
-      {error && <div className="text-xs text-danger">{error}</div>}
+      {/* Always mounted, so screen readers already track this live region when the message lands
+          in it (a region inserted together with its text isn't reliably announced). Empty, it's
+          visually hidden and takes no space. */}
+      <div role="alert" className={error ? "text-xs text-danger" : "sr-only"}>
+        {error}
+      </div>
       {mode === "signup" && (
         <p className="text-xs leading-relaxed text-ink-faint">
           Your email is only an identifier: it isn't verified, and there's no password reset by email yet.

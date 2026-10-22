@@ -3,6 +3,7 @@ import type { ChainId } from "@osstrace/core";
 import GraphView from "./GraphView.tsx";
 import TracerView from "./TracerView.tsx";
 import BountiesView from "./BountiesView.tsx";
+import CasesView from "./CasesView.tsx";
 import PrivateLabelPanel from "./PrivateLabelPanel.tsx";
 import RiskPanel from "./RiskPanel.tsx";
 import AccountPanel from "./AccountPanel.tsx";
@@ -64,11 +65,12 @@ type LookupState =
   | { status: "error"; message: string }
   | { status: "done"; report: AddressReport; chain: ChainId; address: string };
 
-type View = "lookup" | "graph" | "trace" | "bounties" | "moderation";
+type View = "lookup" | "graph" | "trace" | "cases" | "bounties" | "moderation";
 
 function viewFromHash(): View {
   if (window.location.hash === "#graph") return "graph";
   if (window.location.hash === "#trace") return "trace";
+  if (window.location.hash === "#cases") return "cases";
   if (window.location.hash === "#bounties") return "bounties";
   if (window.location.hash === "#moderation") return "moderation";
   return "lookup";
@@ -113,6 +115,13 @@ const TAB_ICONS: Record<View, ReactElement> = {
       <circle cx="6" cy="6.4" r="1.3" fill="none" stroke="currentColor" strokeWidth="1.3" />
       <circle cx="10" cy="9.6" r="1.3" fill="none" stroke="currentColor" strokeWidth="1.3" />
       <circle cx="13.2" cy="4.6" r="1.3" fill="currentColor" />
+    </svg>
+  ),
+  cases: (
+    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" className="shrink-0">
+      <path d="M2 4.2c0-.6.5-1.1 1.1-1.1h3l1.4 1.6h5.4c.6 0 1.1.5 1.1 1.1v6.3c0 .6-.5 1.1-1.1 1.1H3.1c-.6 0-1.1-.5-1.1-1.1V4.2Z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <circle cx="7.4" cy="9" r="1.7" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="m8.7 10.3 1.6 1.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </svg>
   ),
   bounties: (
@@ -170,6 +179,7 @@ export default function App() {
                 { id: "lookup", label: "Lookup", href: "#" },
                 { id: "graph", label: "Graph", href: "#graph" },
                 { id: "trace", label: "Trace", href: "#trace" },
+                { id: "cases", label: "Cases", href: "#cases" },
                 { id: "bounties", label: "Bounties", href: "#bounties" },
                 { id: "moderation", label: "Moderation", href: "#moderation" },
               ] as const
@@ -203,6 +213,8 @@ export default function App() {
             <GraphView />
           ) : view === "trace" ? (
             <TracerView />
+          ) : view === "cases" ? (
+            <CasesView />
           ) : view === "bounties" ? (
             <BountiesView />
           ) : view === "moderation" ? (

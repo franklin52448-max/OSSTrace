@@ -21,6 +21,7 @@ osstrace/
 │   │   ├── accounts/      user accounts, sessions, roles (ADR 0006) — other features depend on it
 │   │   ├── private-labels/ per-user labels only their owner sees (ADR 0004) — consumes accounts
 │   │   ├── community-labels/  sourced label submissions + moderator review (ADR 0007)
+│   │   ├── case-management/   per-user private investigation cases (ADR 0011) — consumes accounts
 │   │   ├── visualizer/    one-hop transaction graph API — consumes core + chains
 │   │   ├── tracer/        multi-hop tracing (ADR 0008) — builds on visualizer's edge resolution
 │   │   └── risk-scoring/  sanctions-exposure risk score (ADR 0010) — builds on tracer + the label store

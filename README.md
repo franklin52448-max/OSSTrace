@@ -52,15 +52,16 @@ harder for the next contributor to understand, it probably isn't. See
 | Label trust tiers ([ADR 0004](docs/adr/0004-label-trust-tiers-and-private-labels.md), [ADR 0007](docs/adr/0007-community-label-submissions-and-review.md)): logged-in users submit sourced **Community** labels; moderators confirm (✓ CONFIRMED badge) or reject them, in the API and web UI | **Active** (no submission rate limiting; self-attested tier 3 deferred) |
 | Tracer (`GET /trace/graph` + `GET /trace/path` — multi-hop fund tracing, ETH + Solana, up to 3 hops, filterable by token/amount/time — [ADR 0008](docs/adr/0008-tracer-multi-hop-search-design.md), [`packages/features/tracer`](packages/features/tracer/README.md)) | **Active** (single-chain only, no bridges/cross-chain tracing yet) |
 | Risk scoring (`GET /risk/:chain/:address` + a "Risk score" card on the Lookup report — [ADR 0010](docs/adr/0010-risk-scoring-model.md), [`packages/features/risk-scoring`](packages/features/risk-scoring/README.md)): 0–100 from a real risk tag on the address itself (100) or the nearest risk-tagged address within 1–3 hops via Tracer (75/50/25); an unfinished search is reported `inconclusive`, never `none` | **Active** (only risk source today is the ingested `sanctioned` tag; single-chain, address-level only, no entity scores) |
-| Case management | Not built |
+| Case management — group real addresses, each with your own note, into an owned open/closed investigation record, **private to its owner only** (no sharing, no admin read path — [ADR 0011](docs/adr/0011-case-management-private-owner-only-cases.md), [`packages/features/case-management`](packages/features/case-management/README.md)); API + web UI Cases tab | **Active** (no sharing; no "add to case" button from Lookup/Graph yet) |
 | Real-time streaming (websocket) | Not built |
 | More chains (Bitcoin, Tron, etc.) | Not built — see [Adding a chain](packages/chains/README.md) |
 | AI agent for natural-language on-chain questions ("has wallet A sent wallet B more than $100 of USDC in the last 30 days?"), backed by Tracer's real traversal, never a guessed answer | Not built — see "Bounties" below |
 | Bounty board (`GET`/`POST /bounties`, web UI Bounties tab — [ADR 0009](docs/adr/0009-bounty-program-v1-is-tracking-only.md), [`packages/features/bounties`](packages/features/bounties/README.md)): anyone opens a bounty with a spec + their own stated reward, anyone submits a PR against it, a moderator records the winner | **Active** (tracks the workflow only — never holds or moves the reward; see "Bounties" below) |
 
 **The honest pitch today**: a real, working address-lookup tool across Ethereum and Solana, with a
-small, genuinely-sourced seed labelset, real multi-hop tracing, sanctions-exposure risk scoring, a live bounty board, and an
-architecture built so a new chain or a new feature (Case Management, ...) can be
+small, genuinely-sourced seed labelset, real multi-hop tracing, sanctions-exposure risk scoring,
+private investigation cases, a live bounty board, and an architecture built so a new chain or a new
+feature can be
 added as a self-contained module without touching the core. Everything past the table above is
 unbuilt — tracked honestly, not hidden.
 
@@ -129,6 +130,7 @@ npm run dev:accounts   # optional: the accounts API (see packages/features/accou
 npm run dev:private-labels # optional, with dev:accounts: your own private labels in the web UI
 npm run dev:community-labels # optional, with accounts: label submission + moderation API
 npm run dev:bounties   # optional, with accounts: the bounty board API
+npm run dev:cases      # optional, with accounts: your own private cases (Cases tab)
 ```
 
 Without `ETHERSCAN_API_KEY`, the Ethereum adapter still returns a real balance (via public RPC)

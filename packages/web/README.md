@@ -68,6 +68,19 @@ the data source reported one, otherwise its shortened contract/mint address — 
 have a symbol here, since the adapter doesn't fetch token metadata. If a token's decimals are
 unknown, the exact raw integer amount is shown and labelled as raw units.
 
+## Cases
+
+**`src/CasesView.tsx`** (`#cases`): your own private cases, from the case-management API
+(`npm run dev:cases`, port 5314, `VITE_CASES_URL`). It also needs the accounts API for logging in.
+You can create a case, add Ethereum or Solana addresses with a note, edit or remove them, edit the
+title and description, close it (read-only) or reopen it, and delete it after a confirm prompt.
+Logged out, the tab shows a one-line hint. Fetched state is tagged with the session token it was
+fetched for, and the detail view is keyed on token + case id. Switching accounts therefore never
+shows the previous user's cases. This was verified by driving the real UI against the real APIs in
+headless Chromium, watching every DOM mutation across an account switch; there's no automated UI
+suite in the repo. The API's isolation guarantees are tested in
+`packages/features/case-management/tests/`.
+
 ## Accounts and private labels
 
 These are optional, and both need APIs running: `npm run dev:accounts` (port 5310,

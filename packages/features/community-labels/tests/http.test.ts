@@ -6,7 +6,8 @@ import { createAccountsHandler } from "@osstrace/accounts";
 import { createLabelSubmissionsHandler } from "../src/http.ts";
 import { CommunityLabelReader } from "../src/reader.ts";
 import { JsonFileSubmissionStore } from "../src/store.ts";
-import { ETH_ADDRESS, GOOD_PASSWORD, validBody, withEnv, type Env } from "./helpers.ts";
+import { readFile } from "node:fs/promises";
+import { ETH_ADDRESS, GOOD_PASSWORD, SOL_ADDRESS, validBody, withEnv, type Env } from "./helpers.ts";
 
 const WEB_ORIGIN = "http://localhost:5301";
 
@@ -137,6 +138,38 @@ test("HTTP status codes: 401 no session, 403 not a moderator / own submission, 4
     assert.equal((await call(base, "GET", "/labels/submissions?status=bogus", { token: mod.token })).status, 400);
     const rejectedList = await call(base, "GET", "/labels/submissions?status=rejected", { token: mod.token });
     assert.equal(rejectedList.body.submissions.length, 1);
+  });
+});
+
+test("share as Community label over real HTTP: draft → 400 without a source → 201 with one", async () => {
+  await withServer(async (base, env) => {
+    const alice = await signup(base, "alice@example.com");
+    assert.ok((await env.privateLabels.set(alice.token, "ethereum", ETH_ADDRESS, "my Safe singleton note")).ok);
+    const privateBefore = await readFile(env.privateLabelsPath, "utf8");
+
+    const draft = await call(base, "GET", `/labels/submissions/from-private-label/ethereum/${ETH_ADDRESS}`, { token: alice.token });
+    assert.equal(draft.status, 200);
+    assert.equal(draft.body.draft.name, "my Safe singleton note");
+    assert.equal(draft.body.draft.source, null);
+
+    const { source, ...noSource } = validBody({ name: draft.body.draft.name });
+    const refused = await call(base, "POST", "/labels/submissions/from-private-label", { token: alice.token, body: noSource });
+    assert.equal(refused.status, 400);
+    assert.equal(refused.body.error, "invalid_submission");
+    assert.match(refused.body.message, /source/);
+
+    const shared = await call(base, "POST", "/labels/submissions/from-private-label", {
+      token: alice.token,
+      body: { ...noSource, source },
+    });
+    assert.equal(shared.status, 201);
+    assert.equal(shared.body.submission.status, "community");
+    assert.equal(shared.body.submission.name, "my Safe singleton note");
+    assert.equal(await readFile(env.privateLabelsPath, "utf8"), privateBefore);
+
+    const none = await call(base, "GET", `/labels/submissions/from-private-label/solana/${SOL_ADDRESS}`, { token: alice.token });
+    assert.equal(none.status, 404);
+    assert.equal((await call(base, "GET", `/labels/submissions/from-private-label/ethereum/${ETH_ADDRESS}`)).status, 401);
   });
 });
 

@@ -6,7 +6,8 @@
   },
   "references": [
     { "path": "../../core" },
-    { "path": "../accounts" }
+    { "path": "../accounts" },
+    { "path": "../private-labels" }
   ],
   "include": ["src"]
 }

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 // Type-only: this package never constructs accounts itself (bootstrap.ts does, for the server), so
 // a reader of community labels (the Explorer) doesn't load the accounts runtime just by importing us.
 import type { AccountService, AuthResult, PublicUser } from "@osstrace/accounts";
+import { draftFromPrivateLabel, type PrivateLabelLookup, type PrivateLabelSnapshot, type ShareDraft } from "./share.ts";
 import type { SubmissionStore } from "./store.ts";
 import type { PendingSubmission, Submission, SubmissionResult } from "./types.ts";
 import { parseRejectionReason, parseSubmissionInput } from "./validate.ts";
@@ -9,6 +10,11 @@ import { parseRejectionReason, parseSubmissionInput } from "./validate.ts";
 export interface LabelSubmissionServiceOptions {
   /** Injectable clock, so tests can pin timestamps through the real code path. */
   now?: () => Date;
+  /**
+   * Read access to the caller's own private labels, for "share as Community label" (ADR 0017).
+   * Without it the two share methods answer `not_found`; everything else works the same.
+   */
+  privateLabels?: PrivateLabelLookup;
 }
 
 type Actor = SubmissionResult<{ user: PublicUser }>;
@@ -37,16 +43,77 @@ export class LabelSubmissionService {
   readonly #store: SubmissionStore;
   readonly #accounts: AccountService;
   readonly #now: () => Date;
+  readonly #privateLabels: PrivateLabelLookup | null;
 
   constructor(store: SubmissionStore, accounts: AccountService, options: LabelSubmissionServiceOptions = {}) {
     this.#store = store;
     this.#accounts = accounts;
     this.#now = options.now ?? (() => new Date());
+    this.#privateLabels = options.privateLabels ?? null;
   }
 
   async submit(token: string | null | undefined, body: Record<string, unknown>): Promise<SubmissionResult<{ submission: Submission }>> {
     const actor = fromAuth(await this.#accounts.authenticate(token));
     if (!actor.ok) return actor;
+    return this.#createPending(actor.user, body);
+  }
+
+  /**
+   * The pre-filled starting point for sharing the caller's own private label for this address as
+   * a Community submission: its text as the name, and no confidence or source (a private label has
+   * neither, so the submitter must supply them). Nothing is written.
+   */
+  async shareDraft(token: string | null | undefined, chain: unknown, address: unknown): Promise<SubmissionResult<{ draft: ShareDraft }>> {
+    const found = await this.#ownPrivateLabel(token, chain, address);
+    if (!found.ok) return found;
+    return { ok: true, draft: draftFromPrivateLabel(found.label) };
+  }
+
+  /**
+   * "Share as Community label": submits the caller's own private label for `body.chain` +
+   * `body.address` as a new, independent Community submission. `body.name` overrides the private
+   * label's text (the user edited the pre-filled name); if absent, the text is used as-is.
+   * `body.confidence` and `body.source` are required and validated exactly like any submission:
+   * this is `submit` with a pre-filled name, not a way around ADR 0002.
+   *
+   * The private label is only *read*, never changed or removed, and nothing links the two
+   * afterwards: whatever later happens to the submission (confirmed, rejected) doesn't touch it.
+   */
+  async shareFromPrivateLabel(token: string | null | undefined, body: Record<string, unknown>): Promise<SubmissionResult<{ submission: Submission }>> {
+    const found = await this.#ownPrivateLabel(token, body["chain"], body["address"]);
+    if (!found.ok) return found;
+    return this.#createPending(found.user, {
+      chain: body["chain"],
+      address: body["address"],
+      name: body["name"] === undefined ? found.label.label : body["name"],
+      confidence: body["confidence"],
+      source: body["source"],
+    });
+  }
+
+  async #ownPrivateLabel(
+    token: string | null | undefined,
+    chain: unknown,
+    address: unknown,
+  ): Promise<SubmissionResult<{ user: PublicUser; label: PrivateLabelSnapshot }>> {
+    const actor = fromAuth(await this.#accounts.authenticate(token));
+    if (!actor.ok) return actor;
+    if (!this.#privateLabels) {
+      return { ok: false, error: "not_found", message: "sharing private labels isn't enabled on this server" };
+    }
+    // Owner-scoped by the same token: this can only ever return the caller's own private label.
+    const lookup = await this.#privateLabels.get(token, chain, address);
+    if (!lookup.ok) {
+      return lookup.error === "unauthenticated"
+        ? { ok: false, error: "unauthenticated", message: lookup.message }
+        : { ok: false, error: "invalid_submission", message: lookup.message };
+    }
+    if (!lookup.label) return { ok: false, error: "not_found", message: "you have no private label for that address" };
+    return { ok: true, user: actor.user, label: lookup.label };
+  }
+
+  /** The one path that writes a `community` submission, shared by `submit` and `shareFromPrivateLabel`. */
+  async #createPending(user: PublicUser, body: Record<string, unknown>): Promise<SubmissionResult<{ submission: Submission }>> {
     const input = parseSubmissionInput(body);
     if (!input.ok) return { ok: false, error: "invalid_submission", message: input.message };
 
@@ -63,7 +130,7 @@ export class LabelSubmissionService {
         // Source.addedAt is "the date this entry was added" — for a submission, the day it was submitted.
         addedAt: now.toISOString().slice(0, 10),
       },
-      submittedBy: actor.user.id,
+      submittedBy: user.id,
       submittedAt: now.toISOString(),
     };
     const created = await this.#store.create(submission);

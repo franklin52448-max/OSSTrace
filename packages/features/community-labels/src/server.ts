@@ -1,8 +1,10 @@
 import { createServer } from "node:http";
 import { buildAccountService } from "@osstrace/accounts";
+import { JsonFilePrivateLabelStore, PrivateLabelService, privateLabelsStorePath } from "@osstrace/private-labels";
 import { createLabelSubmissionsHandler } from "./http.ts";
 import { communityLabelsPath } from "./paths.ts";
 import { LabelSubmissionService } from "./service.ts";
+import type { PrivateLabelLookup } from "./share.ts";
 import { JsonFileSubmissionStore } from "./store.ts";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -26,7 +28,15 @@ const allowedOrigins = (process.env["COMMUNITY_LABELS_ALLOWED_ORIGINS"] ?? "http
 
 // Same accounts file as the accounts server (ACCOUNTS_STORE_PATH), so a session issued there is
 // valid here and a role granted there applies here on the next request.
-const service = new LabelSubmissionService(new JsonFileSubmissionStore(communityLabelsPath()), buildAccountService());
+const accounts = buildAccountService();
+
+// "Share as Community label" (ADR 0017) reads the caller's own private label from the same file
+// the private-labels server writes (PRIVATE_LABELS_STORE_PATH). Only `get` is handed over, so this
+// process can read a user's own label (owner-scoped by their token) but never write that file.
+const privateLabelService = new PrivateLabelService(accounts, new JsonFilePrivateLabelStore(privateLabelsStorePath()));
+const privateLabels: PrivateLabelLookup = { get: (token, chain, address) => privateLabelService.get(token, chain, address) };
+
+const service = new LabelSubmissionService(new JsonFileSubmissionStore(communityLabelsPath()), accounts, { privateLabels });
 const handle = createLabelSubmissionsHandler(service, { allowedOrigins });
 
 const server = createServer(async (req, res) => {

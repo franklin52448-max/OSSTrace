@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AccountService, JsonFileAccountStore, type PublicUser, type Role } from "@osstrace/accounts";
+import { JsonFilePrivateLabelStore, PrivateLabelService } from "@osstrace/private-labels";
 import { LabelSubmissionService } from "../src/service.ts";
 import { JsonFileSubmissionStore } from "../src/store.ts";
 
@@ -33,6 +34,9 @@ export interface Env {
   store: JsonFileSubmissionStore;
   submissionsPath: string;
   service: LabelSubmissionService;
+  /** The real private-labels service over its own temp file — what "share" reads from (ADR 0017). */
+  privateLabels: PrivateLabelService;
+  privateLabelsPath: string;
   clock: TestClock;
   /** Real signup (real argon2), optionally promoted by the operator path — exactly as in production. */
   account(email: string, role?: Role): Promise<{ user: PublicUser; token: string }>;
@@ -46,13 +50,21 @@ export async function withEnv(run: (env: Env) => Promise<void>): Promise<void> {
     const accounts = new AccountService(new JsonFileAccountStore(join(dir, "accounts.json")));
     const submissionsPath = join(dir, "submissions.json");
     const store = new JsonFileSubmissionStore(submissionsPath);
-    const service = new LabelSubmissionService(store, accounts, { now: clock.now });
+    const privateLabelsPath = join(dir, "private-labels.json");
+    const privateLabels = new PrivateLabelService(accounts, new JsonFilePrivateLabelStore(privateLabelsPath), { now: clock.now });
+    // Only `get` is handed over, exactly as server.ts does it.
+    const service = new LabelSubmissionService(store, accounts, {
+      now: clock.now,
+      privateLabels: { get: (token, chain, address) => privateLabels.get(token, chain, address) },
+    });
     await run({
       dir,
       accounts,
       store,
       submissionsPath,
       service,
+      privateLabels,
+      privateLabelsPath,
       clock,
       async account(email, role) {
         const signup = await accounts.signup(email, GOOD_PASSWORD);

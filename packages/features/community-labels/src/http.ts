@@ -64,6 +64,8 @@ function decodeSegment(segment: string): string {
  *
  *   POST /labels/submissions                 (Bearer)            body → 201 { submission }
  *   GET  /labels/submissions/mine            (Bearer)                 → 200 { submissions }
+ *   GET  /labels/submissions/from-private-label/:chain/:address (Bearer) → 200 { draft }
+ *   POST /labels/submissions/from-private-label (Bearer) { chain, address, name?, confidence, source } → 201 { submission }
  *   GET  /labels/submissions?status=…        (Bearer, moderator)      → 200 { submissions }
  *   POST /labels/submissions/:id/confirm     (Bearer, moderator)      → 200 { submission }
  *   POST /labels/submissions/:id/reject      (Bearer, moderator) { reason } → 200 { submission }
@@ -125,6 +127,15 @@ export function createLabelSubmissionsHandler(
       }
       if (path === "/labels/submissions/mine" && req.method === "GET") {
         sendResult(req, res, await service.listMine(token));
+        return true;
+      }
+      if (path === "/labels/submissions/from-private-label" && req.method === "POST") {
+        sendResult(req, res, await service.shareFromPrivateLabel(token, await readJsonBody(req)), 201);
+        return true;
+      }
+      const draft = path.match(/^\/labels\/submissions\/from-private-label\/([^/]+)\/([^/]+)$/);
+      if (draft?.[1] && draft[2] && req.method === "GET") {
+        sendResult(req, res, await service.shareDraft(token, decodeSegment(draft[1]), decodeSegment(draft[2])));
         return true;
       }
       const action = path.match(/^\/labels\/submissions\/([^/]+)\/(confirm|reject)$/);

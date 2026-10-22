@@ -11,5 +11,6 @@ export * from "./store.ts";
 export * from "./reader.ts";
 export * from "./service.ts";
 export * from "./validate.ts";
+export * from "./share.ts";
 export { communityLabelsPath } from "./paths.ts";
 export { createLabelSubmissionsHandler, type LabelSubmissionsHttpOptions } from "./http.ts";

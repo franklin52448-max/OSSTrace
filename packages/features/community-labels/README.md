@@ -40,6 +40,19 @@ JSON in, JSON out. Authenticated routes take `Authorization: Bearer <token>`. Er
 | `GET /labels/submissions?status=community\|confirmed\|rejected` | bearer, moderator | none | `200 { submissions }`, oldest first, default `community` (the queue) |
 | `POST /labels/submissions/:id/confirm` | bearer, moderator | none | `200 { submission }` |
 | `POST /labels/submissions/:id/reject` | bearer, moderator | `{ reason }` | `200 { submission }` |
+| `GET /labels/submissions/from-private-label/:chain/:address` | bearer | none | `200 { draft }`: your own private label's text as `name`, `confidence` and `source` null |
+| `POST /labels/submissions/from-private-label` | bearer | `{ chain, address, name?, confidence, source }` | `201 { submission }`: shares your private label (its text unless `name` is given), same validation as `POST /labels/submissions` |
+
+### Sharing a private label
+
+"Share as Community label" ([ADR 0017](../../../docs/adr/0017-share-private-labels-and-submission-rate-limit.md))
+turns one of your own private labels into a normal Community submission. The private label only
+pre-fills the name. You still need a confidence and a real source, checked by the same
+`parseSubmissionInput` as every submission. The server reads your private label through a
+read-only `PrivateLabelLookup` (just `get`, owner-scoped by your token), so sharing can't change or
+delete it, and the private label stays as it is whatever happens to the submission. `server.ts`
+reads the private-labels file at `PRIVATE_LABELS_STORE_PATH` (default
+`data/private/private-labels.json`), the same file the private-labels server writes.
 
 ```sh
 curl -X POST localhost:5311/labels/submissions -H "authorization: Bearer $TOKEN" \
@@ -77,7 +90,7 @@ Error codes:
 | 400 | `invalid_submission` (any field rule above, or a missing rejection reason), `bad_request` (malformed JSON) |
 | 401 | `unauthenticated` |
 | 403 | `forbidden` (not a moderator), `own_submission` |
-| 404 | `not_found` |
+| 404 | `not_found` (also: no private label of yours to share for that address) |
 | 409 | `duplicate_submission` (you already have one pending for this address), `already_reviewed` |
 | 413 | `bad_request` (body over 16 KiB) |
 

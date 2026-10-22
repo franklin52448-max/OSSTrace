@@ -81,6 +81,10 @@ Visualizer's own `TransactionsResult.available`/`reason` precedent for the same 
 
 ### 5. Single-chain only, in this version. No bridges.
 
+> **Update 2026-10-22:** [ADR 0012](0012-tracer-cross-chain-bridge-hops-via-wormhole.md) adds
+> opt-in Wormhole bridge hops between Ethereum and Solana (`?bridges=wormhole`). Without that
+> parameter, everything below still holds exactly.
+
 Both `traceGraph` and `tracePath` take one `ChainId` and never cross chains. ADR scope: ETH and
 Solana only (the two chains OSSTrace already supports), per the operator's explicit decision when
 this was scoped (2026-10-22) — Bitcoin/Tron and bridge-hop tracing are real future work, not cut

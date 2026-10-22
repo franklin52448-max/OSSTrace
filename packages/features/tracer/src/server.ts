@@ -4,8 +4,9 @@ import { canonicalAddress, isRealAddress } from "@osstrace/core";
 // Chain wiring + label store are reused from Explorer's bootstrap, same documented exception
 // Visualizer already takes (see its README, "How it plugs in") — one place to register a chain.
 import { buildLabelStore, buildRegistryFromEnv, loadRootEnv } from "@osstrace/explorer/src/bootstrap.ts";
+import { DEFAULT_WORMHOLESCAN_API_URL, WormholescanResolver } from "./bridges/wormhole.ts";
 import type { TraceFilters } from "./filters.ts";
-import { buildTraceGraph, buildTracePath, clampTraceOptions, type TraceOptions } from "./trace.ts";
+import { buildTraceGraph, buildTracePath, clampTraceOptions, type BridgeTracing, type TraceOptions } from "./trace.ts";
 
 loadRootEnv();
 
@@ -14,6 +15,21 @@ const PORT = Number(process.env["TRACER_PORT"] ?? 5303);
 
 const registry = buildRegistryFromEnv();
 const store = buildLabelStore();
+
+// Opt-in per request with ?bridges=wormhole (ADR 0012). Public API, no key needed.
+const wormhole: BridgeTracing = {
+  resolver: new WormholescanResolver({ baseUrl: process.env["WORMHOLESCAN_API_URL"] || DEFAULT_WORMHOLESCAN_API_URL }),
+  adapters: registry,
+};
+
+/** `undefined` = stay on one chain (ADR 0008), a `BridgeTracing` = follow Wormhole hops, `null` = invalid value (already answered 400). */
+function bridgingFromQuery(res: ServerResponse, url: URL): BridgeTracing | undefined | null {
+  const raw = url.searchParams.get("bridges");
+  if (raw === null || raw === "" || raw === "none") return undefined;
+  if (raw === "wormhole") return wormhole;
+  sendJson(res, 400, { error: `unsupported bridges value "${raw}" — supported: wormhole` });
+  return null;
+}
 
 const SUPPORTED_CHAINS: readonly ChainId[] = ["ethereum", "solana"];
 
@@ -90,9 +106,11 @@ const server = createServer(async (req, res) => {
       sendJson(res, 500, { error: `no adapter registered for chain "${address.chain}"` });
       return;
     }
+    const bridging = bridgingFromQuery(res, url);
+    if (bridging === null) return;
     const opts = clampTraceOptions(traceOptionsFromQuery(url));
     try {
-      const report = await buildTraceGraph(address, adapter, store, opts);
+      const report = await buildTraceGraph(address, adapter, store, opts, bridging);
       sendJson(res, 200, report);
     } catch (cause) {
       sendJson(res, 502, { error: cause instanceof Error ? cause.message : String(cause) });
@@ -105,8 +123,15 @@ const server = createServer(async (req, res) => {
     const [, chainRaw] = pathMatch;
     const from = resolveChainAndAddress(res, chainRaw, url.searchParams.get("from") ?? undefined);
     if (!from) return;
-    const to = resolveChainAndAddress(res, chainRaw, url.searchParams.get("to") ?? undefined);
+    // `to` may be on another chain (ADR 0012); it defaults to the `from` chain.
+    const to = resolveChainAndAddress(res, url.searchParams.get("toChain") ?? chainRaw, url.searchParams.get("to") ?? undefined);
     if (!to) return;
+    const bridging = bridgingFromQuery(res, url);
+    if (bridging === null) return;
+    if (to.chain !== from.chain && bridging === undefined) {
+      sendJson(res, 400, { error: `a path from ${from.chain} to ${to.chain} needs bridges=wormhole — without it no path can cross chains` });
+      return;
+    }
     const adapter = registry.get(from.chain);
     if (!adapter) {
       sendJson(res, 500, { error: `no adapter registered for chain "${from.chain}"` });
@@ -124,7 +149,7 @@ const server = createServer(async (req, res) => {
       ...(untilTimestamp !== null ? { untilTimestamp } : {}),
     };
     try {
-      const report = await buildTracePath(from, to, adapter, store, filters, opts);
+      const report = await buildTracePath(from, to, adapter, store, filters, opts, bridging);
       sendJson(res, 200, report);
     } catch (cause) {
       sendJson(res, 502, { error: cause instanceof Error ? cause.message : String(cause) });
@@ -139,4 +164,5 @@ server.listen(PORT, () => {
   console.log(`Tracer API listening on http://localhost:${PORT}`);
   console.log(`Try: curl "http://localhost:${PORT}/trace/graph/solana/<a Solana address>?maxHops=2"`);
   console.log(`Or:  curl "http://localhost:${PORT}/trace/path/solana?from=<A>&to=<B>&token=USDC&minAmount=100"`);
+  console.log(`Cross-chain (Wormhole): add &bridges=wormhole, and &toChain=ethereum|solana on /trace/path`);
 });

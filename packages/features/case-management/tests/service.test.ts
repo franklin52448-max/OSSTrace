@@ -308,6 +308,42 @@ test("validation: title, description, chain, address and note are all checked", 
     assert.equal(cleared.ok, true);
   }));
 
+test("update is a real partial patch: an omitted field is left untouched, and a mixed valid+invalid patch changes nothing", async () =>
+  withStack(async ({ service, account }) => {
+    const { token } = await account("investigator@example.com");
+    const created = await service.create(token, { title: "Original title", description: "Original description" });
+    if (!created.ok) throw new Error("setup failed");
+    const id = created.case.id;
+
+    // title only: description is untouched, not cleared.
+    const titleOnly = await service.update(token, id, { title: "New title" });
+    assert.equal(titleOnly.ok, true);
+    if (titleOnly.ok) {
+      assert.equal(titleOnly.case.title, "New title");
+      assert.equal(titleOnly.case.description, "Original description");
+    }
+
+    // description only: title is untouched.
+    const descOnly = await service.update(token, id, { description: "New description" });
+    assert.equal(descOnly.ok, true);
+    if (descOnly.ok) {
+      assert.equal(descOnly.case.title, "New title");
+      assert.equal(descOnly.case.description, "New description");
+    }
+
+    // A valid title alongside an invalid description: the whole patch is refused, atomically --
+    // the valid title does not get applied while the bad description is rejected.
+    const mixed = await service.update(token, id, { title: "Should not land", description: 42 });
+    assert.equal(mixed.ok, false);
+    if (!mixed.ok) assert.equal(mixed.error, "invalid_case");
+    const afterMixed = await service.get(token, id);
+    assert.equal(afterMixed.ok, true);
+    if (afterMixed.ok) {
+      assert.equal(afterMixed.case.title, "New title", "the rejected patch's title must not have landed");
+      assert.equal(afterMixed.case.description, "New description");
+    }
+  }));
+
 test("one case holds an address once — in any spelling of it; the same address in a different case is fine", async () =>
   withStack(async ({ service, account }) => {
     const { token } = await account("investigator@example.com");

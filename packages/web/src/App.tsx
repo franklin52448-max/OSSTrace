@@ -1,8 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { ChainId } from "@osstrace/core";
-import GraphView from "./GraphView.tsx";
 import { TracerRoute } from "./tracer/index.ts";
 import TracerView from "./TracerView.tsx";
+import { VisualizerRoute } from "./visualizer/index.ts";
 import BountiesView from "./BountiesView.tsx";
 import WorkbenchView from "./WorkbenchView.tsx";
 import PrivateLabelPanel from "./PrivateLabelPanel.tsx";
@@ -227,17 +227,15 @@ export default function App() {
 
       {home ? (
         <Home />
-      ) : route.view === "trace" ? (
+      ) : route.view === "trace" || route.view === "graph" ? (
         // Full-bleed, viewport-height canvas: no page padding/max-width and no page scroll --
-        // the Tracer manages its own pan/zoom/scroll inside this box.
+        // the Tracer/Visualizer manage their own pan/zoom/scroll inside this box.
         <div className="overflow-hidden" style={{ height: `calc(100dvh - ${headerH}px)` }}>
-          <TracerRoute />
+          {route.view === "trace" ? <TracerRoute /> : <VisualizerRoute />}
         </div>
       ) : (
         <main className="mx-auto w-full max-w-[96rem] px-4 py-6 sm:px-6 lg:py-8">
-          {route.view === "graph" ? (
-            <GraphView key={targetKey} initial={route.target} />
-          ) : route.view === "bounties" ? (
+          {route.view === "bounties" ? (
             <BountiesView />
           ) : route.view === "workbench" ? (
             <WorkbenchView />

@@ -199,15 +199,22 @@ export default function App() {
     <div className="min-h-screen bg-ground text-ink">
       {/* Top bar: wordmark, views, global address search, account. Pinned to the original look
           while on the home route too (see HOME_PINNED_STYLE) -- it's the one page asked to stay
-          exactly as it was, header included, not just the content below it. */}
-      <header ref={headerRef} className="sticky top-0 z-30 border-b border-line bg-ground/85 backdrop-blur-md" style={home ? HOME_PINNED_STYLE : undefined}>
-        <div className="mx-auto flex h-16 w-full max-w-[96rem] items-center gap-4 px-4 sm:px-6">
+          exactly as it was, header included, not just the content below it. Every other route
+          sits on a fixed dark "rail" bar instead (see RAIL_PINNED_STYLE), independent of the
+          site's live light/dark setting -- the theme toggle, customize and account controls are
+          untouched, just recoloured by the pin like everything else in the bar. */}
+      <header
+        ref={headerRef}
+        className={cx("sticky top-0 z-30 border-b", home ? "border-line bg-ground/85 backdrop-blur-md" : "border-[var(--trace-rail-border)] bg-[var(--trace-rail)]")}
+        style={home ? HOME_PINNED_STYLE : RAIL_PINNED_STYLE}
+      >
+        <div className={cx("mx-auto flex w-full max-w-[96rem] items-center gap-4 px-4 sm:px-6", home ? "h-16" : "h-14")}>
           <a href="#" className="shrink-0 rounded-md transition-opacity duration-150 hover:opacity-85">
             <Wordmark />
           </a>
           <nav className="hidden items-center gap-0.5 lg:flex" aria-label="Views">
             {nav.map((tab) => (
-              <NavLink key={tab.id} tab={tab} active={route.view === tab.id} />
+              <NavLink key={tab.id} tab={tab} active={route.view === tab.id} rail={!home} />
             ))}
           </nav>
           {/* Home has its own big search; everywhere else the bar carries it. */}
@@ -225,7 +232,7 @@ export default function App() {
         {/* Narrow screens: views scroll horizontally under the bar. */}
         <nav className="flex gap-0.5 overflow-x-auto px-3 pb-2 lg:hidden" aria-label="Views">
           {nav.map((tab) => (
-            <NavLink key={tab.id} tab={tab} active={route.view === tab.id} />
+            <NavLink key={tab.id} tab={tab} active={route.view === tab.id} rail={!home} />
           ))}
         </nav>
       </header>
@@ -261,7 +268,23 @@ export default function App() {
   );
 }
 
-function NavLink({ tab, active }: { tab: (typeof NAV)[number]; active: boolean }) {
+function NavLink({ tab, active, rail }: { tab: (typeof NAV)[number]; active: boolean; rail?: boolean }) {
+  if (rail) {
+    return (
+      <a
+        href={tab.href}
+        aria-current={active ? "page" : undefined}
+        className={cx(
+          "relative inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-md px-3 text-[13.5px] font-medium transition-colors duration-150",
+          active
+            ? "text-ink after:absolute after:inset-x-3 after:-bottom-[10px] after:h-0.5 after:rounded-full after:bg-[var(--color-helium)]"
+            : "text-ink-dim hover:bg-[var(--helium-elevated-7)] hover:text-ink",
+        )}
+      >
+        {tab.label}
+      </a>
+    );
+  }
   return (
     <a
       href={tab.href}
@@ -404,6 +427,37 @@ const HOME_PINNED_STYLE = {
   "--helium-elevated-30": "color-mix(in srgb, #ededef 30%, transparent)",
   "--helium-elevated-40": "color-mix(in srgb, #ededef 40%, transparent)",
   "--helium-elevated-50": "color-mix(in srgb, #ededef 50%, transparent)",
+} as React.CSSProperties;
+
+/**
+ * The header's own bar on every route except home: a fixed dark "rail" surface, the same idea
+ * as a sidebar's activity rail, that stays dark regardless of the site's live light/dark setting
+ * -- same CSS-variable-pinning mechanism as HOME_PINNED_STYLE above, just a different fixed
+ * palette, and only applied to the <header>, not the page below it. --color-signal/--helium-blue
+ * are deliberately left un-pinned so the active-tab underline and primary buttons still track
+ * the real accent color (including user customization), only ink/surface tokens are fixed.
+ */
+const RAIL_PINNED_STYLE = {
+  "--color-ink": "#e4eded",
+  "--color-ink-dim": "#8e9d9e",
+  "--color-ink-faint": "#6b7879",
+  "--primary": "#e4eded",
+  "--secondary": "#8e9d9e",
+  "--tertiary": "#6b7879",
+  "--bg-surface": "#0c1b1e",
+  "--background": "#0c1b1e",
+  "--tooltip-bg": "#182a2e",
+  "--tooltip-shadow": "color-mix(in srgb, #182a2e 40%, transparent)",
+  "--helium-elevated": "#e4eded",
+  "--helium-elevated-5": "color-mix(in srgb, #e4eded 5%, transparent)",
+  "--helium-elevated-7": "color-mix(in srgb, #e4eded 7%, transparent)",
+  "--helium-elevated-10": "color-mix(in srgb, #e4eded 10%, transparent)",
+  "--helium-elevated-15": "color-mix(in srgb, #e4eded 15%, transparent)",
+  "--helium-elevated-20": "color-mix(in srgb, #e4eded 20%, transparent)",
+  "--helium-elevated-25": "color-mix(in srgb, #e4eded 25%, transparent)",
+  "--helium-elevated-30": "color-mix(in srgb, #e4eded 30%, transparent)",
+  "--helium-elevated-40": "color-mix(in srgb, #e4eded 40%, transparent)",
+  "--helium-elevated-50": "color-mix(in srgb, #e4eded 50%, transparent)",
 } as React.CSSProperties;
 
 function Home() {

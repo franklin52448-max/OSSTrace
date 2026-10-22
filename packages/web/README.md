@@ -59,7 +59,10 @@ Each transaction row shows its native value, plus one line per decoded token tra
 (`tokenTransfers` from the API: ERC-20 on Ethereum, SPL on Solana). A token shows its symbol when
 the data source reported one, otherwise its shortened contract/mint address — Solana mints never
 have a symbol here, since the adapter doesn't fetch token metadata. If a token's decimals are
-unknown, the exact raw integer amount is shown and labelled as raw units.
+unknown, the exact raw integer amount is shown and labelled as raw units. A transaction the API
+reports as `status: "failed"` (reverted on-chain) is marked **FAILED · nothing moved**, and its
+amounts are struck through with no +/- sign or direction colour: they're what it attempted, not
+what moved (`src/txDisplay.ts`, covered by `tests/txDisplay.test.ts`).
 
 ## Accounts and private labels
 

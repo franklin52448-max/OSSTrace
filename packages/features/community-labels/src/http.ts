@@ -49,6 +49,15 @@ async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknow
   return parsed as Record<string, unknown>;
 }
 
+/** A malformed `%`-escape is the client's mistake: a 400, not a 500 from the catch-all. */
+function decodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    throw new BodyError(400, "malformed URL encoding in path");
+  }
+}
+
 /**
  * Request handler for the `/labels/submissions` routes. Returns `false` for any other path, so it
  * can be mounted inside another server, same as `createAccountsHandler`.
@@ -120,7 +129,7 @@ export function createLabelSubmissionsHandler(
       }
       const action = path.match(/^\/labels\/submissions\/([^/]+)\/(confirm|reject)$/);
       if (action?.[1] && req.method === "POST") {
-        const id = decodeURIComponent(action[1]);
+        const id = decodeSegment(action[1]);
         if (action[2] === "confirm") {
           sendResult(req, res, await service.confirm(token, id));
         } else {

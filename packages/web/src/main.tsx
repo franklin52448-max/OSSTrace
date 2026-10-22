@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -17,6 +18,7 @@ createRoot(root).render(
       <ToastProvider>
         <App />
       </ToastProvider>
+      <Analytics />
     </QueryClientProvider>
   </StrictMode>,
 );

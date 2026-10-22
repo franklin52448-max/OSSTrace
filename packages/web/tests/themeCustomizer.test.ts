@@ -98,18 +98,18 @@ test("editing a token's color input repaints just that token's CSS variable and 
   await click(customizeButton(root));
   const signalInput = getByAriaLabel("Highlight accent", root);
   assert.equal(signalInput.type, "color");
-  assert.equal(window.document.documentElement.style.getPropertyValue("--color-signal"), "#8ea2ff"); // dark default
+  assert.equal(window.document.documentElement.style.getPropertyValue("--color-signal"), "#4fc4cf"); // dark default
 
   await type(signalInput, "#ff00ff");
   assert.equal(window.document.documentElement.style.getPropertyValue("--color-signal"), "#ff00ff");
-  assert.equal(window.document.documentElement.style.getPropertyValue("--color-ink"), "#ededef"); // untouched
+  assert.equal(window.document.documentElement.style.getPropertyValue("--color-ink"), "#e6e8e6"); // untouched
 
   const resetButton = await waitFor(
     () => root.querySelector('button[aria-label="Reset Highlight accent"]:not([disabled])') as HTMLButtonElement | null,
     "the per-token reset button to appear",
   );
   await click(resetButton);
-  assert.equal(window.document.documentElement.style.getPropertyValue("--color-signal"), "#8ea2ff");
+  assert.equal(window.document.documentElement.style.getPropertyValue("--color-signal"), "#4fc4cf");
 });
 
 test("picking the Light preset in the panel repaints <html> and the toggle agrees", async () => {
@@ -132,7 +132,7 @@ test("Reset all to preset defaults is disabled with nothing overridden, enabled 
   assert.equal(resetAll.disabled, false);
 
   await click(resetAll);
-  assert.equal(window.document.documentElement.style.getPropertyValue("--color-signal"), "#8ea2ff");
+  assert.equal(window.document.documentElement.style.getPropertyValue("--color-signal"), "#4fc4cf");
   assert.equal(resetAll.disabled, true);
 });
 

@@ -35,26 +35,26 @@ export interface ThemeToken {
 
 export const THEME_TOKENS: readonly ThemeToken[] = [
   // Backgrounds
-  { key: "ground", cssVar: "--color-ground", label: "Page background", category: "Backgrounds", defaultDark: "#000000", defaultLight: "#f6f6f7" },
-  { key: "groundDeep", cssVar: "--color-ground-deep", label: "Graph background", category: "Backgrounds", defaultDark: "#000000", defaultLight: "#eeeef0" },
-  { key: "panel", cssVar: "--color-panel", label: "Card background", category: "Backgrounds", defaultDark: "#0a0a0b", defaultLight: "#ffffff" },
-  { key: "raised", cssVar: "--color-raised", label: "Raised surface", category: "Backgrounds", defaultDark: "#131315", defaultLight: "#f1f1f3" },
-  { key: "line", cssVar: "--color-line", label: "Border", category: "Backgrounds", defaultDark: "#1c1c1f", defaultLight: "#e4e4e7" },
-  { key: "lineStrong", cssVar: "--color-line-strong", label: "Strong border", category: "Backgrounds", defaultDark: "#2a2a2e", defaultLight: "#d4d4d8" },
+  { key: "ground", cssVar: "--color-ground", label: "Page background", category: "Backgrounds", defaultDark: "#0e1112", defaultLight: "#edf0ef" },
+  { key: "groundDeep", cssVar: "--color-ground-deep", label: "Graph background", category: "Backgrounds", defaultDark: "#0e1112", defaultLight: "#edf0ef" },
+  { key: "panel", cssVar: "--color-panel", label: "Card background", category: "Backgrounds", defaultDark: "#15191b", defaultLight: "#ffffff" },
+  { key: "raised", cssVar: "--color-raised", label: "Raised surface", category: "Backgrounds", defaultDark: "#1c2124", defaultLight: "#f3f5f4" },
+  { key: "line", cssVar: "--color-line", label: "Border", category: "Backgrounds", defaultDark: "#252b2e", defaultLight: "#dbe0df" },
+  { key: "lineStrong", cssVar: "--color-line-strong", label: "Strong border", category: "Backgrounds", defaultDark: "#353d41", defaultLight: "#bcc4c3" },
   // Text
-  { key: "ink", cssVar: "--color-ink", label: "Primary text", category: "Text", defaultDark: "#ededef", defaultLight: "#18181b" },
-  { key: "inkDim", cssVar: "--color-ink-dim", label: "Secondary text", category: "Text", defaultDark: "#a1a1a8", defaultLight: "#52525b" },
-  { key: "inkFaint", cssVar: "--color-ink-faint", label: "Faint text", category: "Text", defaultDark: "#75757c", defaultLight: "#71717a" },
+  { key: "ink", cssVar: "--color-ink", label: "Primary text", category: "Text", defaultDark: "#e6e8e6", defaultLight: "#121718" },
+  { key: "inkDim", cssVar: "--color-ink-dim", label: "Secondary text", category: "Text", defaultDark: "#a0a8a7", defaultLight: "#4f5859" },
+  { key: "inkFaint", cssVar: "--color-ink-faint", label: "Faint text", category: "Text", defaultDark: "#7f8988", defaultLight: "#646e6f" },
   // Accent
-  { key: "signal", cssVar: "--color-signal", label: "Highlight accent", category: "Accent", defaultDark: "#8ea2ff", defaultLight: "#4356c9" },
-  { key: "helium", cssVar: "--color-helium", label: "Primary action", category: "Accent", defaultDark: "#3450d1", defaultLight: "#3450d1" },
+  { key: "signal", cssVar: "--color-signal", label: "Highlight accent", category: "Accent", defaultDark: "#4fc4cf", defaultLight: "#0b7380" },
+  { key: "helium", cssVar: "--color-helium", label: "Primary action", category: "Accent", defaultDark: "#4fc4cf", defaultLight: "#0b7380" },
   // Status
-  { key: "inbound", cssVar: "--color-inbound", label: "Inbound / success", category: "Status", defaultDark: "#4ad6a0", defaultLight: "#1a9c6f" },
-  { key: "outbound", cssVar: "--color-outbound", label: "Outbound", category: "Status", defaultDark: "#f5a35c", defaultLight: "#c2680a" },
-  { key: "warn", cssVar: "--color-warn", label: "Warning", category: "Status", defaultDark: "#f4c76a", defaultLight: "#a6780a" },
-  { key: "danger", cssVar: "--color-danger", label: "Danger", category: "Status", defaultDark: "#f47b7b", defaultLight: "#d1453d" },
-  { key: "info", cssVar: "--color-info", label: "Info", category: "Status", defaultDark: "#7cc4f5", defaultLight: "#2f7fc2" },
-  { key: "private", cssVar: "--color-private", label: "Private label", category: "Status", defaultDark: "#b7a6f8", defaultLight: "#7c5cd6" },
+  { key: "inbound", cssVar: "--color-inbound", label: "Inbound / success", category: "Status", defaultDark: "#78c793", defaultLight: "#1b7a45" },
+  { key: "outbound", cssVar: "--color-outbound", label: "Outbound", category: "Status", defaultDark: "#e3a35d", defaultLight: "#a3590f" },
+  { key: "warn", cssVar: "--color-warn", label: "Warning", category: "Status", defaultDark: "#dcbf62", defaultLight: "#876a07" },
+  { key: "danger", cssVar: "--color-danger", label: "Danger", category: "Status", defaultDark: "#ef7b6f", defaultLight: "#b8322a" },
+  { key: "info", cssVar: "--color-info", label: "Info", category: "Status", defaultDark: "#4fc4cf", defaultLight: "#0b7380" },
+  { key: "private", cssVar: "--color-private", label: "Private label", category: "Status", defaultDark: "#a993d8", defaultLight: "#6e55b0" },
 ];
 
 /** Category display order, derived from THEME_TOKENS itself — add a token in a new category and it shows up with no further wiring. */

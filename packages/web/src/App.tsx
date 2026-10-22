@@ -9,7 +9,6 @@ import PrivateLabelPanel from "./PrivateLabelPanel.tsx";
 import RiskPanel from "./RiskPanel.tsx";
 import AccountPanel from "./AccountPanel.tsx";
 import ThemeCustomizer, { ThemeToggle } from "./ThemeCustomizer.tsx";
-import { useThemeMode } from "./theme.ts";
 import ModerationView from "./ModerationView.tsx";
 import { LabelSubmitForm, ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
 import { isModerator, useSession } from "./session.ts";
@@ -172,8 +171,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-ground text-ink">
-      {/* Top bar: wordmark, views, global address search, account. */}
-      <header className="sticky top-0 z-30 border-b border-line bg-ground/85 backdrop-blur-md">
+      {/* Top bar: wordmark, views, global address search, account. Pinned to the original look
+          while on the home route too (see HOME_PINNED_STYLE) -- it's the one page asked to stay
+          exactly as it was, header included, not just the content below it. */}
+      <header className="sticky top-0 z-30 border-b border-line bg-ground/85 backdrop-blur-md" style={home ? HOME_PINNED_STYLE : undefined}>
         <div className="mx-auto flex h-16 w-full max-w-[96rem] items-center gap-4 px-4 sm:px-6">
           <a href="#" className="shrink-0 rounded-md transition-opacity duration-150 hover:opacity-85">
             <Wordmark />
@@ -297,11 +298,13 @@ const HERO_FLUID = {
   spikeHeight: 0.45,
 } satisfies FerrofluidProps;
 
-/** Aero Shards needs WebGPU; where it can't start, the WebGL2 ferrofluid takes its place. Both read
- * the site theme's mode directly (not a CSS var) since their lighting model runs on the GPU. */
+/** Aero Shards needs WebGPU; where it can't start, the WebGL2 ferrofluid takes its place. Only
+ * ever used on the home page, which keeps its original dark look regardless of the site's live
+ * theme (see HOME_PINNED_STYLE) -- so unlike a CSS-token-driven element, this reads a fixed mode
+ * rather than the live theme, since its lighting model runs on the GPU, not through CSS vars. */
 function HeroBackground() {
   const [webgpuFailed, setWebgpuFailed] = useState(false);
-  const lightMode = useThemeMode() === "light";
+  const lightMode = false;
   return (
     <Suspense fallback={null}>
       {webgpuFailed ? (
@@ -313,9 +316,67 @@ function HeroBackground() {
   );
 }
 
+/**
+ * The home page (header included) keeps its original look regardless of the rest of the site's
+ * theme, including live customization via the theme panel: every token it reads is pinned here to
+ * the exact values the site shipped with, via a local CSS-variable override that cascades to
+ * everything in whichever subtree it's applied to (the same mechanism the theme system itself
+ * uses). This has to include prism.css's own alias variables (--primary, --helium-blue, the
+ * --helium-elevated-N family, ...), not just the --color-* tokens they're aliased from: those
+ * aliases are declared only once, at :root, as `var(--color-x)` -- and a custom property inherits
+ * its *computed* value, not its declaration, so :root's own alias already resolved against
+ * :root's --color-x before this override ever applies; redefining --color-x here doesn't reach
+ * back into it. Redefining the alias itself, right here, does.
+ */
+const HOME_PINNED_STYLE = {
+  "--font": "Instrument Sans Variable, system-ui, Helvetica, Arial, sans-serif",
+  "--font-sans": "Instrument Sans Variable, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif",
+  "--radius-card": "16px",
+  "--radius-ctl": "12px",
+  "--color-ground": "#000000",
+  "--color-ground-deep": "#000000",
+  "--color-panel": "#0a0a0b",
+  "--color-raised": "#131315",
+  "--color-line": "#1c1c1f",
+  "--color-line-strong": "#2a2a2e",
+  "--color-ink": "#ededef",
+  "--color-ink-dim": "#a1a1a8",
+  "--color-ink-faint": "#75757c",
+  "--color-signal": "#8ea2ff",
+  "--color-helium": "#3450d1",
+  "--color-inbound": "#4ad6a0",
+  "--color-outbound": "#f5a35c",
+  "--color-warn": "#f4c76a",
+  "--color-danger": "#f47b7b",
+  "--color-info": "#7cc4f5",
+  "--color-private": "#b7a6f8",
+  // prism.css's own aliases onto the tokens above (see prism/prism.css) -- pinned directly, for
+  // exactly the reason explained above.
+  "--primary": "#ededef",
+  "--secondary": "#a1a1a8",
+  "--tertiary": "#75757c",
+  "--helium-blue": "#3450d1",
+  "--helium-blue-hover": "color-mix(in srgb, #3450d1 88%, white)",
+  "--helium-blue-press": "color-mix(in srgb, #3450d1 88%, black)",
+  "--bg-surface": "#000000",
+  "--background": "#000000",
+  "--tooltip-bg": "#131315",
+  "--tooltip-shadow": "color-mix(in srgb, #131315 40%, transparent)",
+  "--helium-elevated": "#ededef",
+  "--helium-elevated-5": "color-mix(in srgb, #ededef 5%, transparent)",
+  "--helium-elevated-7": "color-mix(in srgb, #ededef 7%, transparent)",
+  "--helium-elevated-10": "color-mix(in srgb, #ededef 10%, transparent)",
+  "--helium-elevated-15": "color-mix(in srgb, #ededef 15%, transparent)",
+  "--helium-elevated-20": "color-mix(in srgb, #ededef 20%, transparent)",
+  "--helium-elevated-25": "color-mix(in srgb, #ededef 25%, transparent)",
+  "--helium-elevated-30": "color-mix(in srgb, #ededef 30%, transparent)",
+  "--helium-elevated-40": "color-mix(in srgb, #ededef 40%, transparent)",
+  "--helium-elevated-50": "color-mix(in srgb, #ededef 50%, transparent)",
+} as React.CSSProperties;
+
 function Home() {
   return (
-    <div className="pb-16">
+    <div className="pb-16" style={HOME_PINNED_STYLE}>
       {/* Full-bleed hero: the shard field, scrims for legibility, then the search on top. */}
       <section className="relative isolate overflow-hidden border-b border-line">
         <div className="absolute inset-0 -z-10">

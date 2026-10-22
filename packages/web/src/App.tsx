@@ -251,9 +251,9 @@ function GlobalSearch({ initial, small }: { initial: Route["target"]; small?: bo
   );
 }
 
-/** Settings from reactbits.dev/backgrounds/ferrofluid?preset=peaks&sharpness=4&fluidity=0.85&spikeHeight=0.45, tinted to Prism's blues. */
+/** Settings from reactbits.dev/backgrounds/ferrofluid?preset=peaks&sharpness=4&fluidity=0.85&spikeHeight=0.45, in neutral chrome. */
 const HERO_FLUID = {
-  colors: ["#ffffff", "#9aa8e0", "#3450d1"],
+  colors: ["#ffffff", "#d4d4d8", "#52525b"],
   brightness: 1,
   scale: 1.6,
   tilt: 48,
@@ -277,7 +277,7 @@ function Home() {
           className="pointer-events-none absolute inset-0 -z-10"
           style={{
             background:
-              "radial-gradient(60% 55% at 50% 38%, rgb(4 5 10 / 0.82) 0%, rgb(4 5 10 / 0.35) 60%, transparent 100%), linear-gradient(to bottom, var(--color-ground) 0%, transparent 18%, transparent 70%, var(--color-ground) 100%)",
+              "radial-gradient(60% 55% at 50% 38%, rgb(0 0 0 / 0.82) 0%, rgb(0 0 0 / 0.35) 60%, transparent 100%), linear-gradient(to bottom, var(--color-ground) 0%, transparent 18%, transparent 70%, var(--color-ground) 100%)",
           }}
           aria-hidden="true"
         />

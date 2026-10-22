@@ -283,7 +283,7 @@ function nodeColor(node: GraphNode): { fill: string; stroke: string } {
   if (node.tags.some((t) => t.tag === "sanctioned")) return { fill: "#3b1a2a", stroke: "#f47b7b" };
   if (node.role === "center") return { fill: "#1d2a5d", stroke: "#8ea2ff" };
   if (node.label || node.entity || node.tags.length > 0) return { fill: "#3a3020", stroke: "#f4c76a" };
-  return { fill: "#1a1f3d", stroke: "#5a6596" };
+  return { fill: "#18181b", stroke: "#52525b" };
 }
 
 function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; selectedId: string | null; onSelect: (id: string) => void }) {
@@ -489,9 +489,9 @@ function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; se
                   onPointerLeave={() => setHoverId(null)}
                 >
                   <title>{`${name ? `${name}\n` : ""}${node.id}\n${node.stats.txCount} transfer(s)`}</title>
-                  {isSelected && <circle r={r + 6} fill="none" stroke="#e3e6f2" strokeWidth={1.5} strokeDasharray="3 3" />}
+                  {isSelected && <circle r={r + 6} fill="none" stroke="#ededef" strokeWidth={1.5} strokeDasharray="3 3" />}
                   <circle r={r} fill={fill} stroke={stroke} strokeWidth={node.role === "center" ? 3 : 2} />
-                  <text y={r + 20} textAnchor="middle" fontSize={11} fill={name ? "#f4d58d" : "#8f9bcb"} className="pointer-events-none">
+                  <text y={r + 20} textAnchor="middle" fontSize={11} fill={name ? "#f4d58d" : "#a1a1a8"} className="pointer-events-none">
                     {name ? (name.length > 24 ? `${name.slice(0, 23)}…` : name) : short(node.id)}
                   </text>
                 </g>

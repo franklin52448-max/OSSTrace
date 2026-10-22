@@ -13,18 +13,18 @@
   --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Surfaces: near-black with a navy cast, panels lifted one and two steps. */
-  --color-ground: #04050a;
-  --color-ground-deep: #020307;
-  --color-panel: #080a14;
-  --color-raised: #0f1222;
-  --color-line: #141830;
-  --color-line-strong: #1f2442;
+  /* Surfaces: true black, neutral panels lifted one and two steps. Blue is kept for accents only. */
+  --color-ground: #000000;
+  --color-ground-deep: #000000;
+  --color-panel: #0a0a0b;
+  --color-raised: #131315;
+  --color-line: #1c1c1f;
+  --color-line-strong: #2a2a2e;
 
-  /* Ink: Prism's primary / secondary / tertiary. */
-  --color-ink: #e3e6f2;
-  --color-ink-dim: #8f9bcb;
-  --color-ink-faint: #7985b2;
+  /* Ink: neutral greys (Prism's primary / secondary / tertiary roles). */
+  --color-ink: #ededef;
+  --color-ink-dim: #a1a1a8;
+  --color-ink-faint: #75757c;
 
   /* Accent is Prism's elevated periwinkle; semantic state colours tuned to sit on navy. */
   --color-signal: #8ea2ff;
@@ -40,7 +40,7 @@
   --radius-ctl: 12px;
   --radius-chip: 999px;
 
-  --shadow-card: 0 1px 0 rgb(179 190 236 / 0.04) inset, 0 16px 32px -24px rgb(0 0 0 / 0.7);
+  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 16px 32px -24px rgb(0 0 0 / 0.7);
 }
 
 @layer base {
@@ -199,6 +199,6 @@
 /* Faint plotting field behind the graph canvas. */
 @utility graph-field {
   background-color: var(--color-ground-deep);
-  background-image: radial-gradient(rgb(179 190 236 / 0.08) 1px, transparent 1px);
+  background-image: radial-gradient(rgb(255 255 255 / 0.06) 1px, transparent 1px);
   background-size: 24px 24px;
 }

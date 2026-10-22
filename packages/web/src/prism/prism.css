@@ -2,7 +2,7 @@
    Helium Prism styles (https://github.com/imputnet/helium-prism, GPL-3.0-only), ported for the
    React components in ./components.tsx. Global rules go in @layer base and component rules in
    @layer components, so Tailwind utilities still win. OSSTrace is dark-first: Prism's dark palette,
-   pushed darker toward near-black, is the default here. Two deliberate changes from upstream: the pill button visuals apply only
+   neutralised to true black and greys (blue kept for accents), is the default here. Two deliberate changes from upstream: the pill button visuals apply only
    to `.button` (not to every bare <button>, which the existing views use for text links), and the
    global p/a/li typography is dropped in favour of the Text component.
    --------------------------------------------------------------------------------------------- */
@@ -10,25 +10,25 @@
 :root {
   --font: "Instrument Sans Variable", system-ui, Helvetica, Arial, sans-serif;
 
-  --primary: #e3e6f2;
-  --secondary: #8f9bcb;
-  --tertiary: #7985b2;
+  --primary: #ededef;
+  --secondary: #a1a1a8;
+  --tertiary: #75757c;
   --white: #ffffff;
 
   --helium-blue: #3450d1;
   --helium-blue-hover: #3a58db;
   --helium-blue-press: #304bc2;
 
-  --bg-surface: #04050a;
-  --bg-gradient-start: #080a14;
-  --bg-gradient-end: #1d2a5d;
+  --bg-surface: #000000;
+  --bg-gradient-start: #0a0a0b;
+  --bg-gradient-end: #1c1c1f;
 
   --background: var(--bg-surface);
 
-  --tooltip-bg: #111733;
+  --tooltip-bg: #18181b;
   --tooltip-shadow: color-mix(in srgb, var(--tooltip-bg) 40%, transparent);
 
-  --helium-elevated: #9aa8e0;
+  --helium-elevated: #b4b4bc;
   --helium-elevated-5: color-mix(in srgb, var(--helium-elevated) 5%, transparent);
   --helium-elevated-7: color-mix(in srgb, var(--helium-elevated) 7%, transparent);
   --helium-elevated-10: color-mix(in srgb, var(--helium-elevated) 10%, transparent);

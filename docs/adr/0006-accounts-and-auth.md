@@ -150,7 +150,9 @@ since an email is a mutable contact detail.
   unverified emails.
 - **Login rate limiting / lockout** — argon2's cost slows online guessing but isn't a substitute.
   Needed before any public deployment; belongs with the deployment work (it's per-IP and
-  proxy-aware, which depends on the hosting setup).
+  proxy-aware, which depends on the hosting setup). *Update 2026-10-22: built, see ADR 0015.
+  The proxy-aware part (trusting `X-Forwarded-For` from a known proxy) is still deferred to the
+  deployment work.*
 - **OAuth / "Sign in with GitHub"** — the most likely next login method once there's a hosting
   target.
 - **Account deletion, email change, "log out everywhere," password change** — straightforward

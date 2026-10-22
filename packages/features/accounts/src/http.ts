@@ -1,4 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { normalizeEmail } from "./password.ts";
+import { AccountsRateLimiter, ipKey, type RateLimited } from "./rate-limit.ts";
 import type { AccountService } from "./service.ts";
 import type { AuthErrorCode, AuthResult } from "./types.ts";
 
@@ -23,6 +25,12 @@ export interface AccountsHttpOptions {
    * session tokens. Defaults to the local web UI (`http://localhost:5301`).
    */
   allowedOrigins?: readonly string[];
+  /**
+   * The login/signup rate limiter (ADR 0015). Defaults to a fresh `AccountsRateLimiter` with the
+   * default limits; pass one to change the limits or the clock, or to share one limiter between
+   * several mounts of this handler in the same process.
+   */
+  rateLimiter?: AccountsRateLimiter;
 }
 
 class BodyError extends Error {
@@ -78,6 +86,7 @@ export function bearerToken(req: IncomingMessage): string | null {
  * Routes (all JSON; errors are `{ "error": <AuthErrorCode or "bad_request">, "message": "..." }`):
  *   POST /accounts/signup           { email, password }  → 201 { user, session }
  *   POST /accounts/login            { email, password }  → 200 { user, session }
+ *   (signup and login answer 429 + Retry-After when a rate limit trips; see ADR 0015)
  *   POST /accounts/logout           (Bearer)             → 204
  *   GET  /accounts/me               (Bearer)             → 200 { user }
  *   GET  /accounts/users            (Bearer, admin)      → 200 { users }
@@ -88,6 +97,7 @@ export function createAccountsHandler(
   options: AccountsHttpOptions = {},
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   const allowedOrigins = new Set(options.allowedOrigins ?? ["http://localhost:5301"]);
+  const limiter = options.rateLimiter ?? new AccountsRateLimiter();
 
   function baseHeaders(req: IncomingMessage): Record<string, string> {
     const headers: Record<string, string> = {
@@ -100,6 +110,8 @@ export function createAccountsHandler(
       headers["access-control-allow-origin"] = origin;
       headers["access-control-allow-headers"] = "authorization, content-type";
       headers["access-control-allow-methods"] = "GET, POST, PUT, OPTIONS";
+      // Not a CORS-safelisted response header, so the web UI can't read it unless it's exposed.
+      headers["access-control-expose-headers"] = "retry-after";
     }
     return headers;
   }
@@ -129,6 +141,18 @@ export function createAccountsHandler(
     send(req, res, okStatus, body);
   }
 
+  function sendRateLimited(req: IncomingMessage, res: ServerResponse, blocked: RateLimited): void {
+    const seconds = Math.max(1, Math.ceil(blocked.retryAfterMs / 1000));
+    res.writeHead(429, { ...baseHeaders(req), "content-type": "application/json", "retry-after": String(seconds) });
+    res.end(
+      JSON.stringify(
+        { error: "rate_limited", message: `too many attempts; try again in ${seconds} seconds`, retryAfterSeconds: seconds },
+        null,
+        2,
+      ),
+    );
+  }
+
   return async function handle(req, res) {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
@@ -140,13 +164,45 @@ export function createAccountsHandler(
     }
 
     try {
-      if (req.method === "POST" && (path === "/accounts/signup" || path === "/accounts/login")) {
-        const body = await readJsonBody(req);
-        if (path === "/accounts/signup") {
-          sendResult(req, res, await service.signup(body["email"], body["password"]), 201);
-        } else {
-          sendResult(req, res, await service.login(body["email"], body["password"]));
+      if (req.method === "POST" && path === "/accounts/signup") {
+        // Counted before the body is read: every signup attempt costs an argon2 hash (or reveals
+        // whether an email is taken), whether or not it succeeds.
+        const blocked = limiter.signup(ipKey(req.socket.remoteAddress));
+        if (blocked) {
+          req.resume(); // drain the unread body so the connection can be reused
+          sendRateLimited(req, res, blocked);
+          return true;
         }
+        const body = await readJsonBody(req);
+        sendResult(req, res, await service.signup(body["email"], body["password"]), 201);
+        return true;
+      }
+
+      if (req.method === "POST" && path === "/accounts/login") {
+        const ip = ipKey(req.socket.remoteAddress);
+        const flood = limiter.loginRequest(ip);
+        if (flood) {
+          req.resume();
+          sendRateLimited(req, res, flood);
+          return true;
+        }
+        const body = await readJsonBody(req);
+        const email = typeof body["email"] === "string" ? normalizeEmail(body["email"]) : null;
+        const attempt = limiter.loginAttempt(email, ip);
+        if (attempt.limited) {
+          sendRateLimited(req, res, attempt);
+          return true;
+        }
+        let result;
+        try {
+          result = await service.login(body["email"], body["password"]);
+        } catch (cause) {
+          attempt.failed();
+          throw cause;
+        }
+        if (result.ok) attempt.succeeded();
+        else attempt.failed();
+        sendResult(req, res, result);
         return true;
       }
 

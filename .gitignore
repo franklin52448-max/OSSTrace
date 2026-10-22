@@ -29,3 +29,5 @@ data/bounties/
 dump.rdb
 # @osstrace/server's own SQLite store (accounts, traces, labels, transfers cache, ...). Runtime data, not repo seed data -- see ADR 0022.
 packages/server/data/
+.vercel
+.env*

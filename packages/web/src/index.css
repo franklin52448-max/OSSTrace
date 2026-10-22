@@ -13,13 +13,13 @@
   --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Surfaces: Prism's navy ground, panels lifted one and two steps. */
-  --color-ground: #0e1123;
-  --color-ground-deep: #0a0c1b;
-  --color-panel: #12162e;
-  --color-raised: #1a1f3d;
-  --color-line: #20264a;
-  --color-line-strong: #2c3462;
+  /* Surfaces: near-black with a navy cast, panels lifted one and two steps. */
+  --color-ground: #04050a;
+  --color-ground-deep: #020307;
+  --color-panel: #080a14;
+  --color-raised: #0f1222;
+  --color-line: #141830;
+  --color-line-strong: #1f2442;
 
   /* Ink: Prism's primary / secondary / tertiary. */
   --color-ink: #e3e6f2;

@@ -14,6 +14,7 @@ import { amountDisplay, type AmountDisplay, type Direction, type TxStatus } from
 import { LiveBadge, useLiveTransactions } from "./LiveStream.tsx";
 import { CopyButton, Dropdown, SearchBar, Skeleton, Text, cx } from "./prism/components.tsx";
 import { IconArrowRight, IconExternalLink } from "./prism/icons.tsx";
+import Ferrofluid, { type FerrofluidProps } from "./vendor/Ferrofluid.tsx";
 
 const EXPLORER_URL = import.meta.env["VITE_EXPLORER_URL"] ?? "http://localhost:5300";
 
@@ -175,23 +176,25 @@ export default function App() {
         </nav>
       </header>
 
-      <main className="mx-auto w-full max-w-[96rem] px-4 py-6 sm:px-6 lg:py-8">
-        {route.view === "graph" ? (
-          <GraphView key={route.target ? `${route.target.chain}:${route.target.address}` : "empty"} initial={route.target} />
-        ) : route.view === "trace" ? (
-          <TracerView />
-        ) : route.view === "cases" ? (
-          <CasesView />
-        ) : route.view === "bounties" ? (
-          <BountiesView />
-        ) : route.view === "moderation" ? (
-          <ModerationView />
-        ) : route.target ? (
-          <Lookup key={`${route.target.chain}:${route.target.address}`} chain={route.target.chain} address={route.target.address} />
-        ) : (
-          <Home />
-        )}
-      </main>
+      {route.view === "lookup" && !route.target ? (
+        <Home />
+      ) : (
+        <main className="mx-auto w-full max-w-[96rem] px-4 py-6 sm:px-6 lg:py-8">
+          {route.view === "graph" ? (
+            <GraphView key={route.target ? `${route.target.chain}:${route.target.address}` : "empty"} initial={route.target} />
+          ) : route.view === "trace" ? (
+            <TracerView />
+          ) : route.view === "cases" ? (
+            <CasesView />
+          ) : route.view === "bounties" ? (
+            <BountiesView />
+          ) : route.view === "moderation" ? (
+            <ModerationView />
+          ) : route.target ? (
+            <Lookup key={`${route.target.chain}:${route.target.address}`} chain={route.target.chain} address={route.target.address} />
+          ) : null}
+        </main>
+      )}
     </div>
   );
 }
@@ -248,39 +251,70 @@ function GlobalSearch({ initial, small }: { initial: Route["target"]; small?: bo
   );
 }
 
+/** Settings from reactbits.dev/backgrounds/ferrofluid?preset=peaks&sharpness=4&fluidity=0.85&spikeHeight=0.45, tinted to Prism's blues. */
+const HERO_FLUID = {
+  colors: ["#ffffff", "#9aa8e0", "#3450d1"],
+  brightness: 1,
+  scale: 1.6,
+  tilt: 48,
+  turbulence: 1,
+  speed: 0.5,
+  magnetism: 1,
+  sharpness: 4,
+  fluidity: 0.85,
+  spikeHeight: 0.45,
+} satisfies FerrofluidProps;
+
 function Home() {
   return (
-    <div className="mx-auto max-w-3xl pt-10 sm:pt-16">
-      <div className="text-center">
-        <Text variant="display" tone="primary" center>
-          On-chain intelligence, in the open.
-        </Text>
-        <Text tone="secondary" center className="mx-auto mt-4 max-w-xl">
-          Look up any Ethereum or Solana address: real balances, recent transactions, and only labels with a cited public
-          source.
-        </Text>
+    <div className="pb-16">
+      {/* Full-bleed hero: the ferrofluid field, scrims for legibility, then the search on top. */}
+      <section className="relative isolate overflow-hidden border-b border-line">
+        <div className="absolute inset-0 -z-10">
+          <Ferrofluid {...HERO_FLUID} />
+        </div>
+        <div
+          className="pointer-events-none absolute inset-0 -z-10"
+          style={{
+            background:
+              "radial-gradient(60% 55% at 50% 38%, rgb(4 5 10 / 0.82) 0%, rgb(4 5 10 / 0.35) 60%, transparent 100%), linear-gradient(to bottom, var(--color-ground) 0%, transparent 18%, transparent 70%, var(--color-ground) 100%)",
+          }}
+          aria-hidden="true"
+        />
+        <div className="mx-auto flex min-h-[min(78vh,720px)] max-w-3xl flex-col justify-center px-4 py-20 text-center">
+          <Text variant="display" tone="primary" center className="sm:!text-[52px]">
+            On-chain intelligence, in the open.
+          </Text>
+          <Text tone="secondary" center className="mx-auto mt-4 max-w-xl">
+            Look up any Ethereum or Solana address: real balances, recent transactions, and only labels with a cited public
+            source.
+          </Text>
+          <div className="mx-auto mt-8 w-full rounded-[20px] border border-line bg-panel/80 p-3 text-left shadow-card backdrop-blur-md">
+            <GlobalSearch initial={null} />
+          </div>
+        </div>
+      </section>
+
+      <div className="mx-auto max-w-3xl px-4">
+        <div className="mt-8 grid gap-3 sm:grid-cols-3">
+          {[
+            { href: "#graph", title: "Visualizer", desc: "See an address and its direct counterparties as a graph." },
+            { href: "#trace", title: "Tracer", desc: "Follow funds up to three hops, including Wormhole bridges." },
+            { href: "#bounties", title: "Bounties", desc: "Request a feature, or build one someone asked for." },
+          ].map((item) => (
+            <a key={item.href} href={item.href} className="button card !items-start border border-line">
+              <span className="link-text">
+                <span className="text-[15px] font-medium text-ink">{item.title}</span>
+                <span className="text-[13px] leading-snug text-ink-dim">{item.desc}</span>
+              </span>
+              <IconArrowRight className="mt-0.5 text-ink-faint" />
+            </a>
+          ))}
+        </div>
+        <p className="mt-10 text-center text-xs text-ink-faint">
+          Open source (AGPL-3.0). No affiliation with any proprietary platform.
+        </p>
       </div>
-      <div className="mt-8 rounded-[20px] border border-line bg-panel p-3 shadow-card">
-        <GlobalSearch initial={null} />
-      </div>
-      <div className="mt-8 grid gap-3 sm:grid-cols-3">
-        {[
-          { href: "#graph", title: "Visualizer", desc: "See an address and its direct counterparties as a graph." },
-          { href: "#trace", title: "Tracer", desc: "Follow funds up to three hops, including Wormhole bridges." },
-          { href: "#bounties", title: "Bounties", desc: "Request a feature, or build one someone asked for." },
-        ].map((item) => (
-          <a key={item.href} href={item.href} className="button card !items-start border border-line">
-            <span className="link-text">
-              <span className="text-[15px] font-medium text-ink">{item.title}</span>
-              <span className="text-[13px] leading-snug text-ink-dim">{item.desc}</span>
-            </span>
-            <IconArrowRight className="mt-0.5 text-ink-faint" />
-          </a>
-        ))}
-      </div>
-      <p className="mt-10 text-center text-xs text-ink-faint">
-        Open source (AGPL-3.0). No affiliation with any proprietary platform.
-      </p>
     </div>
   );
 }

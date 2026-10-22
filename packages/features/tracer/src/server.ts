@@ -1,12 +1,10 @@
-import { createServer, type ServerResponse } from "node:http";
-import type { Address, ChainId } from "@osstrace/core";
-import { canonicalAddress, isRealAddress } from "@osstrace/core";
+import { createServer } from "node:http";
 // Chain wiring + label store are reused from Explorer's bootstrap, same documented exception
 // Visualizer already takes (see its README, "How it plugs in") — one place to register a chain.
 import { buildLabelStore, buildRegistryFromEnv, loadRootEnv } from "@osstrace/explorer/src/bootstrap.ts";
 import { DEFAULT_WORMHOLESCAN_API_URL, WormholescanResolver } from "./bridges/wormhole.ts";
-import type { TraceFilters } from "./filters.ts";
-import { buildTraceGraph, buildTracePath, clampTraceOptions, type BridgeTracing, type TraceOptions } from "./trace.ts";
+import { createTracerHandler } from "./http.ts";
+import type { BridgeTracing } from "./trace.ts";
 
 loadRootEnv();
 
@@ -22,142 +20,10 @@ const wormhole: BridgeTracing = {
   adapters: registry,
 };
 
-/** `undefined` = stay on one chain (ADR 0008), a `BridgeTracing` = follow Wormhole hops, `null` = invalid value (already answered 400). */
-function bridgingFromQuery(res: ServerResponse, url: URL): BridgeTracing | undefined | null {
-  const raw = url.searchParams.get("bridges");
-  if (raw === null || raw === "" || raw === "none") return undefined;
-  if (raw === "wormhole") return wormhole;
-  sendJson(res, 400, { error: `unsupported bridges value "${raw}" — supported: wormhole` });
-  return null;
-}
+const handle = createTracerHandler({ registry, store, wormhole });
 
-const SUPPORTED_CHAINS: readonly ChainId[] = ["ethereum", "solana"];
-
-function isChainId(value: string): value is ChainId {
-  return (SUPPORTED_CHAINS as readonly string[]).includes(value);
-}
-
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, {
-    "content-type": "application/json",
-    // Permissive by design, same as Explorer/Visualizer: a local dev tool called from a local web
-    // UI on a different port. Tighten before any public deployment.
-    "access-control-allow-origin": "*",
-  });
-  res.end(JSON.stringify(body, null, 2));
-}
-
-function parseIntParam(raw: string | null): number | undefined {
-  if (raw === null) return undefined;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : undefined;
-}
-
-/** Only sets a key when the query actually provided it — `exactOptionalPropertyTypes` forbids `{ key: undefined }`. */
-function traceOptionsFromQuery(url: URL): Partial<TraceOptions> {
-  const opts: Partial<TraceOptions> = {};
-  const maxHops = parseIntParam(url.searchParams.get("maxHops"));
-  const breadth = parseIntParam(url.searchParams.get("breadth"));
-  const txLimitPerNode = parseIntParam(url.searchParams.get("txLimit"));
-  const maxAdapterCalls = parseIntParam(url.searchParams.get("maxCalls"));
-  if (maxHops !== undefined) opts.maxHops = maxHops;
-  if (breadth !== undefined) opts.breadth = breadth;
-  if (txLimitPerNode !== undefined) opts.txLimitPerNode = txLimitPerNode;
-  if (maxAdapterCalls !== undefined) opts.maxAdapterCalls = maxAdapterCalls;
-  return opts;
-}
-
-function resolveChainAndAddress(
-  res: ServerResponse,
-  chainRaw: string | undefined,
-  addressRaw: string | undefined,
-): Address | null {
-  if (!chainRaw || !addressRaw || !isChainId(chainRaw)) {
-    sendJson(res, 400, { error: `unsupported chain "${chainRaw}" — supported: ${SUPPORTED_CHAINS.join(", ")}` });
-    return null;
-  }
-  const decoded = decodeURIComponent(addressRaw).trim();
-  if (!isRealAddress(chainRaw, decoded)) {
-    sendJson(res, 400, { error: `"${decoded}" is not a valid ${chainRaw} address` });
-    return null;
-  }
-  return { chain: chainRaw, value: canonicalAddress(chainRaw, decoded) };
-}
-
-const server = createServer(async (req, res) => {
-  if (!req.url) {
-    sendJson(res, 400, { error: "no URL" });
-    return;
-  }
-  const url = new URL(req.url, `http://localhost:${PORT}`);
-
-  if (url.pathname === "/health") {
-    sendJson(res, 200, { ok: true });
-    return;
-  }
-
-  const graphMatch = url.pathname.match(/^\/trace\/graph\/([^/]+)\/([^/]+)$/);
-  if (graphMatch) {
-    const [, chainRaw, addressRaw] = graphMatch;
-    const address = resolveChainAndAddress(res, chainRaw, addressRaw);
-    if (!address) return;
-    const adapter = registry.get(address.chain);
-    if (!adapter) {
-      sendJson(res, 500, { error: `no adapter registered for chain "${address.chain}"` });
-      return;
-    }
-    const bridging = bridgingFromQuery(res, url);
-    if (bridging === null) return;
-    const opts = clampTraceOptions(traceOptionsFromQuery(url));
-    try {
-      const report = await buildTraceGraph(address, adapter, store, opts, bridging);
-      sendJson(res, 200, report);
-    } catch (cause) {
-      sendJson(res, 502, { error: cause instanceof Error ? cause.message : String(cause) });
-    }
-    return;
-  }
-
-  const pathMatch = url.pathname.match(/^\/trace\/path\/([^/]+)$/);
-  if (pathMatch) {
-    const [, chainRaw] = pathMatch;
-    const from = resolveChainAndAddress(res, chainRaw, url.searchParams.get("from") ?? undefined);
-    if (!from) return;
-    // `to` may be on another chain (ADR 0012); it defaults to the `from` chain.
-    const to = resolveChainAndAddress(res, url.searchParams.get("toChain") ?? chainRaw, url.searchParams.get("to") ?? undefined);
-    if (!to) return;
-    const bridging = bridgingFromQuery(res, url);
-    if (bridging === null) return;
-    if (to.chain !== from.chain && bridging === undefined) {
-      sendJson(res, 400, { error: `a path from ${from.chain} to ${to.chain} needs bridges=wormhole — without it no path can cross chains` });
-      return;
-    }
-    const adapter = registry.get(from.chain);
-    if (!adapter) {
-      sendJson(res, 500, { error: `no adapter registered for chain "${from.chain}"` });
-      return;
-    }
-    const opts = clampTraceOptions(traceOptionsFromQuery(url));
-    const token = url.searchParams.get("token");
-    const minAmount = url.searchParams.get("minAmount");
-    const sinceTimestamp = url.searchParams.get("since");
-    const untilTimestamp = url.searchParams.get("until");
-    const filters: TraceFilters = {
-      ...(token !== null ? { token } : {}),
-      ...(minAmount !== null ? { minAmount } : {}),
-      ...(sinceTimestamp !== null ? { sinceTimestamp } : {}),
-      ...(untilTimestamp !== null ? { untilTimestamp } : {}),
-    };
-    try {
-      const report = await buildTracePath(from, to, adapter, store, filters, opts, bridging);
-      sendJson(res, 200, report);
-    } catch (cause) {
-      sendJson(res, 502, { error: cause instanceof Error ? cause.message : String(cause) });
-    }
-    return;
-  }
-
-  sendJson(res, 404, { error: "not found" });
+const server = createServer((req, res) => {
+  void handle(req, res);
 });
 
 server.listen(PORT, () => {

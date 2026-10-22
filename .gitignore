@@ -25,3 +25,5 @@ data/private/
 data/community/
 # Bounty postings + submissions written by a running instance. Runtime data, not repo seed data -- see ADR 0009.
 data/bounties/
+# A local Redis server's own snapshot, written if one is ever started with this folder as its cwd -- never repo data.
+dump.rdb

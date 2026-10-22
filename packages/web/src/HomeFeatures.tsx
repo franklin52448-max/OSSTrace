@@ -110,11 +110,11 @@ export default function HomeFeatures() {
 
       <div className="mt-24 grid gap-4 md:grid-cols-2">
         <MiniFeature
-          href="#cases"
-          name="Cases"
-          title="Keep an investigation together"
-          body="Group the addresses you're looking into, each with your own note, then close the case when you're done. Cases are private: not even moderators can see them."
-          diagram={<CasesMini />}
+          href="#workbench"
+          name="Workbench"
+          title="Sign in and look an address up"
+          body="Create an account, then pull up any address's real balances and transfers against the tracing backend -- the same account the Tracer and Alerts run on."
+          diagram={<WorkbenchMini />}
         />
         <MiniFeature
           href="#bounties"
@@ -530,22 +530,22 @@ function LabelsDiagram() {
   );
 }
 
-function CasesMini() {
+function WorkbenchMini() {
   return (
     <div className="flex items-center gap-3" aria-hidden="true">
       <div className="min-w-0 flex-1 space-y-1.5">
         {[
-          ["0x8f3a…c21a", "funds arrived from the exploit"],
-          ["0x41c2…9e0b", "likely the cash-out wallet"],
-          ["7xKX…AsU", "bridged leg on Solana"],
+          ["0x8f3a…c21a", "balance $42,901.18"],
+          ["0x41c2…9e0b", "balance $108.40"],
+          ["7xKX…AsU", "balance 1,204.5 SOL"],
         ].map(([addr, note]) => (
           <div key={addr} className="flex items-center gap-2 rounded-[10px] border border-line bg-panel px-3 py-1.5 text-xs">
             <span className="hash shrink-0 text-ink">{addr}</span>
-            <span className="truncate text-ink-faint">{note}</span>
+            <span className="num truncate text-ink-faint">{note}</span>
           </div>
         ))}
       </div>
-      <span className="chip shrink-0 self-start border-signal/35 bg-signal/10 text-signal">open</span>
+      <span className="chip shrink-0 self-start border-signal/35 bg-signal/10 text-signal">signed in</span>
     </div>
   );
 }

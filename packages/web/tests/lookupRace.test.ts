@@ -44,7 +44,7 @@ beforeEach(() => {
   consoleErrors.length = 0;
   // Never the bare home route: its hero background needs WebGPU/WebGL, which jsdom has neither
   // of, and these tests have nothing to do with the home page anyway.
-  window.location.hash = "#cases";
+  window.location.hash = "#bounties";
 });
 afterEach(cleanup);
 

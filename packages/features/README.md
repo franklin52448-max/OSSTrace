@@ -24,6 +24,9 @@ directly from Explorer's source.
 - [`visualizer/`](visualizer/README.md) — given a chain + address, returns a one-hop transaction
   graph (center node, one node per direct counterparty, one edge per real transfer, labels/tags on
   every node). Drawn interactively by the web UI's Graph tab.
+- [`tracer/`](tracer/README.md) — follows fund flow further than one hop: a real multi-hop graph
+  expansion, and a point-to-point "does a path exist from A to B matching these filters" query
+  (ADR 0008). Builds directly on Visualizer's one-hop edge resolution rather than reimplementing it.
 
 ## Adding a feature
 

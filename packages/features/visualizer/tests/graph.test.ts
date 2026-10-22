@@ -13,7 +13,7 @@ import {
   type TransactionsResult,
 } from "@osstrace/core";
 import { buildGraph, deriveGraph } from "../src/graph.ts";
-import { addDecimal } from "../src/decimal.ts";
+import { addDecimal, compareDecimal } from "../src/decimal.ts";
 
 /** A real, concrete ChainAdapter implementation for tests — not a mocking framework, a small working stand-in. */
 class FixedChainAdapter implements ChainAdapter {
@@ -57,6 +57,16 @@ test("addDecimal sums decimal strings exactly, without float loss", () => {
   assert.equal(addDecimal("0.000000000000000001", "1"), "1.000000000000000001");
   assert.equal(addDecimal("0.5", "0.5"), "1");
   assert.equal(addDecimal("123456789012345678901234567890", "1"), "123456789012345678901234567891");
+});
+
+test("compareDecimal compares decimal strings exactly, without float loss", () => {
+  assert.equal(compareDecimal("1", "1"), 0);
+  assert.equal(compareDecimal("1.5", "1.50"), 0); // trailing zero, not a magnitude difference
+  assert.equal(compareDecimal("2", "1.9"), 1);
+  assert.equal(compareDecimal("1.9", "2"), -1);
+  assert.equal(compareDecimal("0.1", "0.2"), -1);
+  // 17 nines after the decimal vs. "1" -- Number(a) < Number(b) would be wrong here if float-rounded up to 1.
+  assert.equal(compareDecimal("0.99999999999999999", "1"), -1);
 });
 
 test("deriveGraph: one node per distinct counterparty, one edge per real transfer, real direction", () => {

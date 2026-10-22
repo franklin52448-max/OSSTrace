@@ -50,7 +50,7 @@ harder for the next contributor to understand, it probably isn't. See
 | Private labels — label any address for yourself only, never shown to anyone else, no source needed ([ADR 0004](docs/adr/0004-label-trust-tiers-and-private-labels.md), [`packages/features/private-labels`](packages/features/private-labels/README.md)) | **Active** (no "share as Community label" yet) |
 | Visualizer (`GET /graph/:chain/:address` + interactive graph in the web UI) — **v1 is one hop**: the address and its direct counterparties only, draws both native and decoded ERC-20/SPL token transfers, and reports a reverted transaction as its own `"failed"` reason instead of lumping it in with genuinely undecodable activity | **Active** |
 | Label trust tiers ([ADR 0004](docs/adr/0004-label-trust-tiers-and-private-labels.md), [ADR 0007](docs/adr/0007-community-label-submissions-and-review.md)): logged-in users submit sourced **Community** labels; moderators confirm (✓ CONFIRMED badge) or reject them, in the API and web UI | **Active** (no submission rate limiting; self-attested tier 3 deferred) |
-| Tracer (hop-by-hop fund tracing across chains/bridges) | Not built |
+| Tracer (`GET /trace/graph` + `GET /trace/path` — multi-hop fund tracing, ETH + Solana, up to 3 hops, filterable by token/amount/time — [ADR 0008](docs/adr/0008-tracer-multi-hop-search-design.md), [`packages/features/tracer`](packages/features/tracer/README.md)) | **Active** (single-chain only, no bridges/cross-chain tracing yet) |
 | Risk scoring | Not built |
 | Case management | Not built |
 | Real-time streaming (websocket) | Not built |
@@ -59,9 +59,9 @@ harder for the next contributor to understand, it probably isn't. See
 | Bounty program — anyone, no coding required, funds a feature idea with tokens; the first PR that matches the spec and gets merged claims it | Not built — see "Bounties" below |
 
 **The honest pitch today**: a real, working address-lookup tool across Ethereum and Solana, with a
-small, genuinely-sourced seed labelset and an architecture built so a new chain or a new feature
-(Tracer, Risk Scoring, ...) can be added as a self-contained module without touching
-the core. Everything past the table above is unbuilt — tracked honestly, not hidden.
+small, genuinely-sourced seed labelset, real multi-hop tracing, and an architecture built so a new
+chain or a new feature (Risk Scoring, Case Management, ...) can be added as a self-contained module
+without touching the core. Everything past the table above is unbuilt — tracked honestly, not hidden.
 
 ## Bounties
 
@@ -121,6 +121,7 @@ npm run ingest:safe    # Safe's official deployment list (Ethereum mainnet contr
 npm run check          # typecheck + tests
 npm run dev:explorer   # starts the Explorer API
 npm run dev:visualizer # starts the Visualizer (graph) API, in another terminal
+npm run dev:tracer     # starts the Tracer (multi-hop) API, in another terminal
 npm run dev:web        # starts the web UI, in another terminal
 npm run dev:accounts   # optional: the accounts API (see packages/features/accounts/README.md)
 npm run dev:private-labels # optional, with dev:accounts: your own private labels in the web UI

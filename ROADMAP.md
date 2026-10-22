@@ -76,9 +76,15 @@ folders, separate agents, same plugin architecture that made this possible in th
 
 ## Wave 4 — the hard one
 
-- [ ] **Tracer** — hop-by-hop fund tracing, including across bridges between chains. Flagged in
-      the PRD as the most complex remaining feature; do this once the team has real bandwidth for
-      it, not squeezed in alongside something else.
+- [x] **Tracer** — multi-hop fund tracing, Ethereum + Solana (`packages/features/tracer/`,
+      [ADR 0008](docs/adr/0008-tracer-multi-hop-search-design.md)): a real multi-hop graph
+      expansion (`traceGraph`) and a point-to-point "does a path exist from A to B matching these
+      filters" query (`tracePath`), both built directly on Visualizer's one-hop edge resolution.
+      Up to 3 hops, breadth/call-budget capped, honest about depth-cap vs breadth-cap vs
+      budget-exhausted vs unavailable.
+  - [ ] **Bridges / cross-chain tracing — not built.** Both entry points take one chain and never
+        cross it; this was the part of the PRD's "most complex remaining feature" framing that's
+        still genuinely unsolved, not a cut corner hidden here.
 
 ## Wave 5 — breadth
 
@@ -118,9 +124,11 @@ Not scoped to this list yet — it's a real idea with real open design work, not
 - [ ] **First planned bounty, once this is live:** an AI agent that answers real on-chain questions
       in plain language by actually calling this project's own tools — not by guessing. Example:
       *"is wallet A connected to wallet B?"* / *"did wallet A send wallet B more than $100 in USDC
-      within the last 30 days?"* The agent uses **Tracer** (Wave 4) to check the real transaction
-      graph and answer with a real, checkable result. Gated on Tracer landing first, since there's
-      nothing real for the agent to call otherwise.
+      within the last 30 days?"* The agent uses **Tracer**'s `tracePath` (Wave 4, now built —
+      `packages/features/tracer/`) to check the real transaction graph and answer with a real,
+      checkable result, honestly surfacing `budgetExhausted` rather than flattening "didn't finish
+      searching" into the same "no" as "proven not connected" (ADR 0008 §4). The tool this bounty
+      needs now exists; the funding/custody/agent work above is still fully undecided.
 
 ---
 

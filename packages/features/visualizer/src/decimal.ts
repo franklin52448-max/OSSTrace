@@ -21,3 +21,19 @@ export function addDecimal(a: string, b: string): string {
 export function isDecimalString(value: string): boolean {
   return /^\d+(\.\d+)?$/.test(value);
 }
+
+/**
+ * Exact comparison of non-negative decimal strings, scaled by BigInt the same way `addDecimal`
+ * does — never `Number(a) - Number(b)`, which loses precision on 18-decimal amounts the same way
+ * floating-point addition would. Used by the Tracer's `minAmount` filter (`@osstrace/tracer`).
+ */
+export function compareDecimal(a: string, b: string): -1 | 0 | 1 {
+  const [aInt = "0", aFrac = ""] = a.split(".");
+  const [bInt = "0", bFrac = ""] = b.split(".");
+  const scale = Math.max(aFrac.length, bFrac.length);
+  const aScaled = BigInt((aInt || "0") + aFrac.padEnd(scale, "0"));
+  const bScaled = BigInt((bInt || "0") + bFrac.padEnd(scale, "0"));
+  if (aScaled < bScaled) return -1;
+  if (aScaled > bScaled) return 1;
+  return 0;
+}

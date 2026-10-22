@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactElement } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { ChainId } from "@osstrace/core";
 import GraphView from "./GraphView.tsx";
 import TracerView from "./TracerView.tsx";
@@ -10,9 +10,20 @@ import AccountPanel from "./AccountPanel.tsx";
 import ModerationView from "./ModerationView.tsx";
 import { LabelSubmitForm, ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
 import { isModerator, useSession } from "./session.ts";
+import { Notice, SignInPrompt } from "./ui.tsx";
+import { ChainIcon, ChainSelect } from "./ChainSelect.tsx";
+import HomeFeatures from "./HomeFeatures.tsx";
 import { amountDisplay, type AmountDisplay, type Direction, type TxStatus } from "./txDisplay.ts";
 import { formatTimestamp } from "./timeDisplay.ts";
 import { LiveBadge, useLiveTransactions } from "./LiveStream.tsx";
+import { CopyButton, SearchBar, Skeleton, Text, cx } from "./prism/components.tsx";
+import { IconChevronDown, IconExternalLink } from "./prism/icons.tsx";
+import type { AeroShardsProps } from "./vendor/AeroShards.tsx";
+import type { FerrofluidProps } from "./vendor/Ferrofluid.tsx";
+
+// The hero effects are big and only used on the home page, so they load in their own chunks.
+const AeroShards = lazy(() => import("./vendor/AeroShards.tsx"));
+const Ferrofluid = lazy(() => import("./vendor/Ferrofluid.tsx"));
 
 const EXPLORER_URL = import.meta.env["VITE_EXPLORER_URL"] ?? "http://localhost:5300";
 
@@ -20,7 +31,7 @@ interface Balance {
   native: { symbol: string; amount: string; decimals: number };
   asOf: string;
 }
-/** Mirrors core's BalanceResult: a failed balance call is reported, never hides the rest of the report. */
+/** Mirrors core's BalanceResult: a failed balance call is reported, never hides the rest of the report (ADR 0014). */
 type BalanceResult = { available: true; balance: Balance } | { available: false; reason: string };
 /** Each chain's native unit, for transaction amounts — known without a successful balance call. */
 const NATIVE_SYMBOL: Record<ChainId, string> = { ethereum: "ETH", solana: "SOL" };
@@ -74,430 +85,622 @@ interface AddressReport {
 }
 
 type LookupState =
-  | { status: "idle" }
   | { status: "loading" }
   | { status: "error"; message: string }
-  /** `generation` is the lookup this report answers (see `Lookup`), so a refresh can tell it's been superseded. */
-  | { status: "done"; report: AddressReport; chain: ChainId; address: string; generation: number };
+  | { status: "done"; report: AddressReport };
+
+const CHAINS: readonly { value: ChainId; label: string }[] = [
+  { value: "ethereum", label: "Ethereum" },
+  { value: "solana", label: "Solana" },
+];
+const isChain = (value: string): value is ChainId => CHAINS.some((c) => c.value === value);
+
+const EXPLORERS: Record<ChainId, { name: string; tx: string; address: string }> = {
+  ethereum: { name: "Etherscan", tx: "https://etherscan.io/tx/", address: "https://etherscan.io/address/" },
+  solana: { name: "Solscan", tx: "https://solscan.io/tx/", address: "https://solscan.io/account/" },
+};
+
+/* Routing ------------------------------------------------------------------------------------------
+   The URL hash is the router (no router library): `#address/<chain>/<address>` is a Lookup report,
+   `#graph/<chain>/<address>` and `#trace/<chain>/<address>` open the Visualizer / Tracer on that
+   address, and the other views are a bare `#<view>`. Every address in the UI links to its own report, so lookups are shareable. */
 
 type View = "lookup" | "graph" | "trace" | "cases" | "bounties" | "moderation";
-
-function viewFromHash(): View {
-  if (window.location.hash === "#graph") return "graph";
-  if (window.location.hash === "#trace") return "trace";
-  if (window.location.hash === "#cases") return "cases";
-  if (window.location.hash === "#bounties") return "bounties";
-  if (window.location.hash === "#moderation") return "moderation";
-  return "lookup";
+interface Route {
+  view: View;
+  target: { chain: ChainId; address: string } | null;
 }
+
+function routeFromHash(): Route {
+  const [head = "", chain = "", ...rest] = window.location.hash.replace(/^#/, "").split("/");
+  const address = decodeURIComponent(rest.join("/"));
+  const target = isChain(chain) && address ? { chain, address } : null;
+  if (head === "address") return { view: "lookup", target };
+  if (head === "graph") return { view: "graph", target };
+  if (head === "trace") return { view: "trace", target };
+  if (head === "cases" || head === "bounties" || head === "moderation") return { view: head, target: null };
+  return { view: "lookup", target: null };
+}
+
+export const addressHref = (chain: ChainId, address: string): string => `#address/${chain}/${encodeURIComponent(address)}`;
+const viewHref = (view: "graph" | "trace", chain: ChainId, address: string): string => `#${view}/${chain}/${encodeURIComponent(address)}`;
+
+const NAV: readonly { id: View; label: string; href: string }[] = [
+  { id: "lookup", label: "Explorer", href: "#" },
+  { id: "graph", label: "Visualizer", href: "#graph" },
+  { id: "trace", label: "Tracer", href: "#trace" },
+  { id: "cases", label: "Cases", href: "#cases" },
+  { id: "bounties", label: "Bounties", href: "#bounties" },
+  { id: "moderation", label: "Moderation", href: "#moderation" },
+];
 
 /** Original mark: three linked nodes — the queried address and two counterparties. */
 function Wordmark() {
   return (
-    <span className="flex items-center gap-2.5">
+    <span className="flex items-center gap-2">
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" className="shrink-0">
         <path d="M7.4 10.6 16 6.4M7.4 13.4 16 17.6" stroke="var(--color-signal)" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
         <circle cx="5.5" cy="12" r="3" fill="var(--color-signal)" />
         <circle cx="18" cy="5.5" r="2.2" fill="none" stroke="var(--color-ink-dim)" strokeWidth="1.5" />
         <circle cx="18" cy="18.5" r="2.2" fill="none" stroke="var(--color-ink-dim)" strokeWidth="1.5" />
       </svg>
-      <span className="text-[15px] font-semibold tracking-tight text-ink">
-        OSSTrace
-      </span>
+      <span className="text-[16px] font-semibold tracking-tight text-ink">OSSTrace</span>
     </span>
   );
 }
 
-const TAB_ICONS: Record<View, ReactElement> = {
-  lookup: (
-    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" className="shrink-0">
-      <circle cx="7" cy="7" r="4.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      <path d="m10.5 10.5 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  ),
-  graph: (
-    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" className="shrink-0">
-      <path d="M4.6 5.8 11 3.4M4.6 10.2 11 12.6" stroke="currentColor" strokeWidth="1.3" opacity="0.75" />
-      <circle cx="3.6" cy="8" r="2" fill="currentColor" />
-      <circle cx="12.4" cy="3" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
-      <circle cx="12.4" cy="13" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
-    </svg>
-  ),
-  trace: (
-    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" className="shrink-0">
-      <path d="M2.8 11.2 6 6.4 10 9.6l3.2-5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="2.8" cy="11.2" r="1.3" fill="currentColor" />
-      <circle cx="6" cy="6.4" r="1.3" fill="none" stroke="currentColor" strokeWidth="1.3" />
-      <circle cx="10" cy="9.6" r="1.3" fill="none" stroke="currentColor" strokeWidth="1.3" />
-      <circle cx="13.2" cy="4.6" r="1.3" fill="currentColor" />
-    </svg>
-  ),
-  cases: (
-    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" className="shrink-0">
-      <path d="M2 4.2c0-.6.5-1.1 1.1-1.1h3l1.4 1.6h5.4c.6 0 1.1.5 1.1 1.1v6.3c0 .6-.5 1.1-1.1 1.1H3.1c-.6 0-1.1-.5-1.1-1.1V4.2Z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-      <circle cx="7.4" cy="9" r="1.7" fill="none" stroke="currentColor" strokeWidth="1.2" />
-      <path d="m8.7 10.3 1.6 1.6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  ),
-  bounties: (
-    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" className="shrink-0">
-      <path
-        d="M8 1.6 2.6 4.3v4.1c0 3.1 2.2 5.4 5.4 6-1.3-1.1-2-2.6-2-4.1 0-2.4 2-4.3 4.4-4.3.9 0 1.7.3 2.4.7V4.3L8 1.6Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinejoin="round"
-      />
-      <circle cx="10" cy="11" r="3.1" fill="none" stroke="currentColor" strokeWidth="1.3" />
-      <path d="M10 9.5v1.5l1 .6" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  ),
-  moderation: (
-    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" className="shrink-0">
-      <path d="M8 1.8 13 3.6v4.1c0 3.1-2.1 5.6-5 6.5-2.9-.9-5-3.4-5-6.5V3.6L8 1.8Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-      <path d="m5.8 7.9 1.6 1.6 2.9-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  ),
-};
-
 export default function App() {
-  const [view, setView] = useState<View>(viewFromHash);
+  const [route, setRoute] = useState<Route>(routeFromHash);
   const session = useSession();
 
   useEffect(() => {
-    const onHashChange = () => setView(viewFromHash());
+    const onHashChange = () => {
+      setRoute(routeFromHash());
+      window.scrollTo({ top: 0 });
+    };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  const home = route.view === "lookup" && !route.target;
+  const targetKey = route.target ? `${route.target.chain}:${route.target.address}` : "empty";
+  const nav = NAV.filter((tab) => tab.id !== "moderation" || isModerator(session) || route.view === "moderation");
+
   return (
     <div className="min-h-screen bg-ground text-ink">
-      <div className="mx-auto flex min-h-screen w-full max-w-[104rem] flex-col lg:flex-row">
-        {/* App rail: wordmark + view nav + account. On mobile it stacks as a top band. */}
-        <aside className="flex w-full shrink-0 flex-col border-b border-line bg-panel/70 lg:sticky lg:top-0 lg:h-screen lg:w-60 lg:border-b-0 lg:border-r">
-          <div className="px-5 pt-5 pb-4">
-            <a
-              href="#"
-              onClick={() => setView("lookup")}
-              className="inline-flex rounded-md transition-opacity duration-150 hover:opacity-85"
-            >
-              <Wordmark />
-            </a>
-            <p className="mt-2 text-xs leading-relaxed text-ink-faint">
-              Open-source on-chain lookup — real data, sourced labels. No affiliation with any proprietary platform.
-            </p>
-          </div>
-
-          <nav className="flex gap-1 overflow-x-auto px-3 pb-3 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:pb-0" aria-label="Views">
-            {(
-              [
-                { id: "lookup", label: "Lookup", href: "#" },
-                { id: "graph", label: "Graph", href: "#graph" },
-                { id: "trace", label: "Trace", href: "#trace" },
-                { id: "cases", label: "Cases", href: "#cases" },
-                { id: "bounties", label: "Bounties", href: "#bounties" },
-                { id: "moderation", label: "Moderation", href: "#moderation" },
-              ] as const
-            )
-              .filter((tab) => tab.id !== "moderation" || isModerator(session) || view === "moderation")
-              .map((tab) => (
-                <a
-                  key={tab.id}
-                  href={tab.href}
-                  onClick={() => setView(tab.id)}
-                  aria-current={view === tab.id ? "page" : undefined}
-                  className={
-                    view === tab.id
-                      ? "flex shrink-0 items-center gap-2.5 rounded-ctl border border-signal/25 bg-signal/10 px-3 py-2 text-sm font-medium text-ink transition-colors duration-150"
-                      : "flex shrink-0 items-center gap-2.5 rounded-ctl border border-transparent px-3 py-2 text-sm text-ink-dim transition-colors duration-150 hover:bg-raised hover:text-ink"
-                  }
-                >
-                  <span className={view === tab.id ? "text-signal" : "text-ink-faint"}>{TAB_ICONS[tab.id]}</span>
-                  {tab.label}
-                </a>
-              ))}
+      {/* Top bar: wordmark, views, global address search, account. */}
+      <header className="sticky top-0 z-30 border-b border-line bg-ground/85 backdrop-blur-md">
+        <div className="mx-auto flex h-16 w-full max-w-[96rem] items-center gap-4 px-4 sm:px-6">
+          <a href="#" className="shrink-0 rounded-md transition-opacity duration-150 hover:opacity-85">
+            <Wordmark />
+          </a>
+          <nav className="hidden items-center gap-0.5 lg:flex" aria-label="Views">
+            {nav.map((tab) => (
+              <NavLink key={tab.id} tab={tab} active={route.view === tab.id} />
+            ))}
           </nav>
-
-          <div className="mt-auto border-t border-line px-4 py-4">
-            <AccountPanel />
-          </div>
-        </aside>
-
-        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-          {view === "graph" ? (
-            <GraphView />
-          ) : view === "trace" ? (
-            <TracerView />
-          ) : view === "cases" ? (
-            <CasesView />
-          ) : view === "bounties" ? (
-            <BountiesView />
-          ) : view === "moderation" ? (
-            <ModerationView />
-          ) : (
-            <div className="mx-auto w-full max-w-4xl">
-              <Lookup />
+          {/* Home has its own big search; everywhere else the bar carries it. */}
+          {!home && (
+            <div className="ml-auto hidden w-full max-w-md md:block">
+              <GlobalSearch key={targetKey} initial={route.target} small />
             </div>
           )}
+          <div className={cx("ml-auto shrink-0", !home && "md:ml-0")}>
+            <AccountPanel />
+          </div>
+        </div>
+        {/* Narrow screens: views scroll horizontally under the bar. */}
+        <nav className="flex gap-0.5 overflow-x-auto px-3 pb-2 lg:hidden" aria-label="Views">
+          {nav.map((tab) => (
+            <NavLink key={tab.id} tab={tab} active={route.view === tab.id} />
+          ))}
+        </nav>
+      </header>
+
+      {home ? (
+        <Home />
+      ) : (
+        <main className="mx-auto w-full max-w-[96rem] px-4 py-6 sm:px-6 lg:py-8">
+          {route.view === "graph" ? (
+            <GraphView key={targetKey} initial={route.target} />
+          ) : route.view === "trace" ? (
+            <TracerView key={targetKey} initial={route.target} />
+          ) : route.view === "cases" ? (
+            <CasesView />
+          ) : route.view === "bounties" ? (
+            <BountiesView />
+          ) : route.view === "moderation" ? (
+            <ModerationView />
+          ) : route.target ? (
+            <Lookup key={`${route.target.chain}:${route.target.address}`} chain={route.target.chain} address={route.target.address} />
+          ) : null}
         </main>
-      </div>
+      )}
     </div>
   );
 }
 
-function Lookup() {
-  const [chain, setChain] = useState<ChainId>("ethereum");
-  const [address, setAddress] = useState("");
-  const [state, setState] = useState<LookupState>({ status: "idle" });
-  // Responses can land out of order: a slow lookup of A, or a slow refresh of A after a label
-  // submission, can resolve after the user has already looked up B. Every request is tagged, and
-  // a response is applied only if it's still for the newest lookup (`generation`) and no request
-  // started after it has already been applied (`seq`). Anything else is dropped, never shown.
-  const generation = useRef(0);
-  const nextSeq = useRef(0);
-  const appliedSeq = useRef(0);
+function NavLink({ tab, active }: { tab: (typeof NAV)[number]; active: boolean }) {
+  return (
+    <a
+      href={tab.href}
+      aria-current={active ? "page" : undefined}
+      className={cx(
+        "button transparent small shrink-0",
+        active ? "!bg-[var(--helium-elevated-10)] text-ink" : "!text-ink-dim hover:!text-ink",
+      )}
+    >
+      {tab.label}
+    </a>
+  );
+}
 
-  function admit(requestGeneration: number, seq: number): boolean {
-    if (requestGeneration !== generation.current || seq < appliedSeq.current) return false;
-    appliedSeq.current = seq;
-    return true;
-  }
+/** Chain + address search. Submitting navigates to the address's report. */
+function GlobalSearch({ initial, small }: { initial: Route["target"]; small?: boolean }) {
+  const [chain, setChain] = useState<ChainId>(initial?.chain ?? "ethereum");
+  const [address, setAddress] = useState(initial?.address ?? "");
 
-  async function handleSubmit(event: React.FormEvent): Promise<void> {
+  function handleSubmit(event: React.FormEvent): void {
     event.preventDefault();
     const trimmed = address.trim();
     if (!trimmed) return;
-    const requestGeneration = ++generation.current;
-    const seq = ++nextSeq.current;
-    setState({ status: "loading" });
-    try {
-      const res = await fetch(`${EXPLORER_URL}/address/${chain}/${encodeURIComponent(trimmed)}`);
-      const body = (await res.json()) as AddressReport | { error: string };
-      if (!admit(requestGeneration, seq)) return;
-      if (!res.ok || "error" in body) {
-        setState({ status: "error", message: "error" in body ? body.error : `HTTP ${res.status}` });
-        return;
-      }
-      setState({ status: "done", report: body, chain, address: trimmed, generation: requestGeneration });
-    } catch (cause) {
-      if (!admit(requestGeneration, seq)) return;
-      setState({ status: "error", message: cause instanceof Error ? cause.message : String(cause) });
-    }
+    // Guess the chain from the address shape so pasting "just works"; the dropdown still overrides.
+    const target: ChainId = /^0x[0-9a-fA-F]{40}$/.test(trimmed) ? "ethereum" : /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed) ? "solana" : chain;
+    setChain(target);
+    window.location.hash = addressHref(target, trimmed);
   }
 
   return (
-    <div>
-      <form onSubmit={handleSubmit} className="card flex flex-col gap-2 p-3 sm:flex-row">
-        <select value={chain} onChange={(e) => setChain(e.target.value as ChainId)} className="ctl shrink-0">
-          <option value="ethereum">Ethereum</option>
-          <option value="solana">Solana</option>
-        </select>
-        <input
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          placeholder={chain === "ethereum" ? "0x…" : "a Solana address"}
-          aria-label="Address to look up"
-          className="ctl hash min-w-0 flex-1"
-        />
-        <button type="submit" disabled={state.status === "loading"} className="btn-accent shrink-0">
-          {state.status === "loading" ? "Looking up…" : "Look up"}
-        </button>
-      </form>
-
-      {state.status === "error" && (
-        <div
-          role="alert"
-          className="mt-4 rounded-card border border-danger/35 bg-danger/10 px-4 py-3 text-sm text-danger"
-        >
-          {state.message}
-        </div>
-      )}
-
-      {state.status === "done" && (
-        <Report
-          report={state.report}
-          chain={state.chain}
-          address={state.address}
-          onLabelSubmitted={() => void refresh(state.report, state.generation)}
-        />
-      )}
-    </div>
+    <form onSubmit={handleSubmit} className="flex w-full items-center gap-2">
+      <ChainSelect value={chain} onChange={setChain} small={small} />
+      <SearchBar
+        aria-label="Search an address"
+        small={small}
+        value={address}
+        onChange={(e) => setAddress(e.target.value)}
+        placeholder={chain === "ethereum" ? "Search address (0x…)" : "Search Solana address"}
+        className="hash"
+        spellCheck={false}
+      />
+    </form>
   );
-
-  /**
-   * Re-fetch after a label submission, without blanking the report while it loads. It keeps the
-   * generation of the report it refreshes, so if the user has looked up another address since
-   * (even while the label POST was still in flight), this response is dropped.
-   */
-  async function refresh(report: AddressReport, requestGeneration: number): Promise<void> {
-    const seq = ++nextSeq.current;
-    try {
-      const res = await fetch(`${EXPLORER_URL}/address/${report.address.chain}/${encodeURIComponent(report.address.value)}`);
-      const body = (await res.json()) as AddressReport | { error: string };
-      if (res.ok && !("error" in body) && admit(requestGeneration, seq)) {
-        setState({
-          status: "done",
-          report: body,
-          chain: report.address.chain,
-          address: report.address.value,
-          generation: requestGeneration,
-        });
-      }
-    } catch {
-      // Keep showing the report we have; the next manual lookup will retry.
-    }
-  }
 }
 
-function Report({
-  report,
-  chain,
-  address,
-  onLabelSubmitted,
-}: {
-  report: AddressReport;
-  chain: ChainId;
-  address: string;
-  onLabelSubmitted: () => void;
-}) {
-  const sanctioned = report.tags.some((t) => t.tag === "sanctioned");
+/** reactbits.dev/backgrounds/aero-shards, "graphite" preset: chrome shards in neutral greys. */
+const HERO_SHARDS = {
+  shardColor: "#a1a1aa",
+  accentColor: "#e4e4e7",
+  material: "chrome",
+  billow: 0.7,
+  glow: 0.25,
+} satisfies AeroShardsProps;
+
+/** Fallback where WebGPU isn't available. From reactbits.dev/backgrounds/ferrofluid?preset=peaks&sharpness=4&fluidity=0.85&spikeHeight=0.45, in neutral chrome. */
+const HERO_FLUID = {
+  colors: ["#ffffff", "#d4d4d8", "#52525b"],
+  brightness: 1,
+  scale: 1.6,
+  tilt: 48,
+  turbulence: 1,
+  speed: 0.5,
+  magnetism: 1,
+  sharpness: 4,
+  fluidity: 0.85,
+  spikeHeight: 0.45,
+} satisfies FerrofluidProps;
+
+/** Aero Shards needs WebGPU; where it can't start, the WebGL2 ferrofluid takes its place. */
+function HeroBackground() {
+  const [webgpuFailed, setWebgpuFailed] = useState(false);
+  return (
+    <Suspense fallback={null}>
+      {webgpuFailed ? <Ferrofluid {...HERO_FLUID} /> : <AeroShards {...HERO_SHARDS} onError={() => setWebgpuFailed(true)} />}
+    </Suspense>
+  );
+}
+
+function Home() {
+  return (
+    <div className="pb-16">
+      {/* Full-bleed hero: the shard field, scrims for legibility, then the search on top. */}
+      <section className="relative isolate overflow-hidden border-b border-line">
+        <div className="absolute inset-0 -z-10">
+          <HeroBackground />
+        </div>
+        <div
+          className="pointer-events-none absolute inset-0 -z-10"
+          style={{
+            background:
+              "radial-gradient(48% 42% at 50% 46%, rgb(0 0 0 / 0.9) 0%, rgb(0 0 0 / 0.6) 55%, transparent 100%), linear-gradient(to bottom, var(--color-ground) 0%, transparent 18%, transparent 70%, var(--color-ground) 100%)",
+          }}
+          aria-hidden="true"
+        />
+        {/* Fills the screen under the sticky header (103px tall while the nav wraps below lg, 65px above). */}
+        <div className="mx-auto flex min-h-[max(560px,calc(100svh-103px))] max-w-3xl flex-col justify-center px-4 py-20 text-center lg:min-h-[max(560px,calc(100svh-65px))]">
+          <Text variant="display" tone="primary" center className="[text-shadow:0_2px_24px_rgb(0_0_0/0.9)] sm:!text-[52px]">
+            On-chain intelligence, in the open.
+          </Text>
+          <Text tone="secondary" center className="mx-auto mt-4 max-w-xl [text-shadow:0_1px_12px_rgb(0_0_0),0_0_4px_rgb(0_0_0)]">
+            Look up any Ethereum or Solana address: real balances, recent transactions, and only labels with a cited public
+            source.
+          </Text>
+          <div className="mx-auto mt-8 w-full rounded-[20px] border border-line bg-panel/80 p-3 text-left shadow-card backdrop-blur-md">
+            <GlobalSearch initial={null} />
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}
+          className="group absolute inset-x-0 bottom-6 mx-auto flex w-fit flex-col items-center gap-1 text-xs font-medium text-ink-faint transition-colors duration-150 hover:text-ink"
+        >
+          How it works
+          <IconChevronDown className="h-5 w-5 motion-safe:animate-bounce" />
+        </button>
+      </section>
+
+      <HomeFeatures />
+
+      <p className="mx-auto mt-20 max-w-3xl px-4 text-center text-xs text-ink-faint">
+        Open source (AGPL-3.0). No affiliation with any proprietary platform.
+      </p>
+    </div>
+  );
+}
+
+function Lookup({ chain, address }: { chain: ChainId; address: string }) {
+  const [state, setState] = useState<LookupState>({ status: "loading" });
+  // Two overlapping requests for this same address (the initial load, plus a "quiet" refresh after
+  // a label submission) can finish out of order. Only the latest-started one's completion is ever
+  // applied; an earlier one finishing late is dropped. Navigating to a *different* address doesn't
+  // need this: the `key` on this component in App() remounts it entirely, so a stale response for
+  // the old address lands on an unmounted instance and never reaches the new one's state.
+  const seq = useRef(0);
+
+  /** `quiet` re-fetches (after a label submission) without blanking the report while it loads. */
+  const load = useCallback(
+    async (quiet: boolean): Promise<void> => {
+      const mySeq = ++seq.current;
+      if (!quiet) setState({ status: "loading" });
+      try {
+        const res = await fetch(`${EXPLORER_URL}/address/${chain}/${encodeURIComponent(address)}`);
+        const body = (await res.json()) as AddressReport | { error: string };
+        if (seq.current !== mySeq) return;
+        if (!res.ok || "error" in body) {
+          if (!quiet) setState({ status: "error", message: "error" in body ? body.error : `HTTP ${res.status}` });
+          return;
+        }
+        setState({ status: "done", report: body });
+      } catch (cause) {
+        if (seq.current !== mySeq) return;
+        // A failed quiet refresh keeps showing the report we have; the next lookup will retry.
+        if (!quiet) setState({ status: "error", message: cause instanceof Error ? cause.message : String(cause) });
+      }
+    },
+    [chain, address],
+  );
+
+  useEffect(() => {
+    void load(false);
+  }, [load]);
+
+  if (state.status === "loading") return <ReportSkeleton />;
+  if (state.status === "error") {
+    return (
+      <Notice tone="danger" className="mx-auto max-w-2xl">
+        Couldn't look up <span className="hash break-all">{address}</span> on {chain}: {state.message}
+      </Notice>
+    );
+  }
+  return <Report report={state.report} onLabelSubmitted={() => void load(true)} />;
+}
+
+function ReportSkeleton() {
+  return (
+    <div className="space-y-4" aria-busy="true" aria-label="Loading address">
+      <div className="card overflow-hidden">
+        <div className="flex items-center gap-4 p-5">
+          <Skeleton width="48px" height="48px" className="!rounded-full" />
+          <div className="flex-1 space-y-2.5">
+            <Skeleton width="220px" height="22px" />
+            <Skeleton width="min(420px, 100%)" height="14px" />
+          </div>
+        </div>
+        <div className="border-t border-line p-5">
+          <Skeleton width="min(520px, 100%)" height="40px" />
+        </div>
+      </div>
+      <Skeleton height="420px" className="!rounded-card" />
+    </div>
+  );
+}
+
+function ChainGlyph({ chain }: { chain: ChainId }) {
+  return (
+    <span
+      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--helium-elevated-10)]"
+      title={chain === "ethereum" ? "Ethereum" : "Solana"}
+    >
+      <ChainIcon chain={chain} size={22} />
+    </span>
+  );
+}
+
+/** At most `places` decimals, cut (never rounded up) so the shown balance never overstates; the exact value is in the title. */
+function trimDecimals(amount: string, places: number): string {
+  const [whole = amount, fraction = ""] = amount.split(".");
+  const kept = fraction.slice(0, places).replace(/0+$/, "");
+  return kept ? `${whole}.${kept}` : whole;
+}
+
+function Report({ report, onLabelSubmitted }: { report: AddressReport; onLabelSubmitted: () => void }) {
+  const { chain, value: address } = report.address;
   const session = useSession();
+  const sanctioned = report.tags.some((t) => t.tag === "sanctioned");
   // The stream requires a session (ADR 0013 §6); the Explorer checks the token itself.
   const streamToken = session.status === "signed-in" || session.status === "unreachable" ? session.token : null;
-  const live = useLiveTransactions<TransactionSummary>(EXPLORER_URL, report.address.chain, report.address.value, streamToken);
-  // "Share as Community label" clicks, tagged with the address they were made on, so looking up a
-  // different address never reopens the form in share mode for it.
-  const here = `${report.address.chain}:${report.address.value}`;
+  const live = useLiveTransactions<TransactionSummary>(EXPLORER_URL, chain, address, streamToken);
+  // "Share as Community label" clicks, tagged with the address they were made on (ADR 0017), so
+  // looking up a different address never reopens the form in share mode for it.
+  const here = `${chain}:${address}`;
   const [share, setShare] = useState<{ at: string; n: number }>({ at: "", n: 0 });
   const fetched = report.transactions.available ? report.transactions.transactions : [];
   // Pushed transactions the last HTTP fetch didn't already include go on top, marked as new.
   const pushed = live.incoming.filter((t) => !fetched.some((f) => f.hash === t.hash));
   const pushedHashes = new Set(pushed.map((t) => t.hash));
   const shown = [...pushed, ...fetched];
+  const explorer = EXPLORERS[chain];
+  // The native unit is known from the chain alone (ADR 0014): a failed balance call still lets
+  // every transaction amount below show its real symbol.
+  const symbol = NATIVE_SYMBOL[chain];
+
   return (
-    <div className="mt-5 space-y-4">
-      {/* Queried address header — the real chain + address from the response. */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span className="chip border-line-strong bg-raised text-ink-dim">{chain}</span>
-        <span className="hash min-w-0 break-all text-sm text-ink-dim">{address}</span>
-      </div>
-
-      <PrivateLabelPanel chain={chain} address={address} onShare={() => setShare((s) => ({ at: here, n: s.n + 1 }))} />
-
-      {report.label && (
-        <section className="card p-4" aria-label="Public label">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-semibold text-ink">{report.label.name}</h2>
-            <span className="chip border-line-strong bg-raised text-ink-dim">{report.label.confidence}</span>
-            <ReviewBadge label={report.label} />
-            {sanctioned && <span className="chip border-danger/40 bg-danger/15 text-danger">SANCTIONED</span>}
-          </div>
-          <a
-            href={report.label.source.url}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-1.5 block text-xs text-ink-faint underline decoration-line-strong underline-offset-2 transition-colors duration-150 hover:text-ink-dim"
-          >
-            Source: {report.label.source.description} · added {report.label.source.addedAt}
-          </a>
-          <SubmissionByline label={report.label} />
-        </section>
-      )}
-
-      <LabelSubmitForm
-        chain={report.address.chain}
-        address={report.address.value}
-        onSubmitted={onLabelSubmitted}
-        shareRequest={share.at === here ? share.n : 0}
-      />
-
-      <RiskPanel chain={report.address.chain} address={report.address.value} />
-
-      <section className="card p-4" aria-label="Balance">
-        <div className="section-title">Balance</div>
-        {report.balance.available ? (
-          <>
-            <div className="num mt-1.5 font-mono text-2xl font-semibold tracking-tight text-ink">
-              {report.balance.balance.native.amount}{" "}
-              <span className="text-base font-medium text-ink-dim">{report.balance.balance.native.symbol}</span>
+    <div className="space-y-4">
+      {/* Entity header: who this is (only if a sourced label says so), the address, key figures, actions. */}
+      <section className="card overflow-hidden" aria-label="Address">
+        <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center">
+          <div className="flex min-w-0 flex-1 items-center gap-4">
+            <ChainGlyph chain={chain} />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className={cx("text-xl font-semibold tracking-tight sm:text-2xl", report.label ? "text-ink" : "text-ink-dim")}>
+                  {report.label?.name ?? "Unlabeled address"}
+                </h1>
+                {report.label && <span className="chip border-line-strong bg-raised text-ink-dim">{report.label.confidence}</span>}
+                {report.label && <ReviewBadge label={report.label} />}
+                {sanctioned && <span className="chip border-danger/40 bg-danger/15 text-danger">SANCTIONED</span>}
+              </div>
+              <div className="mt-1 flex min-w-0 items-center gap-1">
+                <span className="hash min-w-0 truncate text-sm text-ink-dim">{address}</span>
+                <CopyButton value={address} label="Copy address" className="small shrink-0 !text-ink-faint" />
+              </div>
             </div>
-            <div className="mt-1 text-xs text-ink-faint">as of {new Date(report.balance.balance.asOf).toLocaleString()}</div>
-          </>
-        ) : (
-          <div className="mt-1.5 text-sm text-ink-dim">Unavailable — {report.balance.reason}</div>
+          </div>
+          <div className="action-buttons shrink-0 flex-wrap">
+            <a className="button primary small" href={viewHref("graph", chain, address)}>
+              Visualize
+            </a>
+            <a className="button small" href={viewHref("trace", chain, address)}>
+              Trace funds
+            </a>
+            <a className="button small" href={explorer.address + address} target="_blank" rel="noopener noreferrer">
+              <IconExternalLink />
+              {explorer.name}
+            </a>
+          </div>
+        </div>
+
+        {/* Key figures, as one strip rather than separate cards. */}
+        <dl className="grid grid-cols-2 border-t border-line sm:grid-cols-3">
+          <Figure
+            className="border-r border-line"
+            title="Balance"
+            footer={report.balance.available ? `as of ${new Date(report.balance.balance.asOf).toLocaleString()}` : "unavailable"}
+          >
+            {report.balance.available ? (
+              <>
+                <span title={`${report.balance.balance.native.amount} ${report.balance.balance.native.symbol}`}>
+                  {trimDecimals(report.balance.balance.native.amount, 6)}
+                </span>{" "}
+                <span className="text-sm font-medium text-ink-dim">{report.balance.balance.native.symbol}</span>
+              </>
+            ) : (
+              <span className="text-sm font-medium text-ink-faint" title={report.balance.reason}>
+                Unavailable
+              </span>
+            )}
+          </Figure>
+          <Figure className="sm:border-r sm:border-line" title="Recent transactions" footer={report.transactions.available ? "most recent first" : "history unavailable"}>
+            {report.transactions.available ? shown.length : <span className="text-ink-faint">—</span>}
+          </Figure>
+          <Figure className="col-span-2 border-t border-line sm:col-span-1 sm:border-t-0" title="Tags" footer={report.tags.length ? "each with a cited source" : "no sourced tags"}>
+            {report.tags.length === 0 ? (
+              <span className="font-sans text-lg font-medium text-ink-faint">None</span>
+            ) : (
+              <span className="flex flex-wrap gap-1.5 pt-1">
+                {report.tags.map((t) => (
+                  <a
+                    key={t.tag}
+                    href={t.source.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`${t.source.description} · added ${t.source.addedAt}`}
+                    className={cx(
+                      "chip text-xs",
+                      t.tag === "sanctioned" ? "border-danger/40 bg-danger/15 text-danger" : "border-line-strong bg-raised text-ink-dim",
+                    )}
+                  >
+                    {t.tag}
+                  </a>
+                ))}
+              </span>
+            )}
+          </Figure>
+        </dl>
+
+        {report.label && (
+          <div className="border-t border-line px-5 py-3 text-xs text-ink-faint">
+            <a
+              href={report.label.source.url}
+              target="_blank"
+              rel="noreferrer"
+              className="underline decoration-line-strong underline-offset-2 transition-colors duration-150 hover:text-ink-dim"
+            >
+              Source: {report.label.source.description} · added {report.label.source.addedAt}
+            </a>
+            <SubmissionByline label={report.label} />
+          </div>
         )}
       </section>
 
-      <section className="card overflow-hidden" aria-label="Recent transactions">
-        <div className="card-header">
-          <h2 className="section-title">Recent transactions</h2>
-          <span className="flex items-center gap-2">
-            {report.transactions.available && <span className="num text-xs text-ink-faint">{shown.length} shown</span>}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        {/* Transactions table. */}
+        <section className="card overflow-hidden" aria-label="Recent transactions">
+          <div className="card-header">
+            <h2 className="text-[15px] font-medium text-ink">Transactions</h2>
             <LiveBadge state={live} />
-          </span>
-        </div>
-        {live.status && !live.status.live && report.transactions.available && (
-          <div className="border-b border-line px-4 py-2 text-xs leading-relaxed text-ink-faint">
-            Not receiving live updates: {live.status.reason}
           </div>
-        )}
-        {live.gap && (
-          <div className="border-b border-line px-4 py-2 text-xs leading-relaxed text-warn">
-            More transactions landed between two indexer refreshes than could be pushed. Look up the address again for
-            the full recent list.
-          </div>
-        )}
-        {!report.transactions.available ? (
-          <div className="px-4 py-3 text-sm text-ink-dim">Unavailable — {report.transactions.reason}</div>
-        ) : shown.length === 0 ? (
-          <div className="px-4 py-3 text-sm text-ink-dim">No recent transactions found.</div>
-        ) : (
-          <ul className="divide-y divide-line">
-            {shown.map((tx) => {
-              const native = amountDisplay(tx.direction, tx.status);
-              return (
-                <li
-                  key={tx.hash}
-                  className="flex items-center justify-between gap-4 px-4 py-3 transition-colors duration-150 hover:bg-raised/60"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      {pushedHashes.has(tx.hash) && <span className="chip shrink-0 border-signal/30 bg-signal/10 text-signal">NEW</span>}
-                      <div className="hash truncate text-xs text-ink-dim">{tx.hash}</div>
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-faint">
-                      {formatTimestamp(tx.timestamp)}
-                      {native.failed && (
-                        <span
-                          className="chip border-danger/40 bg-danger/10 text-danger"
-                          title="This transaction reverted on-chain: the amounts shown are what it attempted — nothing actually moved"
-                        >
-                          FAILED · nothing moved
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className={`num font-mono text-sm font-medium ${amountClass(native)}`}>
-                      {native.sign}
-                      {tx.valueNative} <span className="text-xs font-normal text-ink-faint">{NATIVE_SYMBOL[report.address.chain]}</span>
-                    </div>
-                    {tx.tokenTransfers?.map((t, i) => {
-                      const token = amountDisplay(t.direction, tx.status);
-                      return (
-                        <div key={i} className={`num mt-0.5 font-mono text-xs ${amountClass(token)}`}>
-                          {token.sign}
-                          {tokenLabel(t)}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+          {live.status && !live.status.live && report.transactions.available && (
+            <div className="border-b border-line px-4 py-2 text-xs leading-relaxed text-ink-faint">
+              Not receiving live updates: {live.status.reason}
+            </div>
+          )}
+          {live.gap && (
+            <div className="border-b border-line px-4 py-2 text-xs leading-relaxed text-warn">
+              More transactions landed than could be pushed live. Reload for the full recent list.
+            </div>
+          )}
+          {!report.transactions.available ? (
+            <div className="px-5 py-10 text-center">
+              <div className="text-sm font-medium text-ink-dim">Transaction history unavailable</div>
+              <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-faint">{report.transactions.reason}</p>
+            </div>
+          ) : shown.length === 0 ? (
+            <div className="px-5 py-10 text-center text-sm text-ink-faint">No recent transactions found.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-line text-xs font-medium text-ink-faint">
+                    <th className="px-4 py-2.5 font-medium">Time</th>
+                    <th className="px-3 py-2.5 font-medium">Transaction</th>
+                    <th className="px-3 py-2.5 font-medium">From</th>
+                    <th className="px-3 py-2.5 font-medium">To</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Value</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {shown.map((tx) => {
+                    const native = amountDisplay(tx.direction, tx.status);
+                    return (
+                      <tr key={tx.hash} className="align-top transition-colors duration-150 hover:bg-raised/50">
+                        <td className="whitespace-nowrap px-4 py-3 text-xs text-ink-dim">
+                          <div className="flex items-center gap-1.5">
+                            {pushedHashes.has(tx.hash) && <span className="chip border-signal/30 bg-signal/10 text-signal">NEW</span>}
+                            <span title={formatTimestamp(tx.timestamp)}>{relativeTime(tx.timestamp)}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <a
+                            href={explorer.tx + tx.hash}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hash text-xs text-ink-dim transition-colors duration-150 hover:text-signal"
+                          >
+                            {shortId(tx.hash)}
+                          </a>
+                          {native.failed && (
+                            <div
+                              className="chip mt-1 !flex w-fit border-danger/40 bg-danger/10 text-danger"
+                              title="This transaction reverted on-chain: the amounts shown are what it attempted — nothing actually moved"
+                            >
+                              FAILED · nothing moved
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-3">
+                          <AddressCell chain={chain} value={tx.from} self={address} />
+                        </td>
+                        <td className="px-3 py-3">
+                          {tx.to ? <AddressCell chain={chain} value={tx.to} self={address} /> : <span className="text-xs text-ink-faint">contract creation</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className={cx("num whitespace-nowrap font-mono text-sm font-medium", amountClass(native))}>
+                            {native.sign}
+                            {tx.valueNative} <span className="text-xs font-normal text-ink-faint">{symbol}</span>
+                          </div>
+                          {tx.tokenTransfers?.map((t, i) => {
+                            const token = amountDisplay(t.direction, tx.status);
+                            return (
+                              <div key={i} className={cx("num mt-0.5 whitespace-nowrap font-mono text-xs", amountClass(token))}>
+                                {token.sign}
+                                {tokenLabel(t)}
+                              </div>
+                            );
+                          })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {/* Side column: analysis + your own notes. */}
+        <aside className="space-y-4">
+          <RiskPanel chain={chain} address={address} />
+          {session.status === "anonymous" ? (
+            <SignInPrompt privateNote>Log in to keep a private note or suggest a public label.</SignInPrompt>
+          ) : (
+            <>
+              <PrivateLabelPanel chain={chain} address={address} onShare={() => setShare((s) => ({ at: here, n: s.n + 1 }))} />
+              <LabelSubmitForm chain={chain} address={address} onSubmitted={onLabelSubmitted} shareRequest={share.at === here ? share.n : 0} />
+            </>
+          )}
+        </aside>
+      </div>
     </div>
   );
+}
+
+function Figure({ title, footer, className, children }: { title: string; footer: string; className?: string; children: React.ReactNode }) {
+  return (
+    <div className={cx("min-w-0 px-4 py-3.5 sm:px-5 sm:py-4", className)}>
+      <dt className="text-xs font-medium text-ink-faint">{title}</dt>
+      <dd className="num mt-1 truncate font-mono text-xl font-semibold tracking-tight text-ink">{children}</dd>
+      <dd className="mt-0.5 truncate text-xs text-ink-faint">{footer}</dd>
+    </div>
+  );
+}
+
+/** A counterparty in the table: links to its own report; the queried address reads "This address". */
+function AddressCell({ chain, value, self }: { chain: ChainId; value: string; self: string }) {
+  if (value.toLowerCase() === self.toLowerCase()) {
+    return <span className="chip border-line-strong bg-raised text-ink-dim">This address</span>;
+  }
+  return (
+    <a href={addressHref(chain, value)} title={value} className="hash text-xs text-signal transition-colors duration-150 hover:text-ink">
+      {shortId(value)}
+    </a>
+  );
+}
+
+/** `null` when the chain didn't report a time (ADR 0016) — shown as "time unknown", in the exact-time title tooltip too. */
+function relativeTime(iso: string | null): string {
+  if (iso === null) return formatTimestamp(null);
+  const seconds = Math.round((Date.now() - Date.parse(iso)) / 1000);
+  if (!Number.isFinite(seconds)) return formatTimestamp(iso);
+  if (seconds < 60) return "just now";
+  const units: [number, string][] = [
+    [60 * 60 * 24 * 365, "y"],
+    [60 * 60 * 24 * 30, "mo"],
+    [60 * 60 * 24, "d"],
+    [60 * 60, "h"],
+    [60, "m"],
+  ];
+  for (const [size, unit] of units) {
+    if (seconds >= size) return `${Math.floor(seconds / size)}${unit} ago`;
+  }
+  return "just now";
 }

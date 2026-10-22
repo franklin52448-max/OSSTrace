@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiCall, COMMUNITY_LABELS_URL, isModerator, useSession } from "./session.ts";
+import { EmptyState, Loading, Notice, PageHeader, SignInPrompt } from "./ui.tsx";
 
 interface Submission {
   id: string;
@@ -40,12 +41,24 @@ export default function ModerationView() {
     if (allowed) void load();
   }, [allowed, load]);
 
-  if (session.status === "checking") return <div className="text-sm text-ink-faint">Checking session…</div>;
+  const header = (actions?: React.ReactNode) => (
+    <PageHeader
+      title="Moderation"
+      description="Community label submissions waiting for review, oldest first. Confirm what the cited source supports; reject the rest with a reason."
+      actions={actions}
+    />
+  );
+
+  if (session.status === "checking") return <Loading label="Checking session…" />;
   if (!allowed) {
     return (
-      <div className="card mx-auto max-w-4xl px-4 py-3 text-sm text-ink-dim">
-        The review queue is for moderators.{" "}
-        {session.status === "signed-in" ? "Your account doesn't have the moderator role." : "Log in with a moderator account."}
+      <div className="mx-auto w-full max-w-4xl space-y-5">
+        {header()}
+        {session.status === "signed-in" ? (
+          <Notice>Your account doesn't have the moderator role.</Notice>
+        ) : (
+          <SignInPrompt>The review queue is for moderators. Log in with a moderator account.</SignInPrompt>
+        )}
       </div>
     );
   }
@@ -55,35 +68,24 @@ export default function ModerationView() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold tracking-tight text-ink">
-          {queue.status === "done" ? (
-            <>
-              <span className="num">{queue.submissions.length}</span> pending community submission
-              {queue.submissions.length === 1 ? "" : "s"}
-            </>
-          ) : (
-            "Pending community submissions"
+    <div className="mx-auto w-full max-w-4xl space-y-5">
+      {header(
+        <>
+          {queue.status === "done" && (
+            <span className="chip self-center border-line-strong bg-raised text-ink-dim">
+              <span className="num">{queue.submissions.length}</span>&nbsp;pending
+            </span>
           )}
-        </h1>
-        <button type="button" onClick={() => void load()} className="btn-outline">
-          Refresh
-        </button>
-      </div>
+          <button type="button" onClick={() => void load()} className="btn-outline">
+            Refresh
+          </button>
+        </>,
+      )}
       <div className="space-y-3">
-        {notice && (
-          <div className="rounded-card border border-line bg-raised px-4 py-2 text-xs text-ink-dim transition-colors duration-150">{notice}</div>
-        )}
-        {queue.status === "loading" && <div className="text-sm text-ink-faint">Loading…</div>}
-        {queue.status === "error" && (
-          <div role="alert" className="rounded-card border border-danger/35 bg-danger/10 px-4 py-3 text-sm text-danger">
-            {queue.message}
-          </div>
-        )}
-        {queue.status === "done" && queue.submissions.length === 0 && (
-          <div className="card px-4 py-6 text-center text-sm text-ink-faint">Nothing waiting for review.</div>
-        )}
+        {notice && <Notice tone="success">{notice}</Notice>}
+        {queue.status === "loading" && <Loading />}
+        {queue.status === "error" && <Notice tone="danger">{queue.message}</Notice>}
+        {queue.status === "done" && queue.submissions.length === 0 && <EmptyState title="All caught up">Nothing is waiting for review.</EmptyState>}
         {queue.status === "done" &&
           token &&
           queue.submissions.map((s) => (
@@ -137,9 +139,9 @@ function SubmissionCard({
   }
 
   return (
-    <article className="card p-4 text-sm transition-colors duration-150 hover:border-line-strong" data-submission-id={s.id}>
+    <article className="card p-5 text-sm" data-submission-id={s.id}>
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="font-semibold text-ink">{s.name}</h2>
+        <h2 className="text-[15px] font-semibold text-ink">{s.name}</h2>
         <span className="chip border-line-strong bg-raised text-ink-dim">{s.confidence}</span>
         <span className="chip border-line bg-ground-deep text-ink-faint">{s.address.chain}</span>
       </div>
@@ -170,7 +172,7 @@ function SubmissionCard({
       {mine ? (
         <div className="mt-3 text-xs text-ink-faint">Your own submission: another moderator has to review it.</div>
       ) : rejecting ? (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
           <input
             value={reason}
             onChange={(e) => setReason(e.target.value)}
@@ -179,30 +181,16 @@ function SubmissionCard({
             aria-label="Rejection reason"
             className="ctl min-w-0 flex-1"
           />
-          <button
-            type="button"
-            disabled={busy || !reason.trim()}
-            onClick={() => void review("reject")}
-            className="rounded-ctl bg-danger/90 px-3 py-1.5 text-sm font-medium text-[#1c0808] transition-colors duration-150 hover:bg-danger disabled:opacity-50"
-          >
+          <button type="button" disabled={busy || !reason.trim()} onClick={() => void review("reject")} className="btn-danger">
             Reject
           </button>
-          <button
-            type="button"
-            onClick={() => setRejecting(false)}
-            className="text-xs text-ink-faint transition-colors duration-150 hover:text-ink-dim"
-          >
+          <button type="button" onClick={() => setRejecting(false)} className="btn-outline">
             Cancel
           </button>
         </div>
       ) : (
-        <div className="mt-3 flex gap-2">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void review("confirm")}
-            className="rounded-ctl bg-info px-3 py-1.5 text-sm font-semibold text-[#06121c] transition-colors duration-150 hover:bg-[#8ad2f8] disabled:opacity-50"
-          >
+        <div className="mt-4 flex gap-2 border-t border-line pt-4">
+          <button type="button" disabled={busy} onClick={() => void review("confirm")} className="btn-accent">
             Confirm
           </button>
           <button

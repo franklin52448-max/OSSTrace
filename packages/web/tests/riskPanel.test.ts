@@ -57,7 +57,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 async function compute(panel: HTMLElement): Promise<void> {
-  await click(getButton("Compute risk score", panel));
+  await click(getButton("Compute", panel));
   await waitFor(() => text(panel).includes("Recompute"), "the risk result");
 }
 
@@ -72,7 +72,7 @@ test("nothing is scored until the button is pressed, then exactly one request is
   await render(createElement(RiskPanel, { chain: "ethereum", address: UNTAGGED }));
   const panel = getRegion("Risk score");
   for (let i = 0; i < 5; i++) await settle();
-  assert.ok(text(panel).includes("From real tags only"));
+  assert.ok(text(panel).includes("Based only on sourced tags"));
   assert.ok(!text(panel).includes("/ 100"));
   assert.deepEqual(stack.riskRequests, [], "no request on mount");
 
@@ -117,7 +117,7 @@ test("one hop from a sanctioned address scores HIGH (75), with the real path tha
 test("an address the API rejects shows the API's own error", async () => {
   await render(createElement(RiskPanel, { chain: "ethereum", address: "0xnot-an-address" }));
   const panel = getRegion("Risk score");
-  await click(getButton("Compute risk score", panel));
+  await click(getButton("Compute", panel));
   const alert = await waitFor(() => panel.querySelector('[role="alert"]'), "the error");
   assert.equal(text(alert).trim(), '"0xnot-an-address" is not a valid ethereum address');
   assert.deepEqual(consoleErrors, []);
@@ -137,7 +137,7 @@ test("a score never outlives the address it was computed for", async () => {
 
   await act(async () => showAddress(UNTAGGED));
   assert.ok(!text(panel).includes("SEVERE"), "the previous address's score is gone");
-  assert.ok(text(panel).includes("Compute risk score"));
+  assert.ok(text(panel).includes("Compute"));
   assert.equal(stack.riskRequests.length, 1, "and the new address isn't scored until asked");
   assert.deepEqual(consoleErrors, []);
 });

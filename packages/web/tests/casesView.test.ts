@@ -60,8 +60,8 @@ async function createCase(title: string, description: string): Promise<void> {
 }
 
 async function backToList(): Promise<void> {
-  await click(getButton("← Back to your cases"));
-  await waitFor(() => !text().includes("Back to your cases") && !text().includes("Loading…"), "the case list");
+  await click(getButton("← All cases"));
+  await waitFor(() => !text().includes("← All cases") && !text().includes("Loading…"), "the case list");
 }
 
 /** The list item for `address` inside the case's Addresses section. */
@@ -89,7 +89,7 @@ async function apiListCases(email: string): Promise<{ id: string; title: string;
 
 test("logged out, the view asks for a log in and offers no case controls", async () => {
   await render(createElement(CasesView));
-  await waitFor(() => text().includes("Log in (in the sidebar) to open a case"), "the logged-out prompt");
+  await waitFor(() => text().includes("Log in to open a case"), "the logged-out prompt");
   assert.ok(!text().includes("New case"));
   assert.deepEqual(consoleErrors, []);
 });
@@ -97,7 +97,7 @@ test("logged out, the view asks for a log in and offers no case controls", async
 test("a case's whole life: create, add an address with a note, edit the note, close (read-only), reopen, delete", async () => {
   await logInAs(ALICE);
   await render(createElement(CasesView));
-  await waitFor(() => text().includes("You have no cases yet."), "Alice's empty case list");
+  await waitFor(() => text().includes("No cases yet"), "Alice's empty case list");
 
   await createCase("Drainer cluster, Oct 2026", "Wallets that received from the drainer contract.");
   assert.ok(text(getRegion("Case")).includes("Wallets that received from the drainer contract."));
@@ -163,7 +163,7 @@ test("a case's whole life: create, add an address with a note, edit the note, cl
   };
   try {
     await click(getButton("Delete"));
-    await waitFor(() => text().includes("You have no cases yet."), "the empty list after deleting");
+    await waitFor(() => text().includes("No cases yet"), "the empty list after deleting");
   } finally {
     window.confirm = originalConfirm;
   }
@@ -175,7 +175,7 @@ test("a case's whole life: create, add an address with a note, edit the note, cl
 test("privacy: another signed-in user never sees your case, in their list or by id", async () => {
   await logInAs(ALICE);
   await render(createElement(CasesView));
-  await waitFor(() => text().includes("You have no cases yet."), "Alice's empty list");
+  await waitFor(() => text().includes("No cases yet"), "Alice's empty list");
   await createCase("Alice's private investigation", "");
   await fill(getControl("Address"), ETH_ADDR);
   await click(getButton("Add to case"));
@@ -185,7 +185,7 @@ test("privacy: another signed-in user never sees your case, in their list or by 
 
   // Bob logs in on the same page while Alice's case is open: the view drops it immediately.
   await logInAs(BOB);
-  await waitFor(() => text().includes("You have no cases yet."), "Bob's own (empty) list");
+  await waitFor(() => text().includes("No cases yet"), "Bob's own (empty) list");
   assert.ok(!text().includes("Alice's private investigation"));
   assert.ok(!text().includes(ETH_ADDR));
   // And the server refuses it by id, the same as a case that doesn't exist.

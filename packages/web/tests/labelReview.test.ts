@@ -102,7 +102,7 @@ test("LabelSubmitForm: a real submission, then the server's own refusal of a bad
   let submitted = 0;
   await render(createElement(LabelReview.LabelSubmitForm, { chain: "ethereum", address: ADDRESS, onSubmitted: () => submitted++ }));
 
-  await click(await waitFor(() => (text().includes("Suggest a label for this address") ? getButton("Suggest a label for this address") : null), "the open button"));
+  await click(await waitFor(() => (text().includes("Suggest a public label") ? getButton("Suggest a public label") : null), "the open button"));
   const form = document.querySelector("form");
   assert.ok(form);
   assert.equal(form.getAttribute("aria-label"), "Suggest a label");
@@ -125,7 +125,7 @@ test("LabelSubmitForm: a real submission, then the server's own refusal of a bad
 
   // Reopened, the fields are empty again. A source the browser accepts as a URL but the server
   // refuses (not a public web address) comes back as the API's own message, inline.
-  await click(getButton("Suggest a label for this address"));
+  await click(getButton("Suggest a public label"));
   const again = document.querySelector("form");
   assert.ok(again);
   assert.equal(getByLabelText("Label", again).value, "");

@@ -62,12 +62,12 @@ function row(title: string): HTMLButtonElement | null {
 
 async function openRow(title: string): Promise<void> {
   await click(await waitFor(() => row(title), `the "${title}" row on the board`));
-  await waitFor(() => text().includes("Back to the board"), `the "${title}" detail view`);
+  await waitFor(() => text().includes("← All bounties"), `the "${title}" detail view`);
 }
 
 async function backToBoard(): Promise<void> {
-  await click(getButton("← Back to the board"));
-  await waitFor(() => !text().includes("Back to the board"), "the board");
+  await click(getButton("← All bounties"));
+  await waitFor(() => !text().includes("← All bounties"), "the board");
 }
 
 async function openBounty(bounty: typeof ALPHA): Promise<void> {
@@ -89,7 +89,7 @@ async function submitPr(prUrl: string, note: string): Promise<void> {
 test("anonymous: the board is browsable, and opening or submitting needs a log in", async () => {
   await render(createElement(BountiesView));
   await waitFor(() => text().includes("No bounties yet"), "the empty board");
-  assert.ok(text().includes("Log in (in the sidebar) to open a bounty"));
+  assert.ok(text().includes("Log in to open a bounty"));
   assert.equal(row("Open a bounty"), null, "no Open a bounty button while logged out");
   assert.deepEqual(consoleErrors, []);
 });

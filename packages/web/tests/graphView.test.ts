@@ -100,8 +100,8 @@ test("a one-hop graph: every counterparty drawn as a node, every transfer as an 
   const header = text(section);
   assert.ok(header.includes("2 counterparties"), header);
   assert.ok(header.includes("3 transfers drawn"), header);
-  assert.ok(header.includes("4 recent transactions fetched"), header);
-  assert.ok(header.includes("1 not drawn (see below)"), header);
+  assert.ok(header.includes("4 txs fetched"), header);
+  assert.ok(header.includes("1 not drawn"), header);
 
   const svg = section.querySelector("svg");
   assert.ok(svg);

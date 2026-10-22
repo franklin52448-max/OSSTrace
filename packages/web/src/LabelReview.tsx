@@ -150,18 +150,18 @@ export function LabelSubmitForm({
 
   if (!open) {
     return (
-      <div className="text-xs">
+      <div className="space-y-2">
         <button
           type="button"
           onClick={() => {
             setSharing(false);
             setOpen(true);
           }}
-          className="font-medium text-signal underline-offset-2 transition-colors duration-150 hover:text-[#53e6a6] hover:underline"
+          className="btn-outline w-full"
         >
-          Suggest a label for this address
+          Suggest a public label
         </button>
-        {result?.kind === "ok" && <span className="ml-2 text-ink-dim">{result.message}</span>}
+        {result?.kind === "ok" && <p className="text-xs text-ink-dim">{result.message}</p>}
       </div>
     );
   }
@@ -263,8 +263,7 @@ export function LabelSubmitForm({
         </select>
       </label>
       <p className="text-xs leading-relaxed text-ink-faint">
-        It's public right away, marked unreviewed, until a moderator confirms or rejects it. Your account id (not your email)
-        is recorded with it.
+        Public right away, marked unreviewed until a moderator checks it. Your account id (not your email) is recorded.
       </p>
       <div className="flex items-center gap-3">
         <button type="submit" disabled={busy} className="btn-accent">

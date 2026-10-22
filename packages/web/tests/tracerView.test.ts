@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createElement, type ComponentType } from "react";
 import type { TransactionSummary } from "@osstrace/core";
-import { choose, fill, getControl } from "./harness/forms.ts";
-import { cleanup, click, consoleErrors, getButton, render, text, waitFor } from "./harness/render.ts";
+import { choose, fill } from "./harness/forms.ts";
+import { cleanup, click, consoleErrors, getButton, getByLabelText, render, text, waitFor } from "./harness/render.ts";
 import { FixedHistoryAdapter, startStack, type Stack } from "./harness/servers.ts";
 
 // The Tracer view against the real Tracer API: a real multi-hop search over the chain stand-in's
@@ -66,7 +66,7 @@ function section(title: string): HTMLElement | null {
 
 test("expand a single-chain graph two hops out: every real edge, and what wasn't expanded and why", async () => {
   await render(createElement(TracerView));
-  await fill(getControl("Trace from this address"), CENTER);
+  await fill(getByLabelText("From"), CENTER);
   assert.ok(getButton("Expand graph"), "no To address: the button says it'll expand the graph");
   await click(getButton("Expand graph"));
   const graph = await waitFor(() => section("Expanded graph"), "the expanded graph");
@@ -95,8 +95,8 @@ test("expand a single-chain graph two hops out: every real edge, and what wasn't
 
 test("with one hop, the same address's neighbours become the frontier", async () => {
   await render(createElement(TracerView));
-  await fill(getControl("Trace from this address"), CENTER);
-  await choose(getControl<HTMLSelectElement>("Max hops"), "1");
+  await fill(getByLabelText("From"), CENTER);
+  await choose(getByLabelText<HTMLSelectElement>("Hops"), "1");
   await click(getButton("Expand graph"));
   const graph = await waitFor(() => section("Expanded graph"), "the expanded graph");
   assert.ok(text(graph).includes("1 nodes expanded"));
@@ -108,12 +108,12 @@ test("with one hop, the same address's neighbours become the frontier", async ()
 
 test("find a single-chain path, hop by hop", async () => {
   await render(createElement(TracerView));
-  await fill(getControl("Trace from this address"), CENTER);
-  await fill(getControl("Does a path reach this address"), ONWARD);
+  await fill(getByLabelText("From"), CENTER);
+  await fill(getByLabelText("To ("), ONWARD);
   await click(getButton("Find path"));
   await waitFor(() => text().includes("Path found"), "the path result");
   assert.ok(text().includes("Path found — 2 hops, every edge matches the filters."), text());
-  const path = section("Real path, hop by hop");
+  const path = section("Path, hop by hop");
   assert.ok(path);
   const hops = [...path.querySelectorAll("li")].map((li) => text(li));
   assert.equal(hops.length, 2);
@@ -124,20 +124,20 @@ test("find a single-chain path, hop by hop", async () => {
 
 test("a path that doesn't exist is reported as not found, with how far the search went", async () => {
   await render(createElement(TracerView));
-  await fill(getControl("Trace from this address"), ONWARD);
-  await fill(getControl("Does a path reach this address"), CENTER);
+  await fill(getByLabelText("From"), ONWARD);
+  await fill(getByLabelText("To ("), CENTER);
   await click(getButton("Find path"));
   await waitFor(() => text().includes("No matching path found"), "the not-found result");
   // ONWARD has no history at all: the search checked it, had nothing to follow, and stopped
   // after that first hop (it reports the hops it actually searched, not the limit).
   assert.match(text(), /No matching path found within 1 hop \(1 addresses checked\)/);
-  assert.equal(section("Real path, hop by hop"), null);
+  assert.equal(section("Path, hop by hop"), null);
   assert.deepEqual(consoleErrors, []);
 });
 
 test("the API's own error for a malformed address is shown", async () => {
   await render(createElement(TracerView));
-  await fill(getControl("Trace from this address"), "0x1234");
+  await fill(getByLabelText("From"), "0x1234");
   await click(getButton("Expand graph"));
   const alert = await waitFor(() => document.querySelector('[role="alert"]'), "the error");
   assert.equal(text(alert).trim(), '"0x1234" is not a valid ethereum address');
@@ -146,9 +146,9 @@ test("the API's own error for a malformed address is shown", async () => {
 
 test("Follow Wormhole bridges: a real recorded Ethereum → Solana transfer is drawn as a bridge hop", async () => {
   await render(createElement(TracerView));
-  await fill(getControl("Trace from this address"), ETH_NODE);
-  await choose(getControl<HTMLSelectElement>("Max hops"), "1");
-  const toggle = getControl<HTMLInputElement>("Follow Wormhole bridge hops across chains");
+  await fill(getByLabelText("From"), ETH_NODE);
+  await choose(getByLabelText<HTMLSelectElement>("Hops"), "1");
+  const toggle = getByLabelText<HTMLInputElement>("Follow Wormhole bridges");
   await click(toggle);
   assert.equal(toggle.checked, true);
   await click(getButton("Expand graph"));

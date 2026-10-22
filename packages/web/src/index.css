@@ -1,90 +1,52 @@
-@import "@fontsource-variable/inter";
+@import "@fontsource-variable/instrument-sans";
 @import "@fontsource-variable/jetbrains-mono";
 @import "tailwindcss";
+@import "./prism/prism.css";
 
 /* ---------------------------------------------------------------------------------------------
-   OSSTrace design system — dark-first, restrained (tinted cool neutrals + one emerald accent).
+   OSSTrace design system, built on Helium Prism (src/prism): Prism's dark navy surfaces, Instrument
+   Sans, pill buttons and soft elevated fills, with a dense intel-dashboard layout on top.
    Addresses, hashes and numerals always set in the mono face; lists use tabular figures.
    --------------------------------------------------------------------------------------------- */
 
 @theme {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Surfaces: a cool near-black ground, panels lifted one and two steps. */
-  --color-ground: #0a0d13;
-  --color-ground-deep: #060910;
-  --color-panel: #10141c;
-  --color-raised: #171e29;
-  --color-line: #1f2733;
-  --color-line-strong: #2c3646;
+  /* Surfaces: true black, neutral panels lifted one and two steps. Blue is kept for accents only. */
+  --color-ground: #000000;
+  --color-ground-deep: #000000;
+  --color-panel: #0a0a0b;
+  --color-raised: #131315;
+  --color-line: #1c1c1f;
+  --color-line-strong: #2a2a2e;
 
-  /* Ink: primary, secondary, tertiary (tertiary still clears 4.5:1 on ground and panel). */
-  --color-ink: #e9edf4;
-  --color-ink-dim: #a3adbd;
-  --color-ink-faint: #7c8798;
+  /* Ink: neutral greys (Prism's primary / secondary / tertiary roles). */
+  --color-ink: #ededef;
+  --color-ink-dim: #a1a1a8;
+  --color-ink-faint: #75757c;
 
-  /* Signal + semantic state colours. Emerald is the product accent (and inbound flow). */
-  --color-signal: #3ddc97;
-  --color-inbound: #3ddc97;
-  --color-outbound: #f59e42;
-  --color-warn: #f4c14f;
-  --color-danger: #f26d6d;
-  --color-info: #6cc5f5;
+  /* Accent is Prism's elevated periwinkle; semantic state colours tuned to sit on navy. */
+  --color-signal: #8ea2ff;
+  --color-helium: #3450d1;
+  --color-inbound: #4ad6a0;
+  --color-outbound: #f5a35c;
+  --color-warn: #f4c76a;
+  --color-danger: #f47b7b;
+  --color-info: #7cc4f5;
   --color-private: #b7a6f8;
 
-  /* Radius scale. */
-  --radius-card: 0.75rem;
-  --radius-ctl: 0.5rem;
-  --radius-chip: 0.375rem;
+  --radius-card: 16px;
+  --radius-ctl: 12px;
+  --radius-chip: 999px;
 
-  /* One depth system: an offset contact shadow plus a soft ambient lift. */
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.45), 0 12px 28px -16px rgb(0 0 0 / 0.6);
+  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 16px 32px -24px rgb(0 0 0 / 0.7);
 }
 
 @layer base {
-  html {
-    color-scheme: dark;
-  }
-
-  body {
-    background-color: var(--color-ground);
-    color: var(--color-ink);
-    font-family: var(--font-sans);
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
-  }
-
-  ::selection {
-    background: rgb(61 220 151 / 0.28);
-    color: var(--color-ink);
-  }
-
-  :focus-visible {
-    outline: 2px solid var(--color-signal);
-    outline-offset: 2px;
-    border-radius: 2px;
-  }
-
-  /* Browser surfaces carry the design too: scrollbars, caret, form controls. */
   * {
     scrollbar-color: var(--color-line-strong) transparent;
     scrollbar-width: thin;
-  }
-
-  ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background-color: var(--color-line-strong);
-    border-radius: 999px;
-    border: 3px solid var(--color-ground);
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background-color: #3a4658;
   }
 
   input,
@@ -94,9 +56,9 @@
   }
 }
 
-/* Shared component vocabulary — one card, one control, three button ranks. */
+/* Shared component vocabulary used across the views, restyled to Prism's look. */
 @layer components {
-  .card {
+  .card:not(.button) {
     border: 1px solid var(--color-line);
     border-radius: var(--radius-card);
     background-color: var(--color-panel);
@@ -105,29 +67,31 @@
 
   .card-header {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    padding: 0.75rem 1rem;
+    padding: 0.875rem 1.125rem;
     border-bottom: 1px solid var(--color-line);
   }
 
   .section-title {
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--color-ink-faint);
   }
 
+  /* Prism Input look for bare inputs/selects/textareas. */
   .ctl {
-    border: 1px solid var(--color-line-strong);
+    border: none;
     border-radius: var(--radius-ctl);
-    background-color: var(--color-ground-deep);
-    padding: 0.5rem 0.75rem;
+    background-color: var(--helium-elevated-7);
+    padding: 0.625rem 0.875rem;
     font-size: 0.875rem;
+    font-weight: 500;
     color: var(--color-ink);
-    transition: border-color 150ms ease, box-shadow 150ms ease;
+    transition: background-color 0.2s, outline-color 0.1s;
   }
 
   .ctl::placeholder {
@@ -135,58 +99,106 @@
   }
 
   .ctl:hover {
-    border-color: #3a4658;
+    background-color: var(--helium-elevated-10);
   }
 
   .ctl:focus {
-    outline: none;
-    border-color: var(--color-signal);
-    box-shadow: 0 0 0 3px rgb(61 220 151 / 0.15);
+    outline: 2px solid var(--primary);
+    outline-offset: -1px;
+    background-color: var(--helium-elevated-10);
   }
 
+  select.ctl option {
+    background-color: var(--background);
+  }
+
+  /* Prism Button, primary. */
   .btn-accent {
-    border-radius: var(--radius-ctl);
-    background-color: var(--color-signal);
-    color: #05130d;
-    padding: 0.5rem 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 36px;
+    border-radius: 18px;
+    background-color: var(--helium-blue);
+    color: var(--white);
+    padding: 0.5rem 1.125rem;
     font-size: 0.875rem;
-    font-weight: 600;
-    transition: background-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
-    box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+    font-weight: 500;
+    transition: background-color 0.2s, transform 0.2s;
   }
 
   .btn-accent:hover:not(:disabled) {
-    background-color: #53e6a6;
-    box-shadow: 0 2px 10px -2px rgb(61 220 151 / 0.35);
+    background-color: var(--helium-blue-hover);
   }
 
   .btn-accent:active:not(:disabled) {
-    transform: translateY(1px);
+    background-color: var(--helium-blue-press);
+    transform: scale(0.97);
   }
 
   .btn-accent:disabled {
     opacity: 0.5;
+    cursor: default;
   }
 
+  /* Prism Button, default (elevated fill). */
   .btn-outline {
-    border: 1px solid var(--color-line-strong);
-    border-radius: var(--radius-ctl);
-    background-color: transparent;
-    color: var(--color-ink-dim);
-    padding: 0.4rem 0.75rem;
-    font-size: 0.8125rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: 999px;
+    background-color: var(--helium-elevated-7);
+    color: var(--color-ink);
+    min-height: 36px;
+    padding: 0.375rem 1rem;
+    font-size: 0.875rem;
     font-weight: 500;
-    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+    transition: background-color 0.2s, transform 0.2s;
   }
 
   .btn-outline:hover:not(:disabled) {
-    background-color: var(--color-raised);
-    border-color: #3a4658;
-    color: var(--color-ink);
+    background-color: var(--helium-elevated-10);
+  }
+
+  .btn-outline:active:not(:disabled) {
+    background-color: var(--helium-elevated-15);
+    transform: scale(0.97);
   }
 
   .btn-outline:disabled {
     opacity: 0.5;
+    cursor: default;
+  }
+
+  /* Destructive action: quiet until hovered, never the visual default. */
+  .btn-danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);
+    color: var(--color-danger);
+    min-height: 36px;
+    padding: 0.375rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: background-color 0.2s, transform 0.2s;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  }
+
+  .btn-danger:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  .btn-danger:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   .chip {
@@ -194,9 +206,10 @@
     align-items: center;
     border-radius: var(--radius-chip);
     border: 1px solid transparent;
-    padding: 0.1rem 0.45rem;
+    padding: 0.125rem 0.5rem;
     font-size: 0.6875rem;
     font-weight: 600;
+    letter-spacing: 0.02em;
     line-height: 1.35;
     white-space: nowrap;
   }
@@ -204,6 +217,7 @@
   .hash {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
   }
 }
 
@@ -215,6 +229,6 @@
 /* Faint plotting field behind the graph canvas. */
 @utility graph-field {
   background-color: var(--color-ground-deep);
-  background-image: radial-gradient(rgb(148 163 184 / 0.07) 1px, transparent 1px);
+  background-image: radial-gradient(rgb(255 255 255 / 0.06) 1px, transparent 1px);
   background-size: 24px 24px;
 }

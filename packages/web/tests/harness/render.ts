@@ -120,16 +120,22 @@ export function getButton(name: string, root: ParentNode = window.document.body)
 
 /**
  * The form control a `<label>` names, found the way assistive tech finds it: through the label's
- * own text and the DOM's label → control association (`label.control`), never a test id or
- * class. Matches when the label's visible text starts with `labelText`.
+ * own text and the DOM's label → control association (`label.control`, which resolves for any
+ * labelable element — input, select or textarea), never a test id or class. Matches when the
+ * label's visible text starts with `labelText`.
  */
-export function getByLabelText(labelText: string, root: ParentNode = window.document.body): HTMLInputElement {
+export function getByLabelText<T extends Element = HTMLInputElement>(labelText: string, root: ParentNode = window.document.body): T {
   for (const label of root.querySelectorAll("label")) {
     const own = text(label).trim();
     const control = label.control;
-    if (own.startsWith(labelText) && control instanceof window.HTMLInputElement) return control;
+    if (
+      own.startsWith(labelText) &&
+      (control instanceof window.HTMLInputElement || control instanceof window.HTMLSelectElement || control instanceof window.HTMLTextAreaElement)
+    ) {
+      return control as unknown as T;
+    }
   }
-  throw new Error(`no input labelled "${labelText}"`);
+  throw new Error(`no control labelled "${labelText}"`);
 }
 
 /** The control an `aria-label` names (for inputs that are labelled that way). */

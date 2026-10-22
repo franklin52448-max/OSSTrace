@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiCall, isModerator, useSession } from "./session.ts";
+import { EmptyState, Loading, Notice, PageHeader, SignInPrompt } from "./ui.tsx";
 
 const BOUNTIES_URL = import.meta.env["VITE_BOUNTIES_URL"] ?? "http://localhost:5313";
 
@@ -64,41 +65,40 @@ export default function BountiesView() {
   const selected = list.status === "done" ? list.bounties.find((b) => b.id === selectedId) ?? null : null;
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight text-ink">Bounties</h1>
-          <p className="mt-0.5 text-xs leading-relaxed text-ink-faint">
-            Anyone can fund a feature with a spec and their own stated reward — no coding required to open one. This board
-            tracks the workflow; it does not hold or move the reward itself (
+    <div className="mx-auto w-full max-w-4xl space-y-5">
+      <PageHeader
+        title="Bounties"
+        description={
+          <>
+            Fund a feature with a spec and your own stated reward. This board tracks the work; rewards are paid off-platform (
             <a
               href="https://github.com/OpenTraceIntelligence/OSSTrace/blob/main/docs/adr/0009-bounty-program-v1-is-tracking-only.md"
               target="_blank"
               rel="noreferrer"
-              className="underline hover:text-ink"
+              className="underline decoration-line-strong underline-offset-2 hover:text-ink"
             >
               ADR 0009
             </a>
             ).
-          </p>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <button type="button" onClick={() => void load()} className="btn-outline">
-            Refresh
-          </button>
-          {token && (
-            <button type="button" onClick={() => setShowOpenForm((v) => !v)} className="btn-accent">
-              {showOpenForm ? "Cancel" : "Open a bounty"}
-            </button>
-          )}
-        </div>
-      </div>
+          </>
+        }
+        actions={
+          !selected && (
+            <>
+              <button type="button" onClick={() => void load()} className="btn-outline">
+                Refresh
+              </button>
+              {token && (
+                <button type="button" onClick={() => setShowOpenForm((v) => !v)} className="btn-accent">
+                  {showOpenForm ? "Cancel" : "Open a bounty"}
+                </button>
+              )}
+            </>
+          )
+        }
+      />
 
-      {!token && (
-        <div className="rounded-card border border-line bg-raised px-4 py-2.5 text-xs text-ink-dim">
-          Log in (in the sidebar) to open a bounty or submit a PR against one. Browsing is open to everyone.
-        </div>
-      )}
+      {!token && <SignInPrompt>Log in to open a bounty or submit a PR. Anyone can browse.</SignInPrompt>}
 
       {showOpenForm && token && <OpenBountyForm token={token} onOpened={() => { setShowOpenForm(false); void load(); }} />}
 
@@ -112,25 +112,19 @@ export default function BountiesView() {
 }
 
 function BountyList({ list, onSelect }: { list: ListState; onSelect: (id: string) => void }) {
-  if (list.status === "loading") return <div className="text-sm text-ink-faint">Loading…</div>;
-  if (list.status === "error") {
-    return (
-      <div role="alert" className="rounded-card border border-danger/35 bg-danger/10 px-4 py-3 text-sm text-danger">
-        {list.message}
-      </div>
-    );
-  }
+  if (list.status === "loading") return <Loading />;
+  if (list.status === "error") return <Notice tone="danger">{list.message}</Notice>;
   if (list.bounties.length === 0) {
-    return <div className="card px-4 py-6 text-center text-sm text-ink-faint">No bounties yet — the first one could be yours.</div>;
+    return <EmptyState title="No bounties yet">The first one could be yours: describe a feature and what you'd offer for it.</EmptyState>;
   }
   return (
-    <div className="space-y-2">
+    <div className="card divide-y divide-line overflow-hidden">
       {list.bounties.map((b) => (
         <button
           key={b.id}
           type="button"
           onClick={() => onSelect(b.id)}
-          className="card flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-raised"
+          className="flex w-full items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors duration-150 hover:bg-raised"
         >
           <div className="min-w-0">
             <div className="truncate text-sm font-medium text-ink">{b.title}</div>
@@ -169,8 +163,8 @@ function OpenBountyForm({ token, onOpened }: { token: string; onOpened: () => vo
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card space-y-2 p-4">
-      <h2 className="section-title">Open a bounty</h2>
+    <form onSubmit={handleSubmit} className="card space-y-3 p-4">
+      <h2 className="text-[15px] font-medium text-ink">Open a bounty</h2>
       <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" maxLength={140} required className="ctl w-full" />
       <textarea
         value={description}
@@ -190,10 +184,9 @@ function OpenBountyForm({ token, onOpened }: { token: string; onOpened: () => vo
         className="ctl w-full"
       />
       <p className="text-xs text-ink-faint">
-        This is your own claim, not a balance this platform holds — see ADR 0009. The actual payout happens off-platform,
-        between you and whoever a moderator records as the winning submission.
+        Your own promise, not a balance held here: you pay the submission a moderator records as the winner, off-platform.
       </p>
-      {error && <div className="rounded-card border border-danger/35 bg-danger/10 px-3 py-2 text-xs text-danger">{error}</div>}
+      {error && <Notice tone="danger">{error}</Notice>}
       <button type="submit" disabled={submitting} className="btn-accent">
         {submitting ? "Opening…" : "Open bounty"}
       </button>
@@ -247,31 +240,31 @@ function BountyDetail({ bounty, onBack, onChanged }: { bounty: Bounty; onBack: (
 
   return (
     <div className="space-y-4">
-      <button type="button" onClick={onBack} className="btn-outline">
-        ← Back to the board
+      <button type="button" onClick={onBack} className="text-sm text-ink-dim transition-colors duration-150 hover:text-ink">
+        ← All bounties
       </button>
 
       <section className="card overflow-hidden">
         <div className="card-header">
-          <h2 className="truncate text-sm font-medium text-ink">{bounty.title}</h2>
+          <h2 className="truncate text-lg font-semibold tracking-tight text-ink">{bounty.title}</h2>
           <span className={`chip shrink-0 border ${STATUS_CLASS[bounty.status]}`}>{STATUS_TEXT[bounty.status]}</span>
         </div>
         <div className="space-y-3 px-4 py-3 text-sm">
           <p className="whitespace-pre-wrap text-ink-dim">{bounty.description}</p>
           <div className="text-xs text-ink-faint">
-            Reward (poster's own claim, not escrowed — ADR 0009): <span className="num font-medium text-ink">{bounty.reward}</span>
+            Reward <span className="num font-medium text-ink">{bounty.reward}</span> · the poster's own claim, not escrowed
           </div>
           <div className="hash text-xs text-ink-faint">
             opened by {short(bounty.openedBy)} · {new Date(bounty.openedAt).toLocaleString()}
           </div>
           {bounty.status === "claimed" && (
-            <div className="rounded-card border border-signal/35 bg-signal/10 px-3 py-2 text-xs text-ink">
+            <div className="rounded-ctl border border-signal/30 bg-signal/10 px-3 py-2 text-xs text-ink">
               Claimed by <span className="hash">{short(bounty.claimedBy ?? "")}</span> — recorded by a moderator on{" "}
               {bounty.claimedAt && new Date(bounty.claimedAt).toLocaleString()}.
             </div>
           )}
           {bounty.status === "cancelled" && (
-            <div className="rounded-card border border-line bg-raised px-3 py-2 text-xs text-ink-dim">Cancelled: {bounty.cancellationReason}</div>
+            <div className="rounded-ctl border border-line bg-raised px-3 py-2 text-xs text-ink-dim">Cancelled: {bounty.cancellationReason}</div>
           )}
           {bounty.status === "open" && (isOpener || canModerate) && (
             <button type="button" onClick={() => void cancel()} className="btn-outline">
@@ -281,16 +274,16 @@ function BountyDetail({ bounty, onBack, onChanged }: { bounty: Bounty; onBack: (
         </div>
       </section>
 
-      {notice && <div className="rounded-card border border-line bg-raised px-3 py-2 text-xs text-ink-dim">{notice}</div>}
-      {error && <div role="alert" className="rounded-card border border-danger/35 bg-danger/10 px-3 py-2 text-xs text-danger">{error}</div>}
+      {notice && <Notice>{notice}</Notice>}
+      {error && <Notice tone="danger">{error}</Notice>}
 
       {bounty.status === "open" && token && <SubmitPrForm bountyId={bounty.id} token={token} onSubmitted={() => void loadSubmissions()} />}
 
       <section className="card overflow-hidden">
         <div className="card-header">
-          <h2 className="section-title">Submissions</h2>
+          <h2 className="text-[15px] font-medium text-ink">Submissions</h2>
           <span className="text-xs text-ink-faint">
-            <span className="num font-medium text-ink">{submissions?.length ?? 0}</span>
+            <span className="num">{submissions?.length ?? 0}</span>
           </span>
         </div>
         {submissions === null ? (
@@ -357,11 +350,11 @@ function SubmitPrForm({ bountyId, token, onSubmitted }: { bountyId: string; toke
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card space-y-2 p-4">
-      <h2 className="section-title">Submit your PR against this bounty</h2>
+    <form onSubmit={handleSubmit} className="card space-y-3 p-4">
+      <h2 className="text-[15px] font-medium text-ink">Submit a PR</h2>
       <input value={prUrl} onChange={(e) => setPrUrl(e.target.value)} placeholder="https://github.com/…/pull/…" required className="ctl hash w-full" />
       <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note for the moderator (optional)" maxLength={1000} className="ctl w-full" />
-      {error && <div className="rounded-card border border-danger/35 bg-danger/10 px-3 py-2 text-xs text-danger">{error}</div>}
+      {error && <Notice tone="danger">{error}</Notice>}
       <button type="submit" disabled={submitting} className="btn-accent">
         {submitting ? "Submitting…" : "Submit"}
       </button>

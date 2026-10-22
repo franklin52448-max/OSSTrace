@@ -7,7 +7,7 @@ import {
   consoleErrors,
   getAllByRole,
   getButton,
-  getByLabelText,
+  getByAriaLabel,
   getSubmitButton,
   render,
   text,
@@ -37,11 +37,11 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+/** Opens the header account menu's log-in form (the header's own "Log in" trigger button, not yet inside any form). */
 async function openForm(): Promise<HTMLFormElement> {
   await render(createElement(AccountPanel));
-  await click(await waitFor(() => (text().includes("Log in or sign up") ? getButton("Log in or sign up") : null), "the logged-out prompt"));
-  const form = document.querySelector("form");
-  assert.ok(form);
+  await click(await waitFor(() => (text().includes("Log in") ? getButton("Log in") : null), "the logged-out 'Log in' trigger"));
+  const form = await waitFor(() => document.querySelector("form"), "the auth form");
   return form;
 }
 
@@ -52,17 +52,14 @@ function alertRegion(form: HTMLFormElement): HTMLElement {
   return alerts[0] as HTMLElement;
 }
 
-test("the email and password inputs are named by visible labels, in both modes", async () => {
+test("the email and password inputs are named accessibly (aria-label), in both modes", async () => {
   const form = await openForm();
   for (const mode of ["Log in", "Sign up"]) {
     await click(getButton(mode, form));
-    const email = getByLabelText("Email", form);
-    const password = getByLabelText("Password", form);
+    const email = getByAriaLabel("Email", form);
+    const password = getByAriaLabel("Password", form);
     assert.equal(email.type, "email", mode);
     assert.equal(password.type, "password", mode);
-    // The label is the control's own <label>, not a nearby bit of text.
-    assert.equal(email.labels?.length, 1, mode);
-    assert.equal(password.labels?.length, 1, mode);
   }
   assert.deepEqual(consoleErrors, []);
 });
@@ -74,8 +71,8 @@ test("a failed log in puts the API's real error into the role=alert region that 
   const region = alertRegion(form);
   assert.equal(text(region).trim(), "");
 
-  await type(getByLabelText("Email", form), "taken@example.com");
-  await type(getByLabelText("Password", form), "not the right password");
+  await type(getByAriaLabel("Email", form), "taken@example.com");
+  await type(getByAriaLabel("Password", form), "not the right password");
   await click(getSubmitButton(form));
 
   await waitFor(() => text(region).includes("wrong email or password"), "the log-in error");
@@ -88,8 +85,8 @@ test("a failed sign up (email taken) is announced the same way, and switching mo
   await click(getButton("Sign up", form));
   const region = alertRegion(form);
 
-  await type(getByLabelText("Email", form), "taken@example.com");
-  await type(getByLabelText("Password", form), "another long enough password");
+  await type(getByAriaLabel("Email", form), "taken@example.com");
+  await type(getByAriaLabel("Password", form), "another long enough password");
   await click(getSubmitButton(form));
 
   await waitFor(() => text(region).includes("an account with that email already exists"), "the sign-up error");

@@ -15,8 +15,8 @@ const PLAIN = "plain@example.com";
 const TO_CONFIRM = { address: "0x41675c099f32341bf84bfc5382af534df5c7461a", name: "Safe: Singleton 1.4.1" };
 const TO_REJECT = { address: "0x252a8bd2319d8a555b872990601221b3a2053bce", name: "Definitely the treasury" };
 const OWN = { address: "0x00000000219ab540356cbb839cbe05303d7705fa", name: "Beacon deposit contract" };
-// "1 pending community submission", not "...submissions" (the heading runs straight into the Refresh button's text).
-const ONE_PENDING = /\b1 pending community submission(?!s)/;
+// The count runs straight into the Refresh button's text with no space, so no trailing \b after "pending".
+const ONE_PENDING = /\b1 pending/;
 
 let stack: Stack;
 let ModerationView: ComponentType;
@@ -111,7 +111,7 @@ test("a plain user is refused by the UI, and the server refuses that account the
 test("a moderator sees the real pending queue, confirms one, rejects one with a reason", async () => {
   await signInAs(MODERATOR);
   await render(createElement(ModerationView));
-  await waitFor(() => text().includes("3 pending community submissions"), "the real queue");
+  await waitFor(() => text().includes("3 pending"), "the real queue");
   for (const { name } of [TO_CONFIRM, TO_REJECT, OWN]) assert.ok(text().includes(name), name);
 
   // Their own submission can't be reviewed by them: no buttons, just the explanation.
@@ -122,7 +122,7 @@ test("a moderator sees the real pending queue, confirms one, rejects one with a 
 
   await click(getButton("Confirm", card(TO_CONFIRM.name)));
   await waitFor(() => text().includes(`Confirmed “${TO_CONFIRM.name}”.`), "the confirm notice");
-  await waitFor(() => text().includes("2 pending community submissions"), "the confirmed one to leave the queue");
+  await waitFor(() => text().includes("2 pending"), "the confirmed one to leave the queue");
 
   const rejecting = card(TO_REJECT.name);
   await click(getButton("Reject…", rejecting));

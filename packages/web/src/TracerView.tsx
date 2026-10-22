@@ -1,8 +1,11 @@
 import { useState } from "react";
 import type { ChainId } from "@osstrace/core";
 import { formatTimestamp } from "./timeDisplay.ts";
+import { Checkbox } from "./prism/components.tsx";
+import { Loading, Notice, PageHeader } from "./ui.tsx";
 
 const TRACER_URL = import.meta.env["VITE_TRACER_URL"] ?? "http://localhost:5303";
+const ADR_URL = "https://github.com/OpenTraceIntelligence/OSSTrace/blob/main/docs/adr/";
 
 // --- The Tracer API's response shapes (see packages/features/tracer/README.md) ----------------
 interface Source {
@@ -148,9 +151,10 @@ function edgeAmountText(edge: TraceEdge): string {
   return edge.token?.amount !== null && edge.token?.amount !== undefined ? `${edge.token.amount} ${unit}` : `${edge.token?.rawAmount ?? "?"} raw units of ${unit}`;
 }
 
-export default function TracerView() {
-  const [chain, setChain] = useState<ChainId>("ethereum");
-  const [from, setFrom] = useState("");
+/** `initial` comes from a `#trace/<chain>/<address>` link (a Lookup report's "Trace funds"): it prefills From. */
+export default function TracerView({ initial = null }: { initial?: { chain: ChainId; address: string } | null }) {
+  const [chain, setChain] = useState<ChainId>(initial?.chain ?? "ethereum");
+  const [from, setFrom] = useState(initial?.address ?? "");
   const [to, setTo] = useState("");
   const [maxHops, setMaxHops] = useState(2);
   const [breadth, setBreadth] = useState(5);
@@ -199,105 +203,138 @@ export default function TracerView() {
     }
   }
 
+  const pathMode = to.trim() !== "";
+
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-4">
-      <div className="card overflow-hidden">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-2 border-b border-line p-3">
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <select value={chain} onChange={(e) => setChain(e.target.value as ChainId)} aria-label="Chain" className="ctl shrink-0">
+    <div className="mx-auto w-full max-w-5xl space-y-5">
+      <PageHeader
+        title="Tracer"
+        description="Follow funds outward from an address, up to three hops. Add a destination to check whether a real path connects the two."
+      />
+
+      <form onSubmit={handleSubmit} className="card overflow-hidden">
+        <div className="grid gap-3 p-4 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]">
+          <Field label="Chain">
+            <select value={chain} onChange={(e) => setChain(e.target.value as ChainId)} className="ctl w-full">
               <option value="ethereum">Ethereum</option>
               <option value="solana">Solana</option>
             </select>
+          </Field>
+          <Field label="From">
             <input
               value={from}
               onChange={(e) => setFrom(e.target.value)}
-              placeholder={chain === "ethereum" ? "From: 0x…" : "From: a Solana address"}
-              aria-label="Trace from this address"
-              className="ctl hash min-w-0 flex-1"
+              placeholder={chain === "ethereum" ? "0x…" : "Solana address"}
+              required
+              spellCheck={false}
+              className="ctl hash w-full"
             />
+          </Field>
+          <Field label="To (optional)">
             <input
               value={to}
               onChange={(e) => setTo(e.target.value)}
-              placeholder="To (optional — leave blank to just expand the graph)"
-              aria-label="Does a path reach this address"
-              className="ctl hash min-w-0 flex-1"
+              placeholder="Leave blank to expand the graph"
+              spellCheck={false}
+              className="ctl hash w-full"
             />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <label className="flex items-center gap-1.5 text-xs text-ink-faint">
-              Hops
-              <select value={maxHops} onChange={(e) => setMaxHops(Number(e.target.value))} aria-label="Max hops" className="ctl py-1">
-                {[1, 2, 3].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 border-t border-line bg-ground/40 p-4 sm:grid-cols-3 lg:grid-cols-6">
+          <Field label="Hops">
+            <select value={maxHops} onChange={(e) => setMaxHops(Number(e.target.value))} className="ctl w-full">
+              {[1, 2, 3].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Breadth per hop">
+            <select value={breadth} onChange={(e) => setBreadth(Number(e.target.value))} className="ctl w-full">
+              {[3, 5, 10].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {/* The API applies these to path searches only, so they're inert until a destination is set. */}
+          <Field label="Token" hint={pathMode ? undefined : "path only"}>
+            <input value={token} onChange={(e) => setToken(e.target.value)} disabled={!pathMode} placeholder="USDC, native…" className="ctl w-full disabled:opacity-40" />
+          </Field>
+          <Field label="Min amount" hint={pathMode ? undefined : "path only"}>
+            <input value={minAmount} onChange={(e) => setMinAmount(e.target.value)} disabled={!pathMode} placeholder="0" className="ctl num w-full disabled:opacity-40" />
+          </Field>
+          <Field label="Since" hint={pathMode ? undefined : "path only"}>
+            <input type="datetime-local" value={since} onChange={(e) => setSince(e.target.value)} disabled={!pathMode} className="ctl w-full disabled:opacity-40" />
+          </Field>
+          {followBridges && pathMode ? (
+            <Field label="To chain">
+              <select value={toChain} onChange={(e) => setToChain(e.target.value as ChainId)} className="ctl w-full">
+                <option value="ethereum">Ethereum</option>
+                <option value="solana">Solana</option>
               </select>
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-ink-faint">
-              Breadth
-              <select value={breadth} onChange={(e) => setBreadth(Number(e.target.value))} aria-label="Counterparties expanded per hop" className="ctl py-1">
-                {[3, 5, 10].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Token (e.g. USDC, or native)" aria-label="Token filter" className="ctl w-40 py-1" />
-            <input value={minAmount} onChange={(e) => setMinAmount(e.target.value)} placeholder="Min amount" aria-label="Minimum amount filter" className="ctl num w-28 py-1" />
-            <input type="datetime-local" value={since} onChange={(e) => setSince(e.target.value)} aria-label="Only edges at or after this time" className="ctl py-1" />
-            <label className="flex items-center gap-1.5 text-xs text-ink-faint">
-              <input type="checkbox" checked={followBridges} onChange={(e) => setFollowBridges(e.target.checked)} aria-label="Follow Wormhole bridge hops across chains" />
-              Follow Wormhole bridges
-            </label>
-            {followBridges && to.trim() && (
-              <label className="flex items-center gap-1.5 text-xs text-ink-faint">
-                To chain
-                <select value={toChain} onChange={(e) => setToChain(e.target.value as ChainId)} aria-label="Chain of the To address" className="ctl py-1">
-                  <option value="ethereum">Ethereum</option>
-                  <option value="solana">Solana</option>
-                </select>
-              </label>
-            )}
-            <button type="submit" disabled={state.status === "loading"} className="btn-accent ml-auto shrink-0">
-              {state.status === "loading" ? "Tracing…" : to.trim() ? "Find path" : "Expand graph"}
-            </button>
-          </div>
-        </form>
-        <p className="px-4 py-2.5 text-xs leading-relaxed text-ink-faint">
-          Token/amount/time filters apply to <em>every</em> hop of a found path, not just one of them — tracing one continuous
-          qualifying flow, never an unrelated matching edge found a few hops off the real path. See{" "}
-          <a href="https://github.com/OpenTraceIntelligence/OSSTrace/blob/main/docs/adr/0008-tracer-multi-hop-search-design.md" target="_blank" rel="noreferrer" className="underline hover:text-ink">
+            </Field>
+          ) : (
+            <div />
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-3">
+          <Checkbox checked={followBridges} onCheckedChange={setFollowBridges}>
+            Follow Wormhole bridges
+          </Checkbox>
+          <button type="submit" disabled={state.status === "loading"} className="btn-accent ml-auto shrink-0">
+            {state.status === "loading" ? "Tracing…" : pathMode ? "Find path" : "Expand graph"}
+          </button>
+        </div>
+      </form>
+
+      <details className="px-1 text-xs text-ink-faint">
+        <summary className="cursor-pointer list-none underline decoration-line-strong underline-offset-2 hover:text-ink-dim">How tracing works</summary>
+        <p className="mt-2 max-w-2xl leading-relaxed">
+          Filters apply to <em>every</em> hop of a found path, so a result is one continuous qualifying flow (
+          <a href={ADR_URL + "0008-tracer-multi-hop-search-design.md"} target="_blank" rel="noreferrer" className="underline hover:text-ink">
             ADR 0008
           </a>
-          . With bridges on, a Wormhole transfer between Ethereum and Solana is followed onto the other chain, linked by
-          Wormholescan's index (not re-checked on either chain) — see{" "}
-          <a href="https://github.com/OpenTraceIntelligence/OSSTrace/blob/main/docs/adr/0012-tracer-cross-chain-bridge-hops-via-wormhole.md" target="_blank" rel="noreferrer" className="underline hover:text-ink">
+          ). With bridges on, a Wormhole transfer between Ethereum and Solana is followed onto the other chain, linked by
+          Wormholescan's index rather than re-checked on either chain (
+          <a href={ADR_URL + "0012-tracer-cross-chain-bridge-hops-via-wormhole.md"} target="_blank" rel="noreferrer" className="underline hover:text-ink">
             ADR 0012
           </a>
-          .
+          ).
         </p>
-      </div>
+      </details>
 
-      {state.status === "error" && (
-        <div role="alert" className="rounded-card border border-danger/35 bg-danger/10 px-4 py-3 text-sm text-danger">
-          {state.message}
-        </div>
-      )}
+      {state.status === "error" && <Notice tone="danger">{state.message}</Notice>}
+      {state.status === "loading" && <Loading label="Tracing — this makes real chain calls and can take a moment…" />}
       {state.status === "path" && <PathResult report={state.report} />}
       {state.status === "graph" && <GraphExpansionResult report={state.report} />}
     </div>
   );
 }
 
+function Field({ label, hint, children }: { label: string; hint?: string | undefined; children: React.ReactNode }) {
+  return (
+    <label className="flex min-w-0 flex-col gap-1.5">
+      <span className="flex items-baseline justify-between gap-2 text-xs font-medium text-ink-faint">
+        {label}
+        {hint && <span className="font-normal text-ink-faint/70">{hint}</span>}
+      </span>
+      {children}
+    </label>
+  );
+}
+
 function BudgetNote({ budgetExhausted }: { budgetExhausted: boolean }) {
   if (!budgetExhausted) return null;
   return (
-    <div className="rounded-card border border-warn/30 bg-warn/10 px-4 py-3 text-sm text-warn">
-      The call budget ran out before the search finished — this result is <strong>truncated, not exhaustive</strong>. Raise
-      the hop/breadth limits or try again; a "not found" above does not mean a path has been disproven.
-    </div>
+    <Notice tone="warn">
+      The call budget ran out first, so this result is <strong>truncated, not exhaustive</strong>. A "not found" doesn't
+      disprove a path.
+    </Notice>
   );
 }
 
@@ -352,7 +389,7 @@ function BridgeNotes({ bridges }: { bridges: BridgeReport }) {
   return (
     <section className="card overflow-hidden">
       <div className="card-header">
-        <h2 className="section-title">Bridge activity not followed</h2>
+        <h2 className="text-[15px] font-medium text-ink">Bridge activity not followed</h2>
         <span className="text-xs text-ink-faint">
           <span className="num font-medium text-ink">{bridges.lookupsUsed}</span> Wormholescan lookups
         </span>
@@ -380,22 +417,22 @@ function BridgeNotes({ bridges }: { bridges: BridgeReport }) {
 function PathResult({ report }: { report: TracePathReport }) {
   return (
     <div className="space-y-4">
-      <div className={`rounded-card border px-4 py-3 text-sm ${report.found ? "border-signal/35 bg-signal/10 text-ink" : "border-line bg-raised text-ink-dim"}`}>
+      <Notice tone={report.found ? "success" : "info"}>
         {report.found ? (
           <>
             <strong className="text-signal">Path found</strong> — {report.hopsSearched} hop{report.hopsSearched === 1 ? "" : "s"}, every edge matches the filters.
           </>
         ) : (
           <>
-            <strong>No matching path found</strong> within {report.hopsSearched} hop{report.hopsSearched === 1 ? "" : "s"} ({report.nodesExplored} addresses checked).
+            <strong className="text-ink">No matching path found</strong> within {report.hopsSearched} hop{report.hopsSearched === 1 ? "" : "s"} ({report.nodesExplored} addresses checked).
           </>
         )}
-      </div>
+      </Notice>
       <BudgetNote budgetExhausted={report.budgetExhausted} />
       {report.found && (
         <section className="card overflow-hidden">
           <div className="card-header">
-            <h2 className="section-title">Real path, hop by hop</h2>
+            <h2 className="text-[15px] font-medium text-ink">Path, hop by hop</h2>
             <span className="text-xs text-ink-faint">
               <span className="num font-medium text-ink">{report.adapterCallsUsed}</span> chain calls used
             </span>
@@ -422,7 +459,7 @@ function GraphExpansionResult({ report }: { report: TraceGraphReport }) {
       <BudgetNote budgetExhausted={report.budgetExhausted} />
       <section className="card overflow-hidden">
         <div className="card-header">
-          <h2 className="section-title">Expanded graph</h2>
+          <h2 className="text-[15px] font-medium text-ink">Expanded graph</h2>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-faint">
             <span>
               <span className="num font-medium text-ink">{report.expandedIds.length}</span> nodes expanded
@@ -445,7 +482,7 @@ function GraphExpansionResult({ report }: { report: TraceGraphReport }) {
       {report.frontier.length > 0 && (
         <section className="card overflow-hidden">
           <div className="card-header">
-            <h2 className="section-title">Not expanded further</h2>
+            <h2 className="text-[15px] font-medium text-ink">Not expanded further</h2>
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-faint">
               {[...byReason.entries()].map(([reason, count]) => (
                 <span key={reason} className="chip border-line-strong text-ink-dim">

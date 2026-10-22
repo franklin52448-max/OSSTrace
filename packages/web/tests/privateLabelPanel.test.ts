@@ -72,9 +72,9 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-test("signed out: no panel, just how to get one", async () => {
-  await render(createElement(PrivateLabelPanel, { chain: "ethereum", address: ADDRESS }));
-  await waitFor(() => text().includes("Log in (in the sidebar) to add a private label"), "the logged-out prompt");
+test("signed out: renders nothing (the sign-in prompt is the caller's job, shared across the whole private-notes area)", async () => {
+  const { container } = await render(createElement(PrivateLabelPanel, { chain: "ethereum", address: ADDRESS }));
+  assert.equal(container.textContent, "");
   assert.equal(document.querySelector('section[aria-label="Your private label"]'), null);
   assert.deepEqual(consoleErrors, []);
 });

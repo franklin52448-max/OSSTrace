@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ChainId } from "@osstrace/core";
-import { LockIcon } from "./PrivateLabelPanel.tsx";
 import { apiCall, useSession } from "./session.ts";
+import { EmptyState, Loading, LockIcon, Notice, PageHeader, SignInPrompt } from "./ui.tsx";
 
 const CASES_URL = import.meta.env["VITE_CASES_URL"] ?? "http://localhost:5314";
 
@@ -31,8 +31,6 @@ const STATUS_CLASS: Record<CaseStatus, string> = {
   open: "border-signal/35 bg-signal/10 text-signal",
   closed: "border-line bg-raised text-ink-faint",
 };
-
-const errorBox = "rounded-card border border-danger/35 bg-danger/10 px-3 py-2 text-xs text-danger";
 
 type ListState = { status: "loading" } | { status: "error"; message: string } | { status: "done"; cases: CaseSummary[] };
 
@@ -64,30 +62,29 @@ export default function CasesView() {
 
   if (!token) {
     return (
-      <div className="mx-auto w-full max-w-4xl space-y-4">
+      <div className="mx-auto w-full max-w-4xl space-y-5">
         <Header />
-        <div className="flex items-center gap-2 rounded-card border border-dashed border-line-strong px-4 py-2.5 text-xs text-ink-faint">
-          <LockIcon /> Log in (in the sidebar) to open a case. Cases are private — only you can ever see yours.
-        </div>
+        <SignInPrompt privateNote>Log in to open a case. Only you can ever see your cases.</SignInPrompt>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <Header />
-        {!selectedId && (
-          <div className="flex shrink-0 gap-2">
-            <button type="button" onClick={() => void load()} className="btn-outline">
-              Refresh
-            </button>
-            <button type="button" onClick={() => setShowNew((v) => !v)} className="btn-accent">
-              {showNew ? "Cancel" : "New case"}
-            </button>
-          </div>
-        )}
-      </div>
+    <div className="mx-auto w-full max-w-4xl space-y-5">
+      <Header
+        actions={
+          !selectedId && (
+            <>
+              <button type="button" onClick={() => void load()} className="btn-outline">
+                Refresh
+              </button>
+              <button type="button" onClick={() => setShowNew((v) => !v)} className="btn-accent">
+                {showNew ? "Cancel" : "New case"}
+              </button>
+            </>
+          )
+        }
+      />
 
       {showNew && !selectedId && (
         <NewCaseForm
@@ -111,47 +108,56 @@ export default function CasesView() {
           }}
         />
       ) : (
-        <CaseList list={list} onSelect={(id) => setSelected({ owner: token, id })} />
+        <CaseList list={list} onSelect={(id) => setSelected({ owner: token, id })} onNew={showNew ? undefined : () => setShowNew(true)} />
       )}
     </div>
   );
 }
 
-function Header() {
+function Header({ actions }: { actions?: React.ReactNode }) {
   return (
-    <div>
-      <h1 className="text-lg font-semibold tracking-tight text-ink">Cases</h1>
-      <p className="mt-0.5 flex items-center gap-1.5 text-xs leading-relaxed text-ink-faint">
-        <span className="text-private">
-          <LockIcon />
+    <PageHeader
+      title="Cases"
+      description={
+        <span className="inline-flex items-center gap-1.5">
+          <span className="text-private">
+            <LockIcon />
+          </span>
+          Group addresses and your notes into an investigation. Private to you — not even moderators can see them.
         </span>
-        Group addresses and your own notes into an investigation record. Private to you — not shared with anyone, including
-        moderators and admins (ADR 0011).
-      </p>
-    </div>
+      }
+      actions={actions}
+    />
   );
 }
 
-function CaseList({ list, onSelect }: { list: ListState; onSelect: (id: string) => void }) {
-  if (list.status === "loading") return <div className="text-sm text-ink-faint">Loading…</div>;
-  if (list.status === "error") {
+function CaseList({ list, onSelect, onNew }: { list: ListState; onSelect: (id: string) => void; onNew: (() => void) | undefined }) {
+  if (list.status === "loading") return <Loading />;
+  if (list.status === "error") return <Notice tone="danger">{list.message}</Notice>;
+  if (list.cases.length === 0) {
     return (
-      <div role="alert" className="rounded-card border border-danger/35 bg-danger/10 px-4 py-3 text-sm text-danger">
-        {list.message}
-      </div>
+      <EmptyState
+        title="No cases yet"
+        action={
+          onNew && (
+            <button type="button" onClick={onNew} className="btn-accent">
+              New case
+            </button>
+          )
+        }
+      >
+        Start one to collect the addresses you're investigating, each with your own note.
+      </EmptyState>
     );
   }
-  if (list.cases.length === 0) {
-    return <div className="card px-4 py-6 text-center text-sm text-ink-faint">You have no cases yet.</div>;
-  }
   return (
-    <div className="space-y-2">
+    <div className="card divide-y divide-line overflow-hidden">
       {list.cases.map((c) => (
         <button
           key={c.id}
           type="button"
           onClick={() => onSelect(c.id)}
-          className="card flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-raised"
+          className="flex w-full items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors duration-150 hover:bg-raised"
         >
           <div className="min-w-0">
             <div className="truncate text-sm font-medium text-ink">{c.title}</div>
@@ -187,8 +193,8 @@ function NewCaseForm({ token, onCreated }: { token: string; onCreated: (id: stri
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card space-y-2 p-4">
-      <h2 className="section-title">New case</h2>
+    <form onSubmit={handleSubmit} className="card space-y-3 p-4">
+      <h2 className="text-[15px] font-medium text-ink">New case</h2>
       <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" maxLength={140} required className="ctl w-full" />
       <textarea
         value={description}
@@ -198,7 +204,7 @@ function NewCaseForm({ token, onCreated }: { token: string; onCreated: (id: stri
         rows={3}
         className="ctl w-full"
       />
-      {error && <div className={errorBox}>{error}</div>}
+      {error && <Notice tone="danger">{error}</Notice>}
       <button type="submit" disabled={busy || title.trim() === ""} className="btn-accent">
         {busy ? "Creating…" : "Create case"}
       </button>
@@ -263,22 +269,20 @@ function CaseDetail({ token, caseId, onBack }: { token: string; caseId: string; 
 
   return (
     <div className="space-y-4">
-      <button type="button" onClick={onBack} className="btn-outline">
-        ← Back to your cases
+      <button type="button" onClick={onBack} className="text-sm text-ink-dim transition-colors duration-150 hover:text-ink">
+        ← All cases
       </button>
 
-      {state.status === "loading" && <div className="text-sm text-ink-faint">Loading…</div>}
+      {state.status === "loading" && <Loading />}
       {state.status === "error" && (
-        <div role="alert" className="rounded-card border border-danger/35 bg-danger/10 px-4 py-3 text-sm text-danger">
-          {state.notFound ? "This case doesn't exist (it may have been deleted)." : state.message}
-        </div>
+        <Notice tone="danger">{state.notFound ? "This case doesn't exist (it may have been deleted)." : state.message}</Notice>
       )}
 
       {state.status === "done" && (
         <>
           <section className="card overflow-hidden" aria-label="Case">
             <div className="card-header">
-              <h2 className="truncate text-sm font-medium text-ink">{state.case.title}</h2>
+              <h2 className="truncate text-lg font-semibold tracking-tight text-ink">{state.case.title}</h2>
               <span className={`chip shrink-0 border ${STATUS_CLASS[state.case.status]}`}>{state.case.status}</span>
             </div>
             <div className="space-y-3 px-4 py-3 text-sm">
@@ -318,12 +322,7 @@ function CaseDetail({ token, caseId, onBack }: { token: string; caseId: string; 
                         Reopen case
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => void deleteCase()}
-                      disabled={busy}
-                      className="rounded-ctl border border-danger/40 px-3 py-1.5 text-sm font-medium text-danger transition-colors duration-150 hover:bg-danger/10 disabled:opacity-50"
-                    >
+                    <button type="button" onClick={() => void deleteCase()} disabled={busy} className="btn-danger ml-auto">
                       Delete
                     </button>
                   </div>
@@ -335,18 +334,14 @@ function CaseDetail({ token, caseId, onBack }: { token: string; caseId: string; 
             </div>
           </section>
 
-          {error && (
-            <div role="alert" className={errorBox}>
-              {error}
-            </div>
-          )}
+          {error && <Notice tone="danger">{error}</Notice>}
 
           {state.case.status === "open" && <AddItemForm token={token} base={base} onAdded={load} />}
 
           <section className="card overflow-hidden" aria-label="Addresses in this case">
             <div className="card-header">
-              <h2 className="section-title">Addresses</h2>
-              <span className="num text-xs font-medium text-ink">{state.items.length}</span>
+              <h2 className="text-[15px] font-medium text-ink">Addresses</h2>
+              <span className="num text-xs text-ink-faint">{state.items.length}</span>
             </div>
             {state.items.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm text-ink-faint">No addresses in this case yet.</div>
@@ -412,7 +407,7 @@ function EditCaseForm({
         aria-label="Description"
         className="ctl w-full"
       />
-      {error && <div className={errorBox}>{error}</div>}
+      {error && <Notice tone="danger">{error}</Notice>}
       <div className="flex gap-2">
         <button type="submit" disabled={busy || title.trim() === ""} className="btn-accent">
           Save
@@ -448,8 +443,8 @@ function AddItemForm({ token, base, onAdded }: { token: string; base: string; on
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card space-y-2 p-4">
-      <h2 className="section-title">Add an address</h2>
+    <form onSubmit={handleSubmit} className="card space-y-3 p-4">
+      <h2 className="text-[15px] font-medium text-ink">Add an address</h2>
       <div className="flex flex-col gap-2 sm:flex-row">
         <select value={chain} onChange={(e) => setChain(e.target.value as ChainId)} aria-label="Chain" className="ctl shrink-0">
           <option value="ethereum">Ethereum</option>
@@ -473,7 +468,7 @@ function AddItemForm({ token, base, onAdded }: { token: string; base: string; on
         aria-label="Note"
         className="ctl w-full"
       />
-      {error && <div className={errorBox}>{error}</div>}
+      {error && <Notice tone="danger">{error}</Notice>}
       <button type="submit" disabled={busy || address.trim() === ""} className="btn-accent">
         {busy ? "Adding…" : "Add to case"}
       </button>

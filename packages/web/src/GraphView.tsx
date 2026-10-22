@@ -3,8 +3,12 @@ import type { ChainId } from "@osstrace/core";
 import { forceLayout, type Point } from "./layout.ts";
 import { ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
 import { formatTimestamp } from "./timeDisplay.ts";
+import { CopyButton } from "./prism/components.tsx";
+import { Loading, Notice, PageHeader } from "./ui.tsx";
 
 const VISUALIZER_URL = import.meta.env["VITE_VISUALIZER_URL"] ?? "http://localhost:5302";
+/** Same `#address/<chain>/<address>` route App.tsx's router reads. */
+const addressHref = (chain: ChainId, address: string): string => `#address/${chain}/${encodeURIComponent(address)}`;
 
 // --- The Visualizer API's response shape (see packages/features/visualizer/README.md) ---------
 interface Source {
@@ -84,9 +88,9 @@ function short(address: string): string {
   return address.length > 14 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address;
 }
 
-export default function GraphView() {
-  const [chain, setChain] = useState<ChainId>("ethereum");
-  const [address, setAddress] = useState("");
+export default function GraphView({ initial = null }: { initial?: { chain: ChainId; address: string } | null }) {
+  const [chain, setChain] = useState<ChainId>(initial?.chain ?? "ethereum");
+  const [address, setAddress] = useState(initial?.address ?? "");
   const [limit, setLimit] = useState(10);
   const [state, setState] = useState<GraphState>({ status: "idle" });
 
@@ -107,6 +111,12 @@ export default function GraphView() {
     }
   }, []);
 
+  // Opened from a Lookup report's "Visualize" button: graph that address straight away.
+  useEffect(() => {
+    if (initial) void load(initial.chain, initial.address, limit);
+    // Only on mount: the parent remounts this view (keyed on the address) for a new target.
+  }, []);
+
   function handleSubmit(event: React.FormEvent): void {
     event.preventDefault();
     void load(chain, address, limit);
@@ -119,48 +129,45 @@ export default function GraphView() {
   }
 
   return (
-    <div>
-      {/* Toolbar: chain / address / hop-depth controls over the graph workspace. */}
-      <div className="card overflow-hidden">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-2 border-b border-line p-3 sm:flex-row">
-          <select value={chain} onChange={(e) => setChain(e.target.value as ChainId)} aria-label="Chain" className="ctl shrink-0">
-            <option value="ethereum">Ethereum</option>
-            <option value="solana">Solana</option>
-          </select>
-          <input
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder={chain === "ethereum" ? "0x…" : "a Solana address"}
-            aria-label="Address to graph"
-            className="ctl hash min-w-0 flex-1"
-          />
-          <select
-            value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
-            aria-label="How many recent transactions to graph"
-            className="ctl shrink-0"
-          >
-            {[5, 10, 25, 50].map((n) => (
-              <option key={n} value={n}>
-                last {n} txs
-              </option>
-            ))}
-          </select>
-          <button type="submit" disabled={state.status === "loading"} className="btn-accent shrink-0">
-            {state.status === "loading" ? "Building graph…" : "Graph it"}
-          </button>
-        </form>
-        <p className="px-4 py-2.5 text-xs leading-relaxed text-ink-faint">
-          One hop: the address and the counterparties in its most recent transactions. Click a counterparty, then “Graph this
-          address” to step outward one real query at a time.
-        </p>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Visualizer"
+        description="An address and the counterparties in its most recent transactions. Select a counterparty to step outward, one real query at a time."
+      />
 
-      {state.status === "error" && (
-        <div role="alert" className="mt-4 rounded-card border border-danger/35 bg-danger/10 px-4 py-3 text-sm text-danger">
-          {state.message}
-        </div>
-      )}
+      {/* Toolbar: chain / address / transaction-count controls over the graph workspace. */}
+      <form onSubmit={handleSubmit} className="card flex flex-col gap-2 p-3 sm:flex-row">
+        <select value={chain} onChange={(e) => setChain(e.target.value as ChainId)} aria-label="Chain" className="ctl shrink-0">
+          <option value="ethereum">Ethereum</option>
+          <option value="solana">Solana</option>
+        </select>
+        <input
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          placeholder={chain === "ethereum" ? "Address to graph (0x…)" : "Solana address to graph"}
+          aria-label="Address to graph"
+          spellCheck={false}
+          className="ctl hash min-w-0 flex-1"
+        />
+        <select
+          value={limit}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          aria-label="How many recent transactions to graph"
+          className="ctl shrink-0"
+        >
+          {[5, 10, 25, 50].map((n) => (
+            <option key={n} value={n}>
+              Last {n} txs
+            </option>
+          ))}
+        </select>
+        <button type="submit" disabled={state.status === "loading"} className="btn-accent shrink-0">
+          {state.status === "loading" ? "Building…" : "Graph it"}
+        </button>
+      </form>
+
+      {state.status === "error" && <Notice tone="danger">{state.message}</Notice>}
+      {state.status === "loading" && <Loading label="Fetching transactions and building the graph…" />}
 
       {state.status === "done" && <GraphResult key={`${state.report.center.chain}:${state.report.center.value}`} report={state.report} onRecenter={recenter} />}
     </div>
@@ -188,19 +195,18 @@ function GraphResult({ report, onRecenter }: { report: GraphReport; onRecenter: 
   }, [report]);
 
   return (
-    <div className="mt-4 space-y-4">
+    <div className="space-y-4">
       {!report.transactions.available && (
-        <div className="rounded-card border border-warn/30 bg-warn/10 px-4 py-3 text-sm text-warn">
-          Transaction history unavailable — {report.transactions.reason}. Only the address itself (and anything on record about it) is
-          shown; no counterparties are drawn because none were fetched.
-        </div>
+        <Notice tone="warn">
+          No counterparties drawn: transaction history is unavailable ({report.transactions.reason}).
+        </Notice>
       )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         {/* Framed canvas: header strip carries the real fetch stats, the field below is the graph. */}
         <section className="card flex min-w-0 flex-col overflow-hidden" aria-label="Transaction graph">
           <div className="card-header">
-            <h2 className="section-title">Transaction graph</h2>
+            <h2 className="text-[15px] font-medium text-ink">Graph</h2>
             {report.transactions.available && (
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-faint">
                 <span>
@@ -210,11 +216,11 @@ function GraphResult({ report, onRecenter }: { report: GraphReport; onRecenter: 
                   <span className="num font-medium text-ink">{report.edges.length}</span> transfers drawn
                 </span>
                 <span>
-                  <span className="num font-medium text-ink">{report.transactions.fetched}</span> recent transactions fetched
+                  <span className="num font-medium text-ink">{report.transactions.fetched}</span> txs fetched
                 </span>
                 {report.omitted.length > 0 && (
                   <span>
-                    <span className="num font-medium text-ink">{report.omitted.length}</span> not drawn (see below)
+                    <span className="num font-medium text-ink">{report.omitted.length}</span> not drawn
                   </span>
                 )}
               </div>
@@ -276,10 +282,10 @@ function nodeRadius(node: GraphNode): number {
 }
 
 function nodeColor(node: GraphNode): { fill: string; stroke: string } {
-  if (node.tags.some((t) => t.tag === "sanctioned")) return { fill: "#7f1d1d", stroke: "#f87171" };
-  if (node.role === "center") return { fill: "#064e3b", stroke: "#34d399" };
-  if (node.label || node.entity || node.tags.length > 0) return { fill: "#78350f", stroke: "#fbbf24" };
-  return { fill: "#262626", stroke: "#737373" };
+  if (node.tags.some((t) => t.tag === "sanctioned")) return { fill: "#3b1a2a", stroke: "#f47b7b" };
+  if (node.role === "center") return { fill: "#1d2a5d", stroke: "#8ea2ff" };
+  if (node.label || node.entity || node.tags.length > 0) return { fill: "#3a3020", stroke: "#f4c76a" };
+  return { fill: "#18181b", stroke: "#52525b" };
 }
 
 function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; selectedId: string | null; onSelect: (id: string) => void }) {
@@ -345,7 +351,6 @@ function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; se
   // Fit once on first real size measurement (and when the container is resized).
   useEffect(() => {
     fit();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fit on resize only, not on every drag
   }, [size]);
 
   const zoomAt = useCallback((factor: number, cx: number, cy: number) => {
@@ -424,7 +429,7 @@ function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; se
           <defs>
             {(["in", "out"] as const).map((dir) => (
               <marker key={dir} id={`arrow-${dir}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                <path d="M0,0 L10,5 L0,10 z" fill={dir === "in" ? "#34d399" : "#fb923c"} />
+                <path d="M0,0 L10,5 L0,10 z" fill={dir === "in" ? "#4ad6a0" : "#f5a35c"} />
               </marker>
             ))}
           </defs>
@@ -451,7 +456,7 @@ function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; se
               const mx = (x1 + x2) / 2 - uy * bend;
               const my = (y1 + y2) / 2 + ux * bend;
               const dimmed = focusId !== null && focusId !== report.center.value && link.source !== focusId && link.target !== focusId;
-              const color = link.direction === "in" ? "#34d399" : "#fb923c";
+              const color = link.direction === "in" ? "#4ad6a0" : "#f5a35c";
               return (
                 <g key={link.key} opacity={dimmed ? 0.15 : 0.85}>
                   <path
@@ -486,9 +491,9 @@ function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; se
                   onPointerLeave={() => setHoverId(null)}
                 >
                   <title>{`${name ? `${name}\n` : ""}${node.id}\n${node.stats.txCount} transfer(s)`}</title>
-                  {isSelected && <circle r={r + 6} fill="none" stroke="#e5e5e5" strokeWidth={1.5} strokeDasharray="3 3" />}
+                  {isSelected && <circle r={r + 6} fill="none" stroke="#ededef" strokeWidth={1.5} strokeDasharray="3 3" />}
                   <circle r={r} fill={fill} stroke={stroke} strokeWidth={node.role === "center" ? 3 : 2} />
-                  <text y={r + 20} textAnchor="middle" fontSize={11} fill={name ? "#fde68a" : "#a3a3a3"} className="pointer-events-none">
+                  <text y={r + 20} textAnchor="middle" fontSize={11} fill={name ? "#f4d58d" : "#a1a1a8"} className="pointer-events-none">
                     {name ? (name.length > 24 ? `${name.slice(0, 23)}…` : name) : short(node.id)}
                   </text>
                 </g>
@@ -538,8 +543,13 @@ function NodePanel({ node, report, onRecenter }: { node: GraphNode; report: Grap
   return (
     <aside className="card space-y-3 p-4 text-sm lg:max-h-[624px] lg:overflow-y-auto" aria-label="Selected node">
       <div>
-        <div className="section-title">{node.role === "center" ? "Queried address" : "Counterparty"}</div>
-        <div className="hash mt-1.5 break-all text-xs text-ink-dim">{node.id}</div>
+        <div className="text-xs font-medium text-ink-faint">{node.role === "center" ? "Queried address" : "Counterparty"}</div>
+        <div className="mt-1 flex min-w-0 items-center gap-1">
+          <a href={addressHref(node.address.chain, node.id)} title={node.id} className="hash min-w-0 truncate text-sm text-ink hover:text-signal">
+            {node.id}
+          </a>
+          <CopyButton value={node.id} label="Copy address" className="small shrink-0 !text-ink-faint" />
+        </div>
       </div>
 
       {node.label ? (
@@ -605,18 +615,14 @@ function NodePanel({ node, report, onRecenter }: { node: GraphNode; report: Grap
       </p>
 
       {node.role === "counterparty" && (
-        <button
-          type="button"
-          onClick={() => onRecenter(node)}
-          className="w-full rounded-ctl border border-signal/40 bg-signal/10 px-3 py-1.5 text-xs font-medium text-signal transition-colors duration-150 hover:bg-signal/20"
-        >
+        <button type="button" onClick={() => onRecenter(node)} className="btn-accent w-full">
           Graph this address
         </button>
       )}
 
       {edges.length > 0 && (
         <div>
-          <div className="section-title">Transfers</div>
+          <div className="text-xs font-medium text-ink-faint">Transfers</div>
           <ul className="mt-1 divide-y divide-line border-t border-line">
             {edges.map((e) => {
               // Direction from this node's point of view.

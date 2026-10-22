@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { signIn, signOut, useSession } from "./session.ts";
 
-const inputClass = "rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm";
-
 /** Log in / sign up / log out, against the real accounts API (`@osstrace/accounts`). */
 export default function AccountPanel() {
   const session = useSession();
@@ -14,21 +12,28 @@ export default function AccountPanel() {
   const [error, setError] = useState<string | null>(null);
 
   if (session.status === "checking") {
-    return <div className="mt-3 text-xs text-neutral-500">Checking session…</div>;
+    return <div className="text-xs text-ink-faint">Checking session…</div>;
   }
 
   if (session.status === "signed-in" || session.status === "unreachable") {
     return (
-      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-neutral-400">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs text-ink-dim">
         {session.status === "signed-in" ? (
-          <span>
-            Signed in as <span className="text-neutral-200">{session.user.email}</span>
-            {session.user.role !== "user" && <span className="ml-1 rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-300">{session.user.role}</span>}
+          <span className="min-w-0">
+            <span className="text-ink-faint">Signed in as </span>
+            <span className="break-all font-medium text-ink">{session.user.email}</span>
+            {session.user.role !== "user" && (
+              <span className="chip ml-1.5 border-info/35 bg-info/10 text-info align-middle">{session.user.role}</span>
+            )}
           </span>
         ) : (
-          <span className="text-amber-300">Session not checked: {session.message}</span>
+          <span className="text-warn">Session not checked: {session.message}</span>
         )}
-        <button type="button" onClick={() => void signOut()} className="text-neutral-400 underline hover:text-neutral-200">
+        <button
+          type="button"
+          onClick={() => void signOut()}
+          className="ml-auto text-ink-faint underline decoration-line-strong underline-offset-2 transition-colors duration-150 hover:text-ink"
+        >
           Log out
         </button>
       </div>
@@ -37,8 +42,12 @@ export default function AccountPanel() {
 
   if (!open) {
     return (
-      <div className="mt-3 text-xs text-neutral-500">
-        <button type="button" onClick={() => setOpen(true)} className="text-emerald-400 hover:text-emerald-300">
+      <div className="text-xs text-ink-faint">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="font-medium text-signal transition-colors duration-150 hover:text-[#53e6a6] hover:underline underline-offset-2"
+        >
           Log in or sign up
         </button>{" "}
         to suggest labels.
@@ -61,8 +70,8 @@ export default function AccountPanel() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-3 rounded-md border border-neutral-800 bg-neutral-900 p-3" aria-label={mode === "login" ? "Log in" : "Sign up"}>
-      <div className="mb-2 flex gap-3 text-sm">
+    <form onSubmit={handleSubmit} className="space-y-2.5" aria-label={mode === "login" ? "Log in" : "Sign up"}>
+      <div className="flex items-center gap-1 text-sm">
         {(["login", "signup"] as const).map((m) => (
           <button
             key={m}
@@ -71,42 +80,48 @@ export default function AccountPanel() {
               setMode(m);
               setError(null);
             }}
-            className={mode === m ? "font-medium text-neutral-100" : "text-neutral-500 hover:text-neutral-300"}
+            className={
+              mode === m
+                ? "rounded-chip px-2 py-1 font-medium text-ink transition-colors duration-150"
+                : "rounded-chip px-2 py-1 text-ink-faint transition-colors duration-150 hover:text-ink-dim"
+            }
           >
             {m === "login" ? "Log in" : "Sign up"}
           </button>
         ))}
-        <button type="button" onClick={() => setOpen(false)} className="ml-auto text-xs text-neutral-500 hover:text-neutral-300">
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="ml-auto text-xs text-ink-faint transition-colors duration-150 hover:text-ink-dim"
+        >
           Cancel
         </button>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <input
-          type="email"
-          required
-          autoComplete="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className={`${inputClass} min-w-0 flex-1`}
-        />
-        <input
-          type="password"
-          required
-          autoComplete={mode === "login" ? "current-password" : "new-password"}
-          minLength={mode === "signup" ? 10 : undefined}
-          placeholder={mode === "signup" ? "Password (10+ characters)" : "Password"}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className={`${inputClass} min-w-0 flex-1`}
-        />
-        <button type="submit" disabled={busy} className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium hover:bg-emerald-500 disabled:opacity-50">
-          {busy ? "…" : mode === "login" ? "Log in" : "Create account"}
-        </button>
-      </div>
-      {error && <div className="mt-2 text-xs text-red-300">{error}</div>}
+      <input
+        type="email"
+        required
+        autoComplete="email"
+        placeholder="Email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="ctl w-full"
+      />
+      <input
+        type="password"
+        required
+        autoComplete={mode === "login" ? "current-password" : "new-password"}
+        minLength={mode === "signup" ? 10 : undefined}
+        placeholder={mode === "signup" ? "Password (10+ characters)" : "Password"}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        className="ctl w-full"
+      />
+      <button type="submit" disabled={busy} className="btn-accent w-full">
+        {busy ? "…" : mode === "login" ? "Log in" : "Create account"}
+      </button>
+      {error && <div className="text-xs text-danger">{error}</div>}
       {mode === "signup" && (
-        <p className="mt-2 text-xs text-neutral-500">
+        <p className="text-xs leading-relaxed text-ink-faint">
           Your email is only an identifier: it isn't verified, and there's no password reset by email yet.
         </p>
       )}

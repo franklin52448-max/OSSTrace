@@ -57,8 +57,8 @@ export default function PrivateLabelPanel({ chain, address }: { chain: ChainId; 
 
   if (!token) {
     return (
-      <div className="flex items-center gap-2 rounded-md border border-dashed border-neutral-800 px-4 py-2 text-xs text-neutral-500">
-        <LockIcon /> Log in (above) to add a private label to this address — visible only to you.
+      <div className="flex items-center gap-2 rounded-card border border-dashed border-line-strong px-4 py-2.5 text-xs text-ink-faint">
+        <LockIcon /> Log in (in the sidebar) to add a private label to this address — visible only to you.
       </div>
     );
   }
@@ -99,33 +99,45 @@ export default function PrivateLabelPanel({ chain, address }: { chain: ChainId; 
   return (
     <section
       aria-label="Your private label"
-      className="rounded-md border border-dashed border-violet-700/70 bg-violet-950/30 px-4 py-3"
+      className="rounded-card border border-dashed border-private/45 bg-private/[0.07] px-4 py-3"
     >
-      <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-violet-300">
-        <LockIcon /> Your private label
-        <span className="ml-auto normal-case tracking-normal font-normal text-violet-400/80">only visible to you</span>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold uppercase tracking-wider text-private">
+        <span className="flex items-center gap-1.5">
+          <LockIcon /> Your private label
+        </span>
+        <span className="ml-auto text-[11px] font-normal normal-case tracking-normal text-private/70">only visible to you</span>
       </div>
 
-      {state.status === "loading" && <div className="mt-2 text-sm text-neutral-500">Loading…</div>}
-      {state.status === "error" && <div className="mt-2 text-sm text-red-300">{state.message}</div>}
+      {state.status === "loading" && <div className="mt-2 text-sm text-ink-faint">Loading…</div>}
+      {state.status === "error" && <div className="mt-2 text-sm text-danger">{state.message}</div>}
 
       {state.status === "ready" && !editing && (
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
           {current ? (
-            <span className="text-base italic text-violet-100" data-testid="private-label-text">“{current.label}”</span>
+            <span className="text-base italic text-private" data-testid="private-label-text">
+              “{current.label}”
+            </span>
           ) : (
-            <span className="text-sm text-neutral-500">You haven't labelled this address.</span>
+            <span className="text-sm text-ink-faint">You haven't labelled this address.</span>
           )}
           <div className="flex gap-2 text-sm">
             <button
               type="button"
-              onClick={() => { setDraft(current?.label ?? ""); setEditing(true); }}
-              className="rounded-md border border-violet-800 px-3 py-1 text-violet-200 hover:bg-violet-900/50"
+              onClick={() => {
+                setDraft(current?.label ?? "");
+                setEditing(true);
+              }}
+              className="rounded-ctl border border-private/45 px-3 py-1 text-xs font-medium text-private transition-colors duration-150 hover:bg-private/15"
             >
               {current ? "Edit" : "Add private label"}
             </button>
             {current && (
-              <button type="button" onClick={remove} disabled={busy} className="rounded-md border border-neutral-700 px-3 py-1 text-neutral-300 hover:bg-neutral-800 disabled:opacity-50">
+              <button
+                type="button"
+                onClick={remove}
+                disabled={busy}
+                className="btn-outline text-xs disabled:opacity-50"
+              >
                 Remove
               </button>
             )}
@@ -134,7 +146,7 @@ export default function PrivateLabelPanel({ chain, address }: { chain: ChainId; 
       )}
 
       {state.status === "ready" && editing && (
-        <form onSubmit={save} className="mt-2 flex flex-col gap-2 sm:flex-row">
+        <form onSubmit={save} className="mt-2.5 flex flex-col gap-2 sm:flex-row">
           <label className="flex-1">
             <span className="sr-only">Private label</span>
             <input
@@ -143,14 +155,22 @@ export default function PrivateLabelPanel({ chain, address }: { chain: ChainId; 
               maxLength={200}
               onChange={(e) => setDraft(e.target.value)}
               placeholder="e.g. my cold wallet"
-              className="w-full rounded-md border border-violet-800 bg-neutral-950 px-3 py-1.5 text-sm"
+              className="ctl w-full border-private/45 focus:border-private focus:shadow-[0_0_0_3px_rgb(183_166_248_/_0.15)]"
             />
           </label>
           <div className="flex gap-2 text-sm">
-            <button type="submit" disabled={busy || draft.trim() === ""} className="rounded-md bg-violet-700 px-3 py-1.5 font-medium hover:bg-violet-600 disabled:opacity-50">
+            <button
+              type="submit"
+              disabled={busy || draft.trim() === ""}
+              className="rounded-ctl bg-private px-3 py-1.5 text-xs font-semibold text-[#140c26] transition-colors duration-150 hover:bg-[#cbbdfb] disabled:opacity-50"
+            >
               Save
             </button>
-            <button type="button" onClick={() => setEditing(false)} className="rounded-md border border-neutral-700 px-3 py-1.5 hover:bg-neutral-800">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="rounded-ctl border border-line-strong px-3 py-1.5 text-xs font-medium text-ink-dim transition-colors duration-150 hover:bg-raised hover:text-ink"
+            >
               Cancel
             </button>
           </div>
@@ -158,11 +178,15 @@ export default function PrivateLabelPanel({ chain, address }: { chain: ChainId; 
       )}
 
       {current && !editing && (
-        <div className="mt-1 text-xs text-neutral-500">
+        <div className="mt-1.5 text-[11px] text-ink-faint">
           Saved {new Date(current.updatedAt).toLocaleString()} · not a public label, has no source, never shared
         </div>
       )}
-      {actionError && <div className="mt-2 text-xs text-red-300" role="alert">{actionError}</div>}
+      {actionError && (
+        <div className="mt-2 text-xs text-danger" role="alert">
+          {actionError}
+        </div>
+      )}
     </section>
   );
 }

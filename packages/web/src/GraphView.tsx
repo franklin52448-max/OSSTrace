@@ -118,48 +118,46 @@ export default function GraphView() {
 
   return (
     <div>
-      <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-2 sm:flex-row">
-        <select
-          value={chain}
-          onChange={(e) => setChain(e.target.value as ChainId)}
-          className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-        >
-          <option value="ethereum">Ethereum</option>
-          <option value="solana">Solana</option>
-        </select>
-        <input
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          placeholder={chain === "ethereum" ? "0x..." : "a Solana address"}
-          className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-        />
-        <select
-          value={limit}
-          onChange={(e) => setLimit(Number(e.target.value))}
-          aria-label="How many recent transactions to graph"
-          className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm"
-        >
-          {[5, 10, 25, 50].map((n) => (
-            <option key={n} value={n}>
-              last {n} txs
-            </option>
-          ))}
-        </select>
-        <button
-          type="submit"
-          disabled={state.status === "loading"}
-          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500 disabled:opacity-50"
-        >
-          {state.status === "loading" ? "Building graph..." : "Graph it"}
-        </button>
-      </form>
-      <p className="mt-2 text-xs text-neutral-500">
-        One hop: the address and the counterparties in its most recent transactions. Click a counterparty, then “Graph this
-        address” to step outward one real query at a time.
-      </p>
+      {/* Toolbar: chain / address / hop-depth controls over the graph workspace. */}
+      <div className="card overflow-hidden">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-2 border-b border-line p-3 sm:flex-row">
+          <select value={chain} onChange={(e) => setChain(e.target.value as ChainId)} aria-label="Chain" className="ctl shrink-0">
+            <option value="ethereum">Ethereum</option>
+            <option value="solana">Solana</option>
+          </select>
+          <input
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder={chain === "ethereum" ? "0x…" : "a Solana address"}
+            aria-label="Address to graph"
+            className="ctl hash min-w-0 flex-1"
+          />
+          <select
+            value={limit}
+            onChange={(e) => setLimit(Number(e.target.value))}
+            aria-label="How many recent transactions to graph"
+            className="ctl shrink-0"
+          >
+            {[5, 10, 25, 50].map((n) => (
+              <option key={n} value={n}>
+                last {n} txs
+              </option>
+            ))}
+          </select>
+          <button type="submit" disabled={state.status === "loading"} className="btn-accent shrink-0">
+            {state.status === "loading" ? "Building graph…" : "Graph it"}
+          </button>
+        </form>
+        <p className="px-4 py-2.5 text-xs leading-relaxed text-ink-faint">
+          One hop: the address and the counterparties in its most recent transactions. Click a counterparty, then “Graph this
+          address” to step outward one real query at a time.
+        </p>
+      </div>
 
       {state.status === "error" && (
-        <div className="mt-6 rounded-md border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">{state.message}</div>
+        <div role="alert" className="mt-4 rounded-card border border-danger/35 bg-danger/10 px-4 py-3 text-sm text-danger">
+          {state.message}
+        </div>
       )}
 
       {state.status === "done" && <GraphResult key={`${state.report.center.chain}:${state.report.center.value}`} report={state.report} onRecenter={recenter} />}
@@ -188,55 +186,68 @@ function GraphResult({ report, onRecenter }: { report: GraphReport; onRecenter: 
   }, [report]);
 
   return (
-    <div className="mt-6 space-y-4">
-      {!report.transactions.available ? (
-        <div className="rounded-md border border-amber-800 bg-amber-950/40 px-4 py-3 text-sm text-amber-200">
+    <div className="mt-4 space-y-4">
+      {!report.transactions.available && (
+        <div className="rounded-card border border-warn/30 bg-warn/10 px-4 py-3 text-sm text-warn">
           Transaction history unavailable — {report.transactions.reason}. Only the address itself (and anything on record about it) is
           shown; no counterparties are drawn because none were fetched.
-        </div>
-      ) : (
-        <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-neutral-400">
-          <span>
-            <span className="text-neutral-100">{report.nodes.length - 1}</span> counterparties
-          </span>
-          <span>
-            <span className="text-neutral-100">{report.edges.length}</span> transfers drawn
-          </span>
-          <span>
-            <span className="text-neutral-100">{report.transactions.fetched}</span> recent transactions fetched
-          </span>
-          {report.omitted.length > 0 && (
-            <span>
-              <span className="text-neutral-100">{report.omitted.length}</span> not drawn (see below)
-            </span>
-          )}
         </div>
       )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <GraphCanvas report={report} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
+        {/* Framed canvas: header strip carries the real fetch stats, the field below is the graph. */}
+        <section className="card flex min-w-0 flex-col overflow-hidden" aria-label="Transaction graph">
+          <div className="card-header">
+            <h2 className="section-title">Transaction graph</h2>
+            {report.transactions.available && (
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-faint">
+                <span>
+                  <span className="num font-medium text-ink">{report.nodes.length - 1}</span> counterparties
+                </span>
+                <span>
+                  <span className="num font-medium text-ink">{report.edges.length}</span> transfers drawn
+                </span>
+                <span>
+                  <span className="num font-medium text-ink">{report.transactions.fetched}</span> recent transactions fetched
+                </span>
+                {report.omitted.length > 0 && (
+                  <span>
+                    <span className="num font-medium text-ink">{report.omitted.length}</span> not drawn (see below)
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+          <GraphCanvas report={report} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
+        </section>
         {selected && <NodePanel node={selected} report={report} onRecenter={onRecenter} />}
       </div>
 
       {report.omitted.length > 0 && (
-        <details className="rounded-md border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm">
-          <summary className="cursor-pointer text-neutral-300">
-            {report.omitted.length} fetched transaction{report.omitted.length === 1 ? "" : "s"} not drawn as edges
+        <details className="card px-4 py-3 text-sm">
+          <summary className="cursor-pointer list-none text-ink-dim transition-colors duration-150 hover:text-ink">
+            <span className="num font-medium">{report.omitted.length}</span> fetched transaction
+            {report.omitted.length === 1 ? "" : "s"} not drawn as edges
           </summary>
-          <ul className="mt-2 space-y-1 text-xs text-neutral-400">
+          <ul className="mt-3 space-y-1 text-xs text-ink-faint">
             {[...omittedByReason.entries()].map(([reason, count]) => (
               <li key={reason}>
-                {count} × {OMISSION_TEXT[reason]}
+                <span className="num">{count}</span> × {OMISSION_TEXT[reason]}
               </li>
             ))}
           </ul>
-          <ul className="mt-3 divide-y divide-neutral-800 text-xs">
+          <ul className="mt-3 divide-y divide-line border-t border-line">
             {report.omitted.map((o) => (
               <li key={`${o.hash}:${o.reason}`} className="flex items-center justify-between gap-3 py-1.5">
-                <a href={TX_URL[report.center.chain](o.hash)} target="_blank" rel="noreferrer" className="truncate font-mono text-neutral-400 hover:text-neutral-200">
+                <a
+                  href={TX_URL[report.center.chain](o.hash)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hash truncate text-ink-faint transition-colors duration-150 hover:text-ink"
+                >
                   {o.hash}
                 </a>
-                <span className="shrink-0 text-neutral-500">{o.reason}</span>
+                <span className="shrink-0 text-ink-faint">{o.reason}</span>
               </li>
             ))}
           </ul>
@@ -394,8 +405,8 @@ function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; se
   const focusId = hoverId ?? selectedId;
 
   return (
-    <div className="relative overflow-hidden rounded-md border border-neutral-800 bg-neutral-900">
-      <div ref={containerRef} className="h-[420px] w-full sm:h-[560px]">
+    <div className="relative">
+      <div ref={containerRef} className="graph-field h-[420px] w-full sm:h-[560px]">
         <svg
           ref={svgRef}
           width={size.width}
@@ -497,18 +508,18 @@ function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; se
             title={b.title}
             aria-label={b.title}
             onClick={b.action}
-            className="h-8 w-8 rounded-md border border-neutral-700 bg-neutral-950/90 text-sm text-neutral-200 hover:bg-neutral-800"
+            className="h-8 w-8 rounded-ctl border border-line-strong bg-ground-deep/90 text-sm text-ink-dim shadow-card backdrop-blur-sm transition-colors duration-150 hover:bg-raised hover:text-ink"
           >
             {b.label}
           </button>
         ))}
       </div>
 
-      <div className="pointer-events-none absolute bottom-2 left-2 flex flex-wrap gap-x-3 gap-y-1 rounded bg-neutral-950/85 px-2 py-1 text-[11px] text-neutral-400">
-        <span className="text-emerald-400">→ into the address</span>
-        <span className="text-orange-400">→ out of it</span>
-        <span className="text-amber-300">● labeled</span>
-        <span className="text-red-400">● sanctioned</span>
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex flex-wrap gap-x-4 gap-y-1 border-t border-line bg-panel/90 px-3 py-1.5 text-[11px] text-ink-faint">
+        <span className="text-inbound">→ into the address</span>
+        <span className="text-outbound">→ out of it</span>
+        <span className="text-warn">● labeled</span>
+        <span className="text-danger">● sanctioned</span>
         <span>drag to pan · scroll to zoom · click a node</span>
       </div>
     </div>
@@ -523,29 +534,34 @@ function NodePanel({ node, report, onRecenter }: { node: GraphNode; report: Grap
   const edges = report.edges.filter((e) => e.source === node.id || e.target === node.id);
 
   return (
-    <aside className="space-y-3 rounded-md border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm lg:max-h-[560px] lg:overflow-y-auto">
+    <aside className="card space-y-3 p-4 text-sm lg:max-h-[624px] lg:overflow-y-auto" aria-label="Selected node">
       <div>
-        <div className="text-xs uppercase tracking-wide text-neutral-500">{node.role === "center" ? "Queried address" : "Counterparty"}</div>
-        <div className="mt-1 break-all font-mono text-xs text-neutral-200">{node.id}</div>
+        <div className="section-title">{node.role === "center" ? "Queried address" : "Counterparty"}</div>
+        <div className="hash mt-1.5 break-all text-xs text-ink-dim">{node.id}</div>
       </div>
 
       {node.label ? (
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium">{node.label.name}</span>
-            <span className="rounded bg-neutral-800 px-2 py-0.5 text-xs text-neutral-400">{node.label.confidence}</span>
+            <span className="font-medium text-ink">{node.label.name}</span>
+            <span className="chip border-line-strong bg-raised text-ink-dim">{node.label.confidence}</span>
             <ReviewBadge label={node.label} />
           </div>
-          <a href={node.label.source.url} target="_blank" rel="noreferrer" className="mt-1 block text-xs text-neutral-500 hover:text-neutral-300">
+          <a
+            href={node.label.source.url}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 block text-xs text-ink-faint underline decoration-line-strong underline-offset-2 transition-colors duration-150 hover:text-ink-dim"
+          >
             Source: {node.label.source.description} · added {node.label.source.addedAt}
           </a>
           <SubmissionByline label={node.label} />
         </div>
       ) : (
-        <div className="text-xs text-neutral-500">No label on record.</div>
+        <div className="text-xs text-ink-faint">No label on record.</div>
       )}
 
-      {node.entity && <div className="text-xs text-neutral-300">Entity: {node.entity.name}</div>}
+      {node.entity && <div className="text-xs text-ink-dim">Entity: {node.entity.name}</div>}
 
       {node.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
@@ -558,8 +574,8 @@ function NodePanel({ node, report, onRecenter }: { node: GraphNode; report: Grap
               title={t.source.description}
               className={
                 t.tag === "sanctioned"
-                  ? "rounded bg-red-900 px-2 py-0.5 text-xs font-medium text-red-200"
-                  : "rounded bg-neutral-800 px-2 py-0.5 text-xs text-neutral-300"
+                  ? "chip border-danger/40 bg-danger/15 text-danger transition-colors duration-150 hover:bg-danger/25"
+                  : "chip border-line-strong bg-raised text-ink-dim transition-colors duration-150 hover:bg-line-strong"
               }
             >
               {t.tag === "sanctioned" ? "SANCTIONED" : t.tag}
@@ -568,21 +584,21 @@ function NodePanel({ node, report, onRecenter }: { node: GraphNode; report: Grap
         </div>
       )}
 
-      <dl className="grid grid-cols-2 gap-2 text-xs">
+      <dl className="grid grid-cols-2 gap-2 rounded-ctl border border-line bg-ground-deep/60 p-2.5 text-xs">
         <div>
-          <dt className="text-neutral-500">Received ({node.stats.inCount})</dt>
-          <dd className="break-all text-emerald-400">
+          <dt className="text-ink-faint">Received ({node.stats.inCount})</dt>
+          <dd className="num mt-0.5 break-all font-mono text-inbound">
             {node.stats.totalIn} {symbol}
           </dd>
         </div>
         <div>
-          <dt className="text-neutral-500">Sent ({node.stats.outCount})</dt>
-          <dd className="break-all text-orange-400">
+          <dt className="text-ink-faint">Sent ({node.stats.outCount})</dt>
+          <dd className="num mt-0.5 break-all font-mono text-outbound">
             {node.stats.totalOut} {symbol}
           </dd>
         </div>
       </dl>
-      <p className="text-[11px] text-neutral-500">
+      <p className="text-[11px] leading-relaxed text-ink-faint">
         Totals cover only the transfers in this graph{node.role === "counterparty" ? " (with the queried address)" : ""}, not full history.
       </p>
 
@@ -590,7 +606,7 @@ function NodePanel({ node, report, onRecenter }: { node: GraphNode; report: Grap
         <button
           type="button"
           onClick={() => onRecenter(node)}
-          className="w-full rounded-md border border-emerald-700 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-950"
+          className="w-full rounded-ctl border border-signal/40 bg-signal/10 px-3 py-1.5 text-xs font-medium text-signal transition-colors duration-150 hover:bg-signal/20"
         >
           Graph this address
         </button>
@@ -598,25 +614,25 @@ function NodePanel({ node, report, onRecenter }: { node: GraphNode; report: Grap
 
       {edges.length > 0 && (
         <div>
-          <div className="text-xs uppercase tracking-wide text-neutral-500">Transfers</div>
-          <ul className="mt-1 divide-y divide-neutral-800">
+          <div className="section-title">Transfers</div>
+          <ul className="mt-1 divide-y divide-line border-t border-line">
             {edges.map((e) => {
               // Direction from this node's point of view.
               const incoming = e.target === node.id;
               return (
                 <li key={e.id} className="py-1.5">
                   <div className="flex items-center justify-between gap-2 text-xs">
-                    <a href={txUrl(e.hash)} target="_blank" rel="noreferrer" className="truncate font-mono text-neutral-400 hover:text-neutral-200">
+                    <a href={txUrl(e.hash)} target="_blank" rel="noreferrer" className="hash truncate text-ink-faint transition-colors duration-150 hover:text-ink">
                       {short(e.hash)}
                     </a>
-                    <span className={incoming ? "shrink-0 text-emerald-400" : "shrink-0 text-orange-400"}>
+                    <span className={`num shrink-0 font-mono ${incoming ? "text-inbound" : "text-outbound"}`}>
                       {incoming ? "+" : "-"}
                       {e.kind === "token" && e.token
                         ? (e.token.amount ?? `${e.token.rawAmount} raw units`) + " " + (e.token.symbol ?? short(e.token.address ?? "unknown token"))
                         : `${e.valueNative} ${symbol}`}
                     </span>
                   </div>
-                  <div className="text-[11px] text-neutral-500">
+                  <div className="mt-0.5 text-[11px] text-ink-faint">
                     {incoming ? "from" : "to"} {short(incoming ? e.source : e.target)} · {new Date(e.timestamp).toLocaleString()}
                   </div>
                 </li>

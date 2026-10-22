@@ -27,7 +27,7 @@ export function ReviewBadge({ label }: { label: LabelView }) {
   if (label.reviewStatus === "confirmed") {
     return (
       <span
-        className="rounded border border-sky-500/60 bg-sky-950 px-2 py-0.5 text-xs font-medium text-sky-200"
+        className="chip border-info/35 bg-info/10 text-info"
         title="A community submission a project moderator has reviewed and confirmed"
       >
         ✓ CONFIRMED
@@ -37,7 +37,7 @@ export function ReviewBadge({ label }: { label: LabelView }) {
   if (label.reviewStatus === "community") {
     return (
       <span
-        className="rounded border border-amber-500/50 px-2 py-0.5 text-xs text-amber-300"
+        className="chip border-warn/35 bg-warn/10 text-warn"
         title="Submitted by a community member with a cited source; not yet reviewed by a moderator"
       >
         COMMUNITY · UNREVIEWED
@@ -51,14 +51,12 @@ export function ReviewBadge({ label }: { label: LabelView }) {
 export function SubmissionByline({ label }: { label: LabelView }) {
   if (!label.reviewStatus || !label.submittedAt) return null;
   return (
-    <div className="mt-1 text-xs text-neutral-500">
+    <div className="mt-1 text-xs text-ink-faint">
       Community submission, {day(label.submittedAt)}
       {label.reviewStatus === "confirmed" && label.confirmedAt && <> · confirmed by a moderator {day(label.confirmedAt)}</>}
     </div>
   );
 }
-
-const inputClass = "w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm";
 
 /**
  * Suggest a label for the address being viewed. Only rendered for a logged-in user; the server
@@ -76,7 +74,7 @@ export function LabelSubmitForm({ chain, address, onSubmitted }: { chain: ChainI
 
   if (session.status !== "signed-in") {
     return session.status === "anonymous" ? (
-      <div className="text-xs text-neutral-500">Log in to suggest a label for this address.</div>
+      <div className="text-xs text-ink-faint">Log in to suggest a label for this address.</div>
     ) : null;
   }
   const token = session.token;
@@ -84,10 +82,14 @@ export function LabelSubmitForm({ chain, address, onSubmitted }: { chain: ChainI
   if (!open) {
     return (
       <div className="text-xs">
-        <button type="button" onClick={() => setOpen(true)} className="text-emerald-400 hover:text-emerald-300">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="font-medium text-signal underline-offset-2 transition-colors duration-150 hover:text-[#53e6a6] hover:underline"
+        >
           Suggest a label for this address
         </button>
-        {result?.kind === "ok" && <span className="ml-2 text-neutral-400">{result.message}</span>}
+        {result?.kind === "ok" && <span className="ml-2 text-ink-dim">{result.message}</span>}
       </div>
     );
   }
@@ -115,22 +117,41 @@ export function LabelSubmitForm({ chain, address, onSubmitted }: { chain: ChainI
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-2 rounded-md border border-neutral-800 bg-neutral-900 px-4 py-3" aria-label="Suggest a label">
+    <form onSubmit={handleSubmit} className="card space-y-3 p-4" aria-label="Suggest a label">
       <div className="flex items-center justify-between">
-        <div className="text-xs uppercase tracking-wide text-neutral-500">Suggest a label</div>
-        <button type="button" onClick={() => setOpen(false)} className="text-xs text-neutral-500 hover:text-neutral-300">
+        <h2 className="section-title">Suggest a label</h2>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="text-xs text-ink-faint transition-colors duration-150 hover:text-ink-dim"
+        >
           Cancel
         </button>
       </div>
-      <label className="block text-xs text-neutral-400">
+      <label className="block text-xs font-medium text-ink-dim">
         Label
-        <input required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} placeholder="Who or what this address is" className={`mt-1 ${inputClass}`} />
+        <input
+          required
+          maxLength={120}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Who or what this address is"
+          className="ctl mt-1 w-full"
+        />
       </label>
-      <label className="block text-xs text-neutral-400">
+      <label className="block text-xs font-medium text-ink-dim">
         Source URL (required)
-        <input required type="url" maxLength={2048} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" className={`mt-1 ${inputClass}`} />
+        <input
+          required
+          type="url"
+          maxLength={2048}
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://…"
+          className="ctl mt-1 w-full"
+        />
       </label>
-      <label className="block text-xs text-neutral-400">
+      <label className="block text-xs font-medium text-ink-dim">
         What the source says (required)
         <input
           required
@@ -138,25 +159,29 @@ export function LabelSubmitForm({ chain, address, onSubmitted }: { chain: ChainI
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="e.g. the project's own docs list this as its treasury wallet"
-          className={`mt-1 ${inputClass}`}
+          className="ctl mt-1 w-full"
         />
       </label>
-      <label className="block text-xs text-neutral-400">
+      <label className="block text-xs font-medium text-ink-dim">
         How directly does the source support it?
-        <select value={confidence} onChange={(e) => setConfidence(e.target.value as "verified" | "predicted")} className={`mt-1 ${inputClass}`}>
+        <select
+          value={confidence}
+          onChange={(e) => setConfidence(e.target.value as "verified" | "predicted")}
+          className="ctl mt-1 w-full"
+        >
           <option value="verified">verified: the source states it outright</option>
           <option value="predicted">predicted: inferred from the source</option>
         </select>
       </label>
-      <p className="text-xs text-neutral-500">
+      <p className="text-xs leading-relaxed text-ink-faint">
         It's public right away, marked unreviewed, until a moderator confirms or rejects it. Your account id (not your email)
         is recorded with it.
       </p>
       <div className="flex items-center gap-3">
-        <button type="submit" disabled={busy} className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium hover:bg-emerald-500 disabled:opacity-50">
+        <button type="submit" disabled={busy} className="btn-accent">
           {busy ? "Submitting…" : "Submit label"}
         </button>
-        {result?.kind === "error" && <span className="text-xs text-red-300">{result.message}</span>}
+        {result?.kind === "error" && <span className="text-xs text-danger">{result.message}</span>}
       </div>
     </form>
   );

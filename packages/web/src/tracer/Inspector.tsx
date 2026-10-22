@@ -7,7 +7,7 @@ import { formatUsd, shortAddress } from "../kit/format.ts";
 import { EmptyState, ErrorNotice } from "../kit/QueryState.tsx";
 import { SyncBadge } from "../kit/SyncBadge.tsx";
 import { CounterpartiesPanel, type RowActionState } from "../panels/CounterpartiesPanel.tsx";
-import type { CounterpartyRow } from "../panels/model.ts";
+import type { CounterpartyFilter, CounterpartyRow } from "../panels/model.ts";
 import { formatRelative } from "../panels/parts.tsx";
 import { TransfersPanel } from "../panels/TransfersPanel.tsx";
 import { TransferTable, type TransferRowActions } from "../panels/TransferTable.tsx";
@@ -18,7 +18,7 @@ import { edgesBetween } from "./lib/ops.ts";
 export type InspectorController = {
   readOnly: boolean;
   counterpartyState: (base: TraceNode, row: CounterpartyRow) => RowActionState;
-  addCounterparty: (base: TraceNode, row: CounterpartyRow) => void;
+  addCounterparty: (base: TraceNode, row: CounterpartyRow, flow: CounterpartyFilter["flow"]) => void;
   removeCounterparty: (base: TraceNode, row: CounterpartyRow) => void;
   transferActions: (base: TraceNode) => TransferRowActions & { onAddMany?: (ts: Transfer[]) => void };
   removeEdges: (edgeIds: string[]) => void;
@@ -179,7 +179,7 @@ export function NodeInspector({ node, ctl }: { node: TraceNode; ctl: InspectorCo
           selectedKey={cpKey}
           onSelectRow={(r) => setCpKey(r?.kind === "address" ? r.key : null)}
           rowState={ctl.readOnly ? undefined : (r) => ctl.counterpartyState(node, r)}
-          onAddRow={ctl.readOnly ? undefined : (r) => ctl.addCounterparty(node, r)}
+          onAddRow={ctl.readOnly ? undefined : (r, flow) => ctl.addCounterparty(node, r, flow)}
           onRemoveRow={ctl.readOnly ? undefined : (r) => ctl.removeCounterparty(node, r)}
           className="flex-1"
         />

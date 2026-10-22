@@ -42,7 +42,7 @@ import {
   summaryFromTransferEdges,
   type Edit,
 } from "./lib/ops.ts";
-import { occupiedRects, placeNear, sideFor } from "./lib/placement.ts";
+import { occupiedRects, placeNear, sideForFlow } from "./lib/placement.ts";
 import { boundingBox, clampScale, FIT_PADDING, loadViewport, nodeRect, rectsIntersect, saveViewport, screenRectOfNode, screenToWorld, zoomAt, type Viewport } from "./lib/viewport.ts";
 import { Sidebar } from "./Sidebar.tsx";
 import { Toolbar } from "./Toolbar.tsx";
@@ -266,9 +266,10 @@ export function TracerPage({ id, readOnly: readOnlyProp = false }: { id: string;
       if (row.kind === "address" && target.kind === "entity") return "disabled";
       return edgesBetween(doc, base.id, target.id).length ? "added" : "add";
     },
-    addCounterparty: (base, row) => {
+    addCounterparty: (base, row, flow) => {
       if (!doc) return;
-      const pos = placeNear({ base: nodeRect(base), side: sideFor(row.stats.txOut, row.stats.txIn), occupied: occupiedRects(doc.nodes), visible: visibleWorld() });
+      const side = sideForFlow(flow, row.stats.txOut, row.stats.txIn);
+      const pos = placeNear({ base: nodeRect(base), side, occupied: occupiedRects(doc.nodes), visible: visibleWorld() });
       const edit = addCounterpartyEdit({ traceId: id, doc, base, counterparty: row.kind === "entity" ? { entity: row.entity } : row.address, stats: row.stats, position: pos });
       void run(edit);
     },

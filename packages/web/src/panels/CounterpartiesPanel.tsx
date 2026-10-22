@@ -20,7 +20,8 @@ export type CounterpartiesPanelProps = {
   onAddToGraph?: (address: string, chain: Chain) => void;
   /** Rich row actions (tracer): state per row, add with directional stats, remove. */
   rowState?: (row: CounterpartyRow) => RowActionState;
-  onAddRow?: (row: CounterpartyRow) => void;
+  /** `flow` is the tab active when the row was added ("all" when there's no explicit direction context, e.g. the row has both in and out activity and the user wasn't on a direction-filtered tab). */
+  onAddRow?: (row: CounterpartyRow, flow: CounterpartyFilter["flow"]) => void;
   onRemoveRow?: (row: CounterpartyRow) => void;
   /** Row click toggles a counterparty selection (filters the transfers panel). */
   selectedKey?: string | null;
@@ -131,7 +132,7 @@ export function CounterpartiesPanel(props: CounterpartiesPanelProps) {
                     {hasActions ? (
                       <td className="h-9 pl-2" onClick={(e) => e.stopPropagation()}>
                         <RowAction state={state} label={r.kind === "entity" ? r.entity.name : r.address.address}
-                          onAdd={() => (onAddRow ? onAddRow(r) : r.kind === "address" ? onAddToGraph?.(r.address.address, r.address.chain) : undefined)}
+                          onAdd={() => (onAddRow ? onAddRow(r, filter.flow) : r.kind === "address" ? onAddToGraph?.(r.address.address, r.address.chain) : undefined)}
                           onRemove={onRemoveRow ? () => onRemoveRow(r) : undefined}
                           disabledReason={!onAddRow && r.kind === "entity" ? "Ungroup to add single addresses" : undefined} />
                       </td>

@@ -53,6 +53,14 @@ export const EdgeLayer = memo(function EdgeLayer({ segments, nodes, viewport, se
               <stop offset="100%" stopColor={c} stopOpacity={0} />
             </radialGradient>
           ))}
+          {/* Static flow-direction arrowheads (fromNodeID -> toNodeID) -- visible with no animation, no
+              selection and no focus, so direction still reads in a plain screenshot. Two fixed variants
+              (neutral / accent) rather than one dynamically-colored marker, for simplicity. */}
+          {([["arrow-n", "var(--traceg-edge)", 0.7], ["arrow-a", "var(--trace-accent)", 0.95]] as const).map(([k, c, o]) => (
+            <marker key={k} id={`${gid}-${k}`} viewBox="0 0 8 8" refX="6.4" refY="4" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse" markerUnits="strokeWidth">
+              <path d="M0.5,0.8 L7,4 L0.5,7.2 Z" fill={c} fillOpacity={o} />
+            </marker>
+          ))}
         </defs>
         {geoms.map(([seg, g]) => {
           const selected = selectedPair === seg.id;
@@ -70,6 +78,7 @@ export const EdgeLayer = memo(function EdgeLayer({ segments, nodes, viewport, se
                 strokeOpacity={selected ? 0.95 : dim ? 0.2 : touches ? 0.85 : 0.55}
                 strokeWidth={selected ? 1.75 : touches ? 1.5 : 1.2}
                 vectorEffect="non-scaling-stroke"
+                markerEnd={dim ? undefined : `url(#${gid}-${selected ? "arrow-a" : "arrow-n"})`}
               />
               {showDots
                 ? dots.get(seg.id)?.map((dot) => {

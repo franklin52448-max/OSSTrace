@@ -12,6 +12,19 @@ export type Side = "outflow" | "inflow";
 
 export const sideFor = (countOut: number, countIn: number): Side => (countOut >= countIn ? "outflow" : "inflow");
 
+/**
+ * Side for a counterparty being added from a direction-filtered panel tab ("Incoming"/"Outgoing").
+ * The tab the user had open is a strict, per-interaction signal and wins over `sideFor`'s stats
+ * majority guess -- a row can show up under "Incoming" while also having some outgoing activity
+ * with the same base (two-way relationship), and the majority heuristic would then misplace it on
+ * the right. Only falls back to the stats guess when there's no explicit tab context ("all").
+ */
+export function sideForFlow(flow: "all" | "in" | "out", countOut: number, countIn: number): Side {
+  if (flow === "in") return "inflow";
+  if (flow === "out") return "outflow";
+  return sideFor(countOut, countIn);
+}
+
 /** y offsets 0, +200, -200, +400, -400, ... */
 export function fanOffsets(n = FAN_CANDIDATES, step = FAN_STEP): number[] {
   const out = [0];

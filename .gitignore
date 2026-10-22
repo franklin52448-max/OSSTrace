@@ -3,6 +3,8 @@
 !.env.example
 .claude/
 keys/
+# Local screenshot/console-log cache from browser-automation verification runs.
+.playwright-cli/
 *.pem
 *.key
 *keypair*.json

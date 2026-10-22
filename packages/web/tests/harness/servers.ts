@@ -28,6 +28,10 @@ import {
 import { createExplorerHandler } from "@osstrace/explorer/src/http.ts";
 // --- private-labels (imports) ---
 import { JsonFilePrivateLabelStore, PrivateLabelService, createPrivateLabelsHandler } from "@osstrace/private-labels";
+// --- live stream (imports) ---
+import { InMemoryEventBus } from "@osstrace/explorer/src/events.ts";
+import { Indexer } from "@osstrace/explorer/src/indexing.ts";
+import { attachStream, StreamHub } from "@osstrace/explorer/src/stream.ts";
 // --- end ---
 import { WEB_ORIGIN } from "./env.ts";
 
@@ -198,3 +202,48 @@ export async function startStack(adapter: ChainAdapter): Promise<Stack> {
     },
   };
 }
+
+// --- live stream ------------------------------------------------------------------------------
+// A second, streaming Explorer, separate from `startStack()`'s held one: the real HTTP API with
+// the real `/stream` websocket attached (ADR 0013 §6: session auth against the stack's real
+// accounts, an Origin allowlist, the per-IP cap), plus a real Indexer on the same cache and event
+// bus, wired the way `@osstrace/explorer`'s server.ts wires its embedded indexer. The indexer's
+// timer is the one thing not used: a test runs each cycle on demand with `indexer.runCycle()`,
+// as the Explorer's own stream tests do.
+
+export interface LiveExplorer extends Running {
+  indexer: Indexer;
+  hub: StreamHub;
+  /** How many websocket upgrade requests have reached this server (to prove one was, or wasn't, opened). */
+  upgrades(): number;
+}
+
+export async function startLiveExplorer(accountService: AccountService, adapter: ChainAdapter): Promise<LiveExplorer> {
+  const dir = await mkdtemp(join(tmpdir(), "osstrace-web-live-"));
+  const registry = new Map([[adapter.chain, adapter]]);
+  const store = new JsonFileLabelStore(join(dir, "labels.json"));
+  const cache = new InMemoryCache();
+  const bus = new InMemoryEventBus();
+  const handle = createExplorerHandler({ registry, store, cache, allowedOrigins: [WEB_ORIGIN] });
+  const server: Server = createServer((req, res) => void handle(req, res));
+  let upgrades = 0;
+  server.on("upgrade", () => upgrades++);
+  const hub = await StreamHub.create(bus, { accounts: accountService });
+  const stream = attachStream(server, hub, { allowedOrigins: [WEB_ORIGIN] });
+  const indexer = new Indexer({ registry, store, cache, bus, intervalMs: 30_000, topN: 20 });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    indexer,
+    hub,
+    upgrades: () => upgrades,
+    async close() {
+      await stream.close();
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(dir, { recursive: true, force: true });
+    },
+  };
+}
+// --- end live stream --------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
+import { Wallet } from "ethers";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createElement, type ComponentType } from "react";
 import { window } from "./harness/env.ts";
@@ -59,6 +60,19 @@ function mockPhantom(seed: string) {
     },
     async signMessage(message: Uint8Array) {
       return { signature: nacl.sign.detached(message, secretKey) };
+    },
+  };
+}
+
+/** A fake MetaMask-shaped (EIP-1193) provider: a real secp256k1 wallet signs via real `personal_sign` semantics (ethers). */
+function mockMetaMask(seed: string) {
+  const wallet = new Wallet(createHash("sha256").update(seed).digest("hex"));
+  return {
+    address: wallet.address,
+    async request({ method, params }: { method: string; params?: unknown[] }) {
+      if (method === "eth_requestAccounts") return [wallet.address];
+      if (method === "personal_sign") return wallet.signMessage(params?.[0] as string);
+      throw new Error(`mockMetaMask: unexpected method ${method}`);
     },
   };
 }
@@ -161,5 +175,43 @@ test("Settings: changing the display name persists through the real server and u
   await click(getButton("Save"));
 
   await waitFor(() => text().includes("Racer"), "the new display name in the header");
+  assert.deepEqual(consoleErrors, []);
+});
+
+test("connecting MetaMask runs the real challenge/verify flow with a real secp256k1 signature and shows the signed-in wallet", async () => {
+  const mm = mockMetaMask("metamasktest");
+  (window as unknown as { ethereum: unknown }).ethereum = mm;
+  const menu = await openConnectMenu();
+  await click(getButton("MetaMask", menu));
+  await waitFor(() => text().includes("eth_"), "the signed-in handle"); // shortHandle() always starts with eth_
+  assert.deepEqual(consoleErrors, []);
+});
+
+test("an Ethereum provider returning no accounts puts the real error into the alert region", async () => {
+  (window as unknown as { ethereum: unknown }).ethereum = {
+    async request({ method }: { method: string }) {
+      if (method === "eth_requestAccounts") return [];
+      throw new Error("unexpected method");
+    },
+  };
+  const menu = await openConnectMenu();
+  const region = alertRegion(menu);
+  await click(getButton("MetaMask", menu));
+  await waitFor(() => text(region).includes("the wallet returned no account"), "the no-account error");
+  assert.deepEqual(consoleErrors, []);
+});
+
+test("a Solana wallet without signMessage support puts the real error into the alert region", async () => {
+  const { address } = solanaKeypair("nosignmessage");
+  (window as unknown as { solana: unknown }).solana = {
+    async connect() {
+      return { publicKey: { toString: () => address } };
+    },
+    // signMessage deliberately omitted -- some Solana-injected providers don't implement it.
+  };
+  const menu = await openConnectMenu();
+  const region = alertRegion(menu);
+  await click(getButton("Phantom", menu));
+  await waitFor(() => text(region).includes("this wallet doesn't support message signing"), "the unsupported-signMessage error");
   assert.deepEqual(consoleErrors, []);
 });

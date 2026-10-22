@@ -60,6 +60,7 @@ test("every submission needs a real cited source — missing, blank or non-http 
       ["private ip 10/8", validBody({ source: { url: "http://10.1.2.3/report", description: "a writeup" } })],
       ["private ip 192.168/16", validBody({ source: { url: "https://192.168.0.10/report", description: "a writeup" } })],
       ["private ip 172.16/12", validBody({ source: { url: "https://172.20.0.1/report", description: "a writeup" } })],
+      ["carrier-grade NAT ip 100.64/10", validBody({ source: { url: "https://100.100.0.1/report", description: "a writeup" } })],
       ["link-local ip", validBody({ source: { url: "http://169.254.169.254/latest", description: "a writeup" } })],
       ["ipv6 loopback", validBody({ source: { url: "http://[::1]/report", description: "a writeup" } })],
       [".internal host", validBody({ source: { url: "https://wiki.corp.internal/report", description: "a writeup" } })],

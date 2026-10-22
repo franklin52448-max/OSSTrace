@@ -60,15 +60,30 @@ test("submit requires login and the bounty to be open; a real submission is stor
     if (submissions.ok) assert.equal(submissions.submissions.length, 1);
   }));
 
-test("a non-absolute prUrl is refused -- never fetched server-side, so shape is all that's checked", async () =>
+test("a non-absolute prUrl, or one pointing at a host only the submitter can open, is refused -- never fetched server-side, so shape is all that's checked", async () =>
   withEnv(async ({ service, account }) => {
     const { token: posterToken } = await account("poster@example.com");
     const opened = await service.open(posterToken, validBountyBody());
     if (!opened.ok) throw new Error("setup failed");
     const { token: devToken } = await account("dev@example.com");
-    const result = await service.submit(devToken, opened.bounty.id, validSubmissionBody({ prUrl: "not-a-url" }));
-    assert.equal(result.ok, false);
-    if (!result.ok) assert.equal(result.error, "invalid_submission");
+    // Same real-public-host check community-labels' source URL uses (@osstrace/core's
+    // parsePublicUrl): a PR URL that resolves into the submitter's own machine or network,
+    // rather than the moderator's, can't be meaningfully reviewed.
+    for (const prUrl of [
+      "not-a-url",
+      "http://localhost:8080/pr",
+      "http://127.0.0.1/pr",
+      "http://127.1/pr", // short-form loopback, normalised by `new URL`
+      "https://192.168.0.10/pr",
+      "https://172.20.0.1/pr",
+      "https://100.100.0.1/pr", // carrier-grade NAT
+      "http://169.254.169.254/pr", // link-local / cloud metadata endpoint
+      "https://u:p@github.com/x/y/pull/1", // embedded credentials
+    ]) {
+      const result = await service.submit(devToken, opened.bounty.id, validSubmissionBody({ prUrl }));
+      assert.equal(result.ok, false, prUrl);
+      if (!result.ok) assert.equal(result.error, "invalid_submission", prUrl);
+    }
   }));
 
 test("claim requires a moderator; claiming marks the winner accepted and every other pending submission rejected", async () =>

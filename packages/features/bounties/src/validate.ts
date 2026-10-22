@@ -1,3 +1,5 @@
+import { parsePublicUrl } from "@osstrace/core";
+
 export const TITLE_MAX_LENGTH = 140;
 export const DESCRIPTION_MAX_LENGTH = 8000;
 export const REWARD_MAX_LENGTH = 200;
@@ -26,21 +28,15 @@ function text(value: unknown, field: string, max: number, min = 1): Parsed<strin
   return { ok: true, value: trimmed };
 }
 
-/** Same SSRF-safe shape check `@osstrace/community-labels` uses for a source URL — never fetched server-side. */
+/**
+ * The shared "is this host checkable by anyone but the submitter" check in `@osstrace/core`'s
+ * `urlSafety.ts` — the same one `@osstrace/community-labels` uses for a source URL. Never fetched
+ * server-side. A `prUrl` pointing at `localhost` or a private IP would resolve, for whoever
+ * actually opens it (a moderator deciding whether to claim the bounty), into *their own* machine
+ * or network — not the submitter's — so it gets the same real-public-host check a source URL does.
+ */
 export function parsePrUrl(value: unknown): Parsed<string> {
-  if (typeof value !== "string" || !value.trim()) return { ok: false, message: "prUrl is required" };
-  const raw = value.trim();
-  if (raw.length > PR_URL_MAX_LENGTH) return { ok: false, message: `prUrl must be at most ${PR_URL_MAX_LENGTH} characters` };
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return { ok: false, message: "prUrl must be an absolute URL (https://…)" };
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") return { ok: false, message: "prUrl must be an http or https URL" };
-  if (!url.hostname.includes(".") && url.hostname !== "localhost") return { ok: false, message: "prUrl must point at a real host" };
-  if (url.username || url.password) return { ok: false, message: "prUrl must not contain credentials" };
-  return { ok: true, value: url.toString() };
+  return parsePublicUrl(value, "prUrl", PR_URL_MAX_LENGTH);
 }
 
 /**

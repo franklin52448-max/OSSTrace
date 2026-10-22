@@ -3,3 +3,4 @@ export * from "./chainAdapter.ts";
 export * from "./store.ts";
 export * from "./cache.ts";
 export * from "./addressFormat.ts";
+export * from "./urlSafety.ts";

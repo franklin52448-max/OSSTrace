@@ -1,4 +1,4 @@
-import { canonicalAddress, isChainId, isRealAddress, SUPPORTED_CHAINS, type Address, type Confidence } from "@osstrace/core";
+import { canonicalAddress, isChainId, isRealAddress, parsePublicUrl, SUPPORTED_CHAINS, type Address, type Confidence } from "@osstrace/core";
 
 export const NAME_MAX_LENGTH = 120;
 export const DESCRIPTION_MAX_LENGTH = 500;
@@ -35,53 +35,15 @@ function text(value: unknown, field: string, max: number): Parsed<string> {
 }
 
 /**
- * Hosts nobody but the submitter can open: `localhost` and friends, and loopback, private,
- * carrier-grade-NAT and link-local IPv4. A citation there can't be checked by a moderator or any
- * reader (ADR 0002), and every IPv6 literal is already refused by the "has a dot" check below.
- * (`new URL` has already normalised forms like `127.1` or `2130706433` to dotted-quad.)
- */
-function isNonPublicHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/\.$/, "");
-  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
-  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!v4) return false;
-  const a = Number(v4[1]);
-  const b = Number(v4[2]);
-  return (
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168)
-  );
-}
-
-/**
- * A source URL must be an absolute http(s) URL with a real, publicly reachable host. This checks
- * shape only — the server never fetches it (fetching a user-supplied URL from the server is an
- * SSRF hole), so whether it actually supports the claim is exactly what a moderator checks before
- * confirming.
+ * A source URL must be an absolute http(s) URL with a real, publicly reachable host — the shared
+ * check in `@osstrace/core`'s `urlSafety.ts` (moved there once `@osstrace/bounties` needed the
+ * same "is this host checkable by anyone but the submitter" question for its PR URLs). This
+ * checks shape only — the server never fetches it (fetching a user-supplied URL from the server
+ * is an SSRF hole), so whether it actually supports the claim is exactly what a moderator checks
+ * before confirming.
  */
 export function parseSourceUrl(value: unknown): Parsed<string> {
-  if (typeof value !== "string" || !value.trim()) return { ok: false, message: "source.url is required" };
-  const raw = value.trim();
-  if (raw.length > URL_MAX_LENGTH) return { ok: false, message: `source.url must be at most ${URL_MAX_LENGTH} characters` };
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return { ok: false, message: "source.url must be an absolute URL (https://…)" };
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    return { ok: false, message: "source.url must be an http or https URL" };
-  }
-  if (!url.hostname.includes(".") || isNonPublicHost(url.hostname)) {
-    return { ok: false, message: "source.url must point at a real, public host" };
-  }
-  if (url.username || url.password) return { ok: false, message: "source.url must not contain credentials" };
-  return { ok: true, value: url.toString() };
+  return parsePublicUrl(value, "source.url", URL_MAX_LENGTH);
 }
 
 /**

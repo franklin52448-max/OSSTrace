@@ -39,6 +39,7 @@ export const badRequest = (m: string) => new ApiErr("bad_request", m);
 export const notFound = (what = "Not found") => new ApiErr("not_found", what);
 export const unauthorized = () => new ApiErr("unauthorized", "Sign in required");
 export const conflict = (m: string) => new ApiErr("conflict", m);
+export const forbidden = (m: string) => new ApiErr("forbidden", m);
 
 /** A chain/price provider failed. Never replaced by fake data. */
 export class ProviderError extends Error {

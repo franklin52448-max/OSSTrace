@@ -231,6 +231,55 @@ export type AlertLimits = { maxRules: number; maxTargetsPerRule: number; pollInt
 // Semantics: the worker polls watched addresses every pollIntervalSec; an alert only fires for transfers with
 // blockTimestamp AFTER the rule's creation/enable time (no backfill spam); each (rule, transfer) fires once.
 
+// ---------- Bounties ----------
+// This project never custodies a payout: `reward` is the poster's own free-text claim, and a
+// `Deposit` is only ever independently-checked evidence a real on-chain payment happened (ADR
+// 0009, ADR 0020). Resolving/claiming/cancelling a bounty requires being its own opener -- there
+// is no separate moderator role now that accounts are wallet-based.
+export type BountyStatus = "open" | "claimed" | "cancelled";
+export type BountyAsset = "native" | { contract: string };
+export type BountyDeposit = {
+  id: string;
+  chain: Chain;
+  asset: BountyAsset;
+  amount: string;
+  txRef: string;
+  fromAddress: string;
+  toWallet: string;
+  memo?: string;
+  recordedBy: string;
+  recordedAt: string;
+};
+export type BountySubmission = { id: string; bountyId: string; submittedBy: string; prUrl: string; note: string; submittedAt: string; outcome: "pending" | "accepted" | "rejected" };
+export type Bounty = {
+  id: string;
+  status: BountyStatus;
+  title: string;
+  description: string;
+  reward: string;
+  openedBy: string;
+  openedAt: string;
+  claimedSubmissionId?: string;
+  claimedBy?: string;
+  claimedAt?: string;
+  resolvedBy?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancellationReason?: string;
+  submissions: BountySubmission[];
+  deposits: BountyDeposit[];
+};
+export type CreateBounty = { title: string; description: string; reward: string };
+export type BountyWallets = { ethereum?: string; solana?: string };
+// GET /api/bounties/wallets -> BountyWallets (public config; a chain missing means it's not configured)
+// GET /api/bounties -> Bounty[] (no auth -- "anyone can browse"); GET /api/bounties/:id -> Bounty
+// POST /api/bounties (CreateBounty) -> Bounty
+// POST /api/bounties/:id/submissions {prUrl, note?} -> BountySubmission (bounty must be "open")
+// POST /api/bounties/:id/claim {submissionId} -> Bounty (opener only)
+// POST /api/bounties/:id/cancel {reason} -> Bounty (opener only)
+// POST /api/bounties/:id/deposits {chain, txRef} -> BountyDeposit (any signed-in user; the real
+//   on-chain payment is independently verified server-side, not trusted from the request)
+
 export type HealthResponse = { ok: true; version: string; chains: ChainStatus[]; /** false when ALLOW_SIGNUP=false; clients treat undefined as true */ allowSignup?: boolean };
 // GET /api/health -> HealthResponse (no auth)
 

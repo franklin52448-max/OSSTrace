@@ -18,6 +18,12 @@ Listens on `127.0.0.1:5320` by default (`PORT`/`HOST`). A SQLite file at `./data
 (`ETH_BLOCKSCOUT_URL`), Solana via the public JSON-RPC (`SOLANA_RPC_URL`/`SOLANA_RPC_URL_FILE`),
 prices via DefiLlama (`DEFILLAMA_URL`). See `src/config.ts` for every variable.
 
+**`DEV_SKIP_AUTH=1`**: local dev only, treats every request as signed in as a fixed fake user
+(no wallet, no cookie needed) so every feature can be driven without going through the real
+Phantom/MetaMask flow. Refused outright when `NODE_ENV=production`, so it can never activate on a
+deployed instance regardless of what env var is set there. Unset it (or set to `0`) to go back to
+testing the real wallet-connect flow.
+
 ```sh
 curl http://127.0.0.1:5320/api/health
 ```

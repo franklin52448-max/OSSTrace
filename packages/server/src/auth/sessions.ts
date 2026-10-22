@@ -65,6 +65,31 @@ export function pruneSessions(db: Db) {
   db.run("DELETE FROM sessions WHERE expires_at < ?", new Date().toISOString());
 }
 
+// --- Local-dev auth bypass (config.devSkipAuth, always false in production -- see config.ts) ---
+export const DEV_USER_ID = "00000000-0000-4000-8000-000000000001";
+const DEV_USERNAME = "dev-skip-auth";
+
+/** The fixed fake identity every request gets when devSkipAuth is on and no real session exists. */
+export function devUser(): SessionUser {
+  return { id: DEV_USER_ID, username: DEV_USERNAME, displayName: "Dev User", createdAt: nowIso(), chain: "solana", walletAddress: "DEV00000000000000000000000000000000000000", sessionId: "dev-skip-auth" };
+}
+
+/** Idempotent: gives the dev-bypass user a real `users` row, so foreign-key-dependent writes (opening a bounty, saving an alert, ...) have a real id to point at. Call once at startup when devSkipAuth is on. */
+export function ensureDevUser(db: Db): void {
+  const now = nowIso();
+  const u = devUser();
+  db.run(
+    "INSERT INTO users (id, username, display_name, created_at, updated_at, chain, wallet_address) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING",
+    u.id,
+    u.username,
+    u.displayName,
+    now,
+    now,
+    u.chain,
+    u.walletAddress,
+  );
+}
+
 export function cookieOpts(config: Pick<Config, "cookieSecure">) {
   return { path: "/", httpOnly: true, sameSite: "lax" as const, secure: config.cookieSecure, maxAge: Math.floor(SESSION_TTL_MS / 1000) };
 }

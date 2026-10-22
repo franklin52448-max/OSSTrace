@@ -18,8 +18,13 @@ export type Config = {
   solanaRpcCustom: boolean;
   ethBlockscoutUrl: string;
   defillamaUrl: string;
+  /** Public wallet addresses bounty depositors pay into -- never a key this server holds (ADR 0020). */
+  depositWallets: { ethereum?: string; solana?: string };
   /** Enables POST /api/_test/alerts/tick (off unless SERVER_TEST_HOOKS=1). */
   testHooks: boolean;
+  /** Local-dev-only: every request is treated as signed in as a fixed fake user, no cookie needed.
+   *  Always false when `production` is true, no matter what DEV_SKIP_AUTH is set to -- see loadConfig. */
+  devSkipAuth: boolean;
   logLevel: string;
 };
 
@@ -71,7 +76,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     solanaRpcCustom,
     ethBlockscoutUrl: (env.ETH_BLOCKSCOUT_URL ?? "https://eth.blockscout.com").replace(/\/$/, ""),
     defillamaUrl: (env.DEFILLAMA_URL ?? "https://coins.llama.fi").replace(/\/$/, ""),
+    depositWallets: {
+      ...(env.DEPOSIT_WALLET_ETHEREUM ? { ethereum: env.DEPOSIT_WALLET_ETHEREUM.trim() } : {}),
+      ...(env.DEPOSIT_WALLET_SOLANA ? { solana: env.DEPOSIT_WALLET_SOLANA.trim() } : {}),
+    },
     testHooks: bool(env.SERVER_TEST_HOOKS, false),
+    // The `&& !production` is load-bearing: this must never activate on a deployed instance,
+    // regardless of what env var a deploy config sets.
+    devSkipAuth: bool(env.DEV_SKIP_AUTH, false) && !production,
     logLevel: env.LOG_LEVEL ?? (production ? "info" : "info"),
   };
 }

@@ -22,6 +22,7 @@ export type Ctx = {
   resolver: Resolver;
   sendWebhook: WebhookSender;
   version: string;
+  fetchImpl: typeof fetch;
 };
 
 declare module "fastify" {

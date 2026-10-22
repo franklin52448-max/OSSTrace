@@ -3,7 +3,8 @@
 // via real RPC before it's recorded. This still isn't escrow -- see the ADR.
 import { useCallback, useEffect, useState } from "react";
 import type { ChainId } from "@osstrace/core";
-import { apiCall } from "./session.ts";
+import type { BountyDeposit, BountyWallets } from "@osstrace/contract";
+import { serverApiCall } from "./serverSession.ts";
 import { Loading, Notice } from "./ui.tsx";
 import { ChainIcon, ChainSelect } from "./ChainSelect.tsx";
 import {
@@ -18,21 +19,9 @@ import {
   sumDecimalAmounts,
 } from "./wallets.ts";
 
-const BOUNTIES_URL = import.meta.env["VITE_BOUNTIES_URL"] ?? "http://localhost:5313";
-
-type DepositAsset = "native" | { contract: string };
-interface Deposit {
-  id: string;
-  chain: ChainId;
-  asset: DepositAsset;
-  amount: string;
-  txRef: string;
-  fromAddress: string;
-  recordedAt: string;
-  toWallet: string;
-  memo?: string;
-}
-type Wallets = { ethereum?: string; solana?: string };
+type DepositAsset = BountyDeposit["asset"];
+type Deposit = BountyDeposit;
+type Wallets = BountyWallets;
 
 const NATIVE_SYMBOL: Record<ChainId, string> = { ethereum: "ETH", solana: "SOL" };
 
@@ -48,20 +37,21 @@ function assetKey(chain: ChainId, asset: DepositAsset): string {
   return `${chain}:${asset === "native" ? "native" : asset.contract}`;
 }
 
-export default function DepositPanel({ bountyId, token }: { bountyId: string; token: string | null }) {
+export default function DepositPanel({ bountyId, signedIn }: { bountyId: string; signedIn: boolean }) {
   const [wallets, setWallets] = useState<Wallets | null>(null);
   const [deposits, setDeposits] = useState<Deposit[] | null>(null);
   const [showForm, setShowForm] = useState(false);
 
   const loadDeposits = useCallback(async () => {
-    const res = await apiCall<{ deposits: Deposit[] }>(`${BOUNTIES_URL}/bounties/${bountyId}/deposits`);
+    const res = await serverApiCall<{ deposits: Deposit[] }>(`/api/bounties/${bountyId}`);
     if (res.ok) setDeposits(res.body.deposits);
+    // The bounty detail endpoint already embeds its deposits -- no separate deposits-only route.
   }, [bountyId]);
 
   useEffect(() => {
     void (async () => {
-      const res = await apiCall<{ wallets: Wallets }>(`${BOUNTIES_URL}/bounties/wallets`);
-      if (res.ok) setWallets(res.body.wallets);
+      const res = await serverApiCall<Wallets>("/api/bounties/wallets");
+      if (res.ok) setWallets(res.body);
     })();
     void loadDeposits();
   }, [loadDeposits]);
@@ -80,7 +70,7 @@ export default function DepositPanel({ bountyId, token }: { bountyId: string; to
     <section className="card overflow-hidden">
       <div className="card-header">
         <h2 className="text-[15px] font-medium text-ink">Funding</h2>
-        {token && wallets && configuredChains.length > 0 && (
+        {signedIn && wallets && configuredChains.length > 0 && (
           <button type="button" onClick={() => setShowForm((v) => !v)} className="btn-outline">
             {showForm ? "Close" : "Back this bounty"}
           </button>
@@ -133,8 +123,8 @@ export default function DepositPanel({ bountyId, token }: { bountyId: string; to
           </>
         )}
 
-        {!token && <p className="text-xs text-ink-faint">Log in to back this bounty with a real deposit.</p>}
-        {showForm && token && wallets && <FundForm bountyId={bountyId} token={token} wallets={wallets} onRecorded={() => { setShowForm(false); void loadDeposits(); }} />}
+        {!signedIn && <p className="text-xs text-ink-faint">Log in to back this bounty with a real deposit.</p>}
+        {showForm && signedIn && wallets && <FundForm bountyId={bountyId} wallets={wallets} onRecorded={() => { setShowForm(false); void loadDeposits(); }} />}
       </div>
     </section>
   );
@@ -142,7 +132,7 @@ export default function DepositPanel({ bountyId, token }: { bountyId: string; to
 
 type AssetMode = "native" | "token";
 
-function FundForm({ bountyId, token, wallets, onRecorded }: { bountyId: string; token: string; wallets: Wallets; onRecorded: () => void }) {
+function FundForm({ bountyId, wallets, onRecorded }: { bountyId: string; wallets: Wallets; onRecorded: () => void }) {
   const configured = (["solana", "ethereum"] as const).filter((c) => wallets[c]);
   const [chain, setChain] = useState<ChainId>(configured[0] ?? "solana");
   const [assetMode, setAssetMode] = useState<AssetMode>("native");
@@ -159,7 +149,7 @@ function FundForm({ bountyId, token, wallets, onRecorded }: { bountyId: string; 
 
   async function record(forChain: ChainId, txRef: string): Promise<boolean> {
     setBusy("recording");
-    const res = await apiCall(`${BOUNTIES_URL}/bounties/${bountyId}/deposits`, { method: "POST", token, body: { chain: forChain, txRef } });
+    const res = await serverApiCall(`/api/bounties/${bountyId}/deposits`, { method: "POST", body: { chain: forChain, txRef } });
     setBusy("idle");
     if (!res.ok) {
       setError(res.message);
@@ -214,7 +204,7 @@ function FundForm({ bountyId, token, wallets, onRecorded }: { bountyId: string; 
     event.preventDefault();
     setPasteError(null);
     setPasteBusy(true);
-    const res = await apiCall(`${BOUNTIES_URL}/bounties/${bountyId}/deposits`, { method: "POST", token, body: { chain: pasteChain, txRef: pasteRef.trim() } });
+    const res = await serverApiCall(`/api/bounties/${bountyId}/deposits`, { method: "POST", body: { chain: pasteChain, txRef: pasteRef.trim() } });
     setPasteBusy(false);
     if (!res.ok) {
       setPasteError(res.message);

@@ -25,10 +25,13 @@ function shortHandle(chain: WalletChain, address: string): string {
 }
 
 export function registerAuth(app: FastifyInstance, ctx: Ctx) {
-  const { db } = ctx;
+  const { db, config } = ctx;
 
   app.post("/api/auth/challenge", async (req) => {
-    checkChallengeAllowed(db, req.ip);
+    // Skipped under the same test-only flag the alerts test-tick route gates on (SERVER_TEST_HOOKS=1,
+    // always off in production) -- without it, a test suite doing many real logins from one IP trips
+    // the same per-IP abuse guard real callers are meant to.
+    if (!config.testHooks) checkChallengeAllowed(db, req.ip);
     const body = parse(challengeBody, req.body);
     if (!isValidAddress(body.chain, body.address)) throw new ApiErr("bad_request", `That doesn't look like a ${body.chain} address`);
     const message = createChallenge(body.chain, body.address);
@@ -40,7 +43,7 @@ export function registerAuth(app: FastifyInstance, ctx: Ctx) {
     const body = parse(verifyBody, req.body);
     const normalized = normalizeAddress(body.chain, body.address);
     const walletKey = `${body.chain}:${normalized}`;
-    checkVerifyAllowed(db, req.ip, walletKey);
+    if (!config.testHooks) checkVerifyAllowed(db, req.ip, walletKey);
     const ok = isValidAddress(body.chain, body.address) && verifyChallenge(body.chain, body.address, body.signature);
     if (!ok) {
       recordVerify(db, req.ip, walletKey, false);

@@ -34,10 +34,8 @@ import { Indexer } from "@osstrace/explorer/src/indexing.ts";
 import { attachStream, StreamHub } from "@osstrace/explorer/src/stream.ts";
 // --- end ---
 import { WEB_ORIGIN } from "./env.ts";
-// --- BEGIN view backends (bounties, cases, risk, tracer, visualizer): imports -----------------
+// --- BEGIN view backends (cases, risk, tracer, visualizer): imports -----------------
 import type { TransactionSummary } from "@osstrace/core";
-import { BountyService, JsonFileBountyStore, createBountiesHandler } from "@osstrace/bounties";
-import type { DepositVerification, DepositVerifier } from "@osstrace/bounties/src/deposits.ts";
 import { CaseService, JsonFileCaseStore, createCasesHandler } from "@osstrace/case-management";
 // risk-scoring, tracer and visualizer have no index.ts (their package "main" is server.ts, which
 // listens on import): import their real handlers the way their own server.ts files do.
@@ -48,22 +46,6 @@ import { createVisualizerHandler } from "@osstrace/visualizer/src/http.ts";
 // --- END view backends: imports ---------------------------------------------------------------
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => Promise<void> | void;
-
-/**
- * A real, concrete stand-in for `BountyService`'s injected `DepositVerifier` (ADR 0020) — not a
- * mocking framework. A test preprograms exactly what a given `(chain, txRef)` should verify as;
- * the real on-chain decode logic itself has its own tests, against real recorded mainnet data, in
- * `packages/features/bounties/tests/deposits.test.ts`.
- */
-export class StandInDepositVerifier implements DepositVerifier {
-  readonly #answers = new Map<string, DepositVerification>();
-  set(chain: "ethereum" | "solana", txRef: string, result: DepositVerification): void {
-    this.#answers.set(`${chain}:${txRef}`, result);
-  }
-  async verify(chain: "ethereum" | "solana", txRef: string): Promise<DepositVerification> {
-    return this.#answers.get(`${chain}:${txRef}`) ?? { ok: false, reason: "not_found" };
-  }
-}
 
 export interface Running {
   url: string;
@@ -188,12 +170,6 @@ export interface Stack {
   // --- BEGIN view backends: Stack fields ------------------------------------------------------
   /** The label store every chain-reading API here shares (writes go to its labels.json). */
   labelStore: CompositeLabelStore;
-  /** Bounties API (BountiesView), sharing `accountService`. */
-  bounties: Running;
-  /** The deposit verifier `BountyService` was built with — a test preprograms its answers (ADR 0020). */
-  bountyDeposits: StandInDepositVerifier;
-  /** The receiving wallets `GET /bounties/wallets` reports — fixed test addresses, never real ones. */
-  bountyWallets: { ethereum: string; solana: string };
   /** Case-management API (CasesView), sharing `accountService`. */
   cases: Running;
   /** Risk scoring API (RiskPanel), over the stack's adapter + `labelStore`. */
@@ -275,19 +251,6 @@ export async function startStack(adapter: ChainAdapter): Promise<Stack> {
   // Each is wired the way its own src/server.ts wires it, over this stack's temp dir, accounts
   // service, chain adapter and label store. Set after the placeholders above, so these win.
 
-  // Bounties (packages/features/bounties/src/server.ts).
-  const bountyDeposits = new StandInDepositVerifier();
-  // Fixed test addresses -- never anything that could be mistaken for a real receiving wallet.
-  const bountyWallets = { ethereum: "0xTestWalletEthereum00000000000000000001", solana: "TestWalletSolana1111111111111111111111111" };
-  const bountyService = new BountyService(new JsonFileBountyStore(join(dir, "bounties.json")), accountService, { deposits: bountyDeposits });
-  const bountiesHandler = createBountiesHandler(bountyService, { allowedOrigins: [WEB_ORIGIN], wallets: bountyWallets });
-  const bounties = await listen(async (req, res) => {
-    if (await bountiesHandler(req, res)) return;
-    res.writeHead(404, { "content-type": "application/json" });
-    res.end(JSON.stringify({ error: "not_found", message: "not found" }));
-  });
-  process.env["VITE_BOUNTIES_URL"] = bounties.url;
-
   // Case management (packages/features/case-management/src/server.ts).
   const caseService = new CaseService(accountService, new JsonFileCaseStore(join(dir, "cases.json")));
   const casesHandler = createCasesHandler(caseService, { allowedOrigins: [WEB_ORIGIN] });
@@ -344,9 +307,6 @@ export async function startStack(adapter: ChainAdapter): Promise<Stack> {
     privateLabels, // private-labels
     // --- BEGIN view backends: Stack values --------------------------------------------------
     labelStore,
-    bounties,
-    bountyDeposits,
-    bountyWallets,
     cases,
     risk,
     riskRequests,
@@ -358,7 +318,7 @@ export async function startStack(adapter: ChainAdapter): Promise<Stack> {
     async close() {
       await privateLabels.close(); // private-labels
       // --- BEGIN view backends: close -------------------------------------------------------
-      for (const server of [visualizer, tracer, wormholescan, risk, cases, bounties]) await server.close();
+      for (const server of [visualizer, tracer, wormholescan, risk, cases]) await server.close();
       // --- END view backends: close ---------------------------------------------------------
       await explorer.close();
       await accounts.close();

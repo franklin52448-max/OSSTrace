@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { apiCall, isModerator, useSession } from "./session.ts";
+import type { Bounty, BountySubmission } from "@osstrace/contract";
+import { serverApiCall, useServerSession } from "./serverSession.ts";
 import { EmptyState, Loading, Notice, PageHeader, SignInPrompt } from "./ui.tsx";
 
 // DepositPanel pulls in @solana/web3.js + @solana/spl-token (~2.5MB unminified, the whole Solana
@@ -8,35 +9,7 @@ import { EmptyState, Loading, Notice, PageHeader, SignInPrompt } from "./ui.tsx"
 // way App.tsx already lazy-loads the home page's WebGPU/WebGL hero effects.
 const DepositPanel = lazy(() => import("./DepositPanel.tsx"));
 
-const BOUNTIES_URL = import.meta.env["VITE_BOUNTIES_URL"] ?? "http://localhost:5313";
-
-// --- The Bounties API's response shapes (see packages/features/bounties/README.md) ------------
-type BountyStatus = "open" | "claimed" | "cancelled";
-interface Bounty {
-  id: string;
-  status: BountyStatus;
-  title: string;
-  description: string;
-  reward: string;
-  openedBy: string;
-  openedAt: string;
-  claimedSubmissionId?: string;
-  claimedBy?: string;
-  claimedAt?: string;
-  resolvedBy?: string;
-  cancelledAt?: string;
-  cancelledBy?: string;
-  cancellationReason?: string;
-}
-interface BountySubmission {
-  id: string;
-  bountyId: string;
-  submittedBy: string;
-  prUrl: string;
-  note: string;
-  submittedAt: string;
-  outcome: "pending" | "accepted" | "rejected";
-}
+type BountyStatus = Bounty["status"];
 
 const STATUS_TEXT: Record<BountyStatus, string> = { open: "Open", claimed: "Claimed", cancelled: "Cancelled" };
 const STATUS_CLASS: Record<BountyStatus, string> = {
@@ -52,16 +25,16 @@ function short(id: string): string {
 type ListState = { status: "loading" } | { status: "error"; message: string } | { status: "done"; bounties: Bounty[] };
 
 export default function BountiesView() {
-  const session = useSession();
-  const token = session.status === "signed-in" ? session.token : null;
+  const session = useServerSession();
+  const signedIn = session.status === "signed-in";
   const [list, setList] = useState<ListState>({ status: "loading" });
   const [showOpenForm, setShowOpenForm] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setList({ status: "loading" });
-    const res = await apiCall<{ bounties: Bounty[] }>(`${BOUNTIES_URL}/bounties`);
-    setList(res.ok ? { status: "done", bounties: res.body.bounties } : { status: "error", message: res.message });
+    const res = await serverApiCall<Bounty[]>("/api/bounties");
+    setList(res.ok ? { status: "done", bounties: res.body } : { status: "error", message: res.message });
   }, []);
 
   useEffect(() => {
@@ -94,7 +67,7 @@ export default function BountiesView() {
               <button type="button" onClick={() => void load()} className="btn-outline">
                 Refresh
               </button>
-              {token && (
+              {signedIn && (
                 <button type="button" onClick={() => setShowOpenForm((v) => !v)} className="btn-accent">
                   {showOpenForm ? "Cancel" : "Open a bounty"}
                 </button>
@@ -104,9 +77,9 @@ export default function BountiesView() {
         }
       />
 
-      {!token && <SignInPrompt>Log in to open a bounty or submit a PR. Anyone can browse.</SignInPrompt>}
+      {!signedIn && <SignInPrompt>Log in to open a bounty or submit a PR. Anyone can browse.</SignInPrompt>}
 
-      {showOpenForm && token && <OpenBountyForm token={token} onOpened={() => { setShowOpenForm(false); void load(); }} />}
+      {showOpenForm && signedIn && <OpenBountyForm onOpened={() => { setShowOpenForm(false); void load(); }} />}
 
       {selected ? (
         <BountyDetail bounty={selected} onBack={() => setSelectedId(null)} onChanged={load} />
@@ -145,7 +118,7 @@ function BountyList({ list, onSelect }: { list: ListState; onSelect: (id: string
   );
 }
 
-function OpenBountyForm({ token, onOpened }: { token: string; onOpened: () => void }) {
+function OpenBountyForm({ onOpened }: { onOpened: () => void }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [reward, setReward] = useState("");
@@ -156,7 +129,7 @@ function OpenBountyForm({ token, onOpened }: { token: string; onOpened: () => vo
     event.preventDefault();
     setSubmitting(true);
     setError(null);
-    const res = await apiCall<{ bounty: Bounty }>(`${BOUNTIES_URL}/bounties`, { method: "POST", token, body: { title, description, reward } });
+    const res = await serverApiCall<Bounty>("/api/bounties", { method: "POST", body: { title, description, reward } });
     setSubmitting(false);
     if (!res.ok) {
       setError(res.message);
@@ -190,7 +163,7 @@ function OpenBountyForm({ token, onOpened }: { token: string; onOpened: () => vo
         className="ctl w-full"
       />
       <p className="text-xs text-ink-faint">
-        Your own promise, not a balance held here: you pay the submission a moderator records as the winner, off-platform.
+        Your own promise, not a balance held here: you pay whichever submission you mark claimed, off-platform.
       </p>
       {error && <Notice tone="danger">{error}</Notice>}
       <button type="submit" disabled={submitting} className="btn-accent">
@@ -201,27 +174,16 @@ function OpenBountyForm({ token, onOpened }: { token: string; onOpened: () => vo
 }
 
 function BountyDetail({ bounty, onBack, onChanged }: { bounty: Bounty; onBack: () => void; onChanged: () => void }) {
-  const session = useSession();
-  const token = session.status === "signed-in" ? session.token : null;
-  const canModerate = isModerator(session);
-  const isOpener = session.status === "signed-in" && session.user.id === bounty.openedBy;
-  const [submissions, setSubmissions] = useState<BountySubmission[] | null>(null);
+  const session = useServerSession();
+  const signedIn = session.status === "signed-in";
+  const isOpener = signedIn && session.user.id === bounty.openedBy;
+  const submissions = bounty.submissions;
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const loadSubmissions = useCallback(async () => {
-    const res = await apiCall<{ submissions: BountySubmission[] }>(`${BOUNTIES_URL}/bounties/${bounty.id}/submissions`);
-    if (res.ok) setSubmissions(res.body.submissions);
-  }, [bounty.id]);
-
-  useEffect(() => {
-    void loadSubmissions();
-  }, [loadSubmissions]);
-
   async function claim(submissionId: string): Promise<void> {
-    if (!token) return;
     setError(null);
-    const res = await apiCall(`${BOUNTIES_URL}/bounties/${bounty.id}/claim`, { method: "POST", token, body: { submissionId } });
+    const res = await serverApiCall(`/api/bounties/${bounty.id}/claim`, { method: "POST", body: { submissionId } });
     if (!res.ok) {
       setError(res.message);
       return;
@@ -231,11 +193,10 @@ function BountyDetail({ bounty, onBack, onChanged }: { bounty: Bounty; onBack: (
   }
 
   async function cancel(): Promise<void> {
-    if (!token) return;
     const reason = window.prompt("Reason for cancelling (shown on the bounty)?");
     if (!reason) return;
     setError(null);
-    const res = await apiCall(`${BOUNTIES_URL}/bounties/${bounty.id}/cancel`, { method: "POST", token, body: { reason } });
+    const res = await serverApiCall(`/api/bounties/${bounty.id}/cancel`, { method: "POST", body: { reason } });
     if (!res.ok) {
       setError(res.message);
       return;
@@ -265,14 +226,14 @@ function BountyDetail({ bounty, onBack, onChanged }: { bounty: Bounty; onBack: (
           </div>
           {bounty.status === "claimed" && (
             <div className="rounded-ctl border border-signal/30 bg-signal/10 px-3 py-2 text-xs text-ink">
-              Claimed by <span className="hash">{short(bounty.claimedBy ?? "")}</span> — recorded by a moderator on{" "}
+              Claimed by <span className="hash">{short(bounty.claimedBy ?? "")}</span> — recorded by the opener on{" "}
               {bounty.claimedAt && new Date(bounty.claimedAt).toLocaleString()}.
             </div>
           )}
           {bounty.status === "cancelled" && (
             <div className="rounded-ctl border border-line bg-raised px-3 py-2 text-xs text-ink-dim">Cancelled: {bounty.cancellationReason}</div>
           )}
-          {bounty.status === "open" && (isOpener || canModerate) && (
+          {bounty.status === "open" && isOpener && (
             <button type="button" onClick={() => void cancel()} className="btn-outline">
               Cancel this bounty
             </button>
@@ -284,10 +245,10 @@ function BountyDetail({ bounty, onBack, onChanged }: { bounty: Bounty; onBack: (
       {error && <Notice tone="danger">{error}</Notice>}
 
       <Suspense fallback={<Loading label="Loading funding…" />}>
-        <DepositPanel bountyId={bounty.id} token={token} />
+        <DepositPanel bountyId={bounty.id} signedIn={signedIn} />
       </Suspense>
 
-      {bounty.status === "open" && token && <SubmitPrForm bountyId={bounty.id} token={token} onSubmitted={() => void loadSubmissions()} />}
+      {bounty.status === "open" && signedIn && <SubmitPrForm bountyId={bounty.id} onSubmitted={onChanged} />}
 
       <section className="card overflow-hidden">
         <div className="card-header">
@@ -319,7 +280,7 @@ function BountyDetail({ bounty, onBack, onChanged }: { bounty: Bounty; onBack: (
                   >
                     {s.outcome}
                   </span>
-                  {bounty.status === "open" && canModerate && s.outcome === "pending" && (
+                  {bounty.status === "open" && isOpener && s.outcome === "pending" && (
                     <button type="button" onClick={() => void claim(s.id)} className="btn-outline">
                       Mark claimed
                     </button>
@@ -334,7 +295,7 @@ function BountyDetail({ bounty, onBack, onChanged }: { bounty: Bounty; onBack: (
   );
 }
 
-function SubmitPrForm({ bountyId, token, onSubmitted }: { bountyId: string; token: string; onSubmitted: () => void }) {
+function SubmitPrForm({ bountyId, onSubmitted }: { bountyId: string; onSubmitted: () => void }) {
   const [prUrl, setPrUrl] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -344,11 +305,7 @@ function SubmitPrForm({ bountyId, token, onSubmitted }: { bountyId: string; toke
     event.preventDefault();
     setSubmitting(true);
     setError(null);
-    const res = await apiCall<{ submission: BountySubmission }>(`${BOUNTIES_URL}/bounties/${bountyId}/submissions`, {
-      method: "POST",
-      token,
-      body: { prUrl, note },
-    });
+    const res = await serverApiCall<BountySubmission>(`/api/bounties/${bountyId}/submissions`, { method: "POST", body: { prUrl, note } });
     setSubmitting(false);
     if (!res.ok) {
       setError(res.message);
@@ -363,7 +320,7 @@ function SubmitPrForm({ bountyId, token, onSubmitted }: { bountyId: string; toke
     <form onSubmit={handleSubmit} className="card space-y-3 p-4">
       <h2 className="text-[15px] font-medium text-ink">Submit a PR</h2>
       <input value={prUrl} onChange={(e) => setPrUrl(e.target.value)} placeholder="https://github.com/…/pull/…" required className="ctl hash w-full" />
-      <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note for the moderator (optional)" maxLength={1000} className="ctl w-full" />
+      <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note for the bounty's opener (optional)" maxLength={1000} className="ctl w-full" />
       {error && <Notice tone="danger">{error}</Notice>}
       <button type="submit" disabled={submitting} className="btn-accent">
         {submitting ? "Submitting…" : "Submit"}

@@ -10,7 +10,7 @@ import type { ChainProvider } from "./chain/types.ts";
 import type { Config } from "./config.ts";
 import type { Ctx, WebhookSender } from "./context.ts";
 import { openDb, type Db } from "./db/index.ts";
-import { cookieOpts, resolveSession, SESSION_COOKIE } from "./auth/sessions.ts";
+import { cookieOpts, devUser, ensureDevUser, resolveSession, SESSION_COOKIE } from "./auth/sessions.ts";
 import { ApiErr, ProviderError } from "./lib/errors.ts";
 import { safePost, systemResolver, type Resolver } from "./lib/ssrf.ts";
 import { AlertWorker } from "./services/alerts.ts";
@@ -21,6 +21,7 @@ import { registerTraces } from "./routes/traces.ts";
 import { registerViews } from "./routes/views.ts";
 import { registerLabels } from "./routes/labels.ts";
 import { registerAlerts } from "./routes/alerts.ts";
+import { registerBounties } from "./routes/bounties.ts";
 
 export const VERSION = "0.1.0";
 
@@ -60,6 +61,7 @@ class WindowLimiter {
 
 export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ app: FastifyInstance; ctx: Ctx; worker: AlertWorker }> {
   const db = o.db ?? openDb(config.dbPath);
+  if (config.devSkipAuth) ensureDevUser(db); // local dev only -- config.ts refuses this when production is true
   const providers: Record<Chain, ChainProvider> = {
     ethereum: o.providers?.ethereum ?? new BlockscoutProvider(config.ethBlockscoutUrl, o.fetchImpl),
     solana:
@@ -129,6 +131,7 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
     resolver,
     sendWebhook: o.sendWebhook ?? ((url, body, headers) => safePost(url, body, headers, { resolve: resolver, timeoutMs: 5000 })),
     version: VERSION,
+    fetchImpl: o.fetchImpl ?? fetch,
   };
 
   await app.register(cookie);
@@ -206,6 +209,9 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
         reply.clearCookie(SESSION_COOKIE, { path: "/" });
       }
     }
+    // Local dev only (config.ts refuses this in production): fills the gap when there's no real
+    // session, so the whole site behaves as signed in without touching the real wallet-auth routes.
+    if (config.devSkipAuth && !req.user) req.user = devUser();
   });
 
   app.addHook("onSend", async (req, reply, payload) => {
@@ -248,6 +254,7 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
   registerViews(app, ctx);
   registerLabels(app, ctx);
   registerAlerts(app, ctx);
+  registerBounties(app, ctx);
 
   const worker = new AlertWorker(ctx, app.log);
   if (config.testHooks) {

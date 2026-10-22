@@ -12,9 +12,8 @@ import PrivateLabelPanel from "./PrivateLabelPanel.tsx";
 import RiskPanel from "./RiskPanel.tsx";
 import AccountPanel from "./AccountPanel.tsx";
 import ThemeCustomizer, { ThemeToggle } from "./ThemeCustomizer.tsx";
-import ModerationView from "./ModerationView.tsx";
 import { LabelSubmitForm, ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
-import { isModerator, useSession } from "./session.ts";
+import { useSession } from "./session.ts";
 import { Notice, SignInPrompt } from "./ui.tsx";
 import { ChainIcon, ChainSelect } from "./ChainSelect.tsx";
 import HomeFeatures from "./HomeFeatures.tsx";
@@ -117,7 +116,7 @@ const EXPLORERS: Record<ChainId, { name: string; tx: string; address: string }> 
    notes this gets folded back into the canvas as a feature later, rather than staying a separate
    page for good. */
 
-type View = "lookup" | "graph" | "trace" | "pathfind" | "alerts" | "labels" | "bounties" | "moderation" | "workbench";
+type View = "lookup" | "graph" | "trace" | "pathfind" | "alerts" | "labels" | "bounties" | "workbench";
 interface Route {
   view: View;
   target: { chain: ChainId; address: string } | null;
@@ -131,7 +130,7 @@ function routeFromHash(): Route {
   if (head === "graph") return { view: "graph", target };
   if (head === "trace") return { view: "trace", target: null };
   if (head === "pathfind") return { view: "pathfind", target };
-  if (head === "alerts" || head === "labels" || head === "bounties" || head === "moderation" || head === "workbench") return { view: head, target: null };
+  if (head === "alerts" || head === "labels" || head === "bounties" || head === "workbench") return { view: head, target: null };
   return { view: "lookup", target: null };
 }
 
@@ -146,7 +145,6 @@ const NAV: readonly { id: View; label: string; href: string }[] = [
   { id: "labels", label: "Labels", href: "#labels" },
   { id: "bounties", label: "Bounties", href: "#bounties" },
   { id: "workbench", label: "Workbench", href: "#workbench" },
-  { id: "moderation", label: "Moderation", href: "#moderation" },
 ];
 
 /** Original mark: three linked nodes — the queried address and two counterparties. */
@@ -166,7 +164,6 @@ function Wordmark() {
 
 export default function App() {
   const [route, setRoute] = useState<Route>(routeFromHash);
-  const session = useSession();
   const headerRef = useRef<HTMLElement>(null);
   const [headerH, setHeaderH] = useState(0);
 
@@ -193,7 +190,6 @@ export default function App() {
 
   const home = route.view === "lookup" && !route.target;
   const targetKey = route.target ? `${route.target.chain}:${route.target.address}` : "empty";
-  const nav = NAV.filter((tab) => tab.id !== "moderation" || isModerator(session) || route.view === "moderation");
 
   return (
     <div className="min-h-screen bg-ground text-ink">
@@ -213,7 +209,7 @@ export default function App() {
             <Wordmark />
           </a>
           <nav className="hidden items-center gap-0.5 lg:flex" aria-label="Views">
-            {nav.map((tab) => (
+            {NAV.map((tab) => (
               <NavLink key={tab.id} tab={tab} active={route.view === tab.id} rail={!home} />
             ))}
           </nav>
@@ -231,7 +227,7 @@ export default function App() {
         </div>
         {/* Narrow screens: views scroll horizontally under the bar. */}
         <nav className="flex gap-0.5 overflow-x-auto px-3 pb-2 lg:hidden" aria-label="Views">
-          {nav.map((tab) => (
+          {NAV.map((tab) => (
             <NavLink key={tab.id} tab={tab} active={route.view === tab.id} rail={!home} />
           ))}
         </nav>
@@ -255,8 +251,6 @@ export default function App() {
             <BountiesView />
           ) : route.view === "workbench" ? (
             <WorkbenchView />
-          ) : route.view === "moderation" ? (
-            <ModerationView />
           ) : route.view === "pathfind" ? (
             <TracerView key={targetKey} initial={route.target} />
           ) : route.target ? (

@@ -96,7 +96,7 @@ export default function BountiesView() {
 
       {!token && (
         <div className="rounded-card border border-line bg-raised px-4 py-2.5 text-xs text-ink-dim">
-          Log in (in the sidebar) to open a bounty or submit a PR against one. Browsing is open to everyone.
+          Log in (top right) to open a bounty or submit a PR against one. Browsing is open to everyone.
         </div>
       )}
 

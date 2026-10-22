@@ -85,7 +85,7 @@ export function LabelSubmitForm({ chain, address, onSubmitted }: { chain: ChainI
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="font-medium text-signal underline-offset-2 transition-colors duration-150 hover:text-[#53e6a6] hover:underline"
+          className="font-medium text-signal underline-offset-2 transition-colors duration-150 hover:text-ink hover:underline"
         >
           Suggest a label for this address
         </button>

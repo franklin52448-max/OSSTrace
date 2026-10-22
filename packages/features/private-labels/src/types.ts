@@ -21,7 +21,7 @@ export const PRIVATE_LABELS_PER_USER_LIMIT = 5000;
 export interface StoredPrivateLabel {
   userId: string;
   chain: ChainId;
-  /** Canonical form (see `address.ts`): lowercase hex on Ethereum, exact base58 on Solana. */
+  /** Canonical form (see `@osstrace/core`'s `canonicalAddress`): lowercase hex on Ethereum, exact base58 on Solana. */
   address: string;
   label: string;
   /** ISO 8601. */

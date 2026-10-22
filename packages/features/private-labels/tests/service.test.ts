@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { canonicalAddress } from "../src/address.ts";
 import { checkLabelText } from "../src/service.ts";
 import { PRIVATE_LABEL_MAX_LENGTH } from "../src/types.ts";
 import { ETH_ADDR, GOOD_PASSWORD, SOL_ADDR, withStack } from "./helpers.ts";
@@ -11,17 +10,10 @@ async function newUser(stack: Parameters<Parameters<typeof withStack>[0]>[0], em
   return res.session.token;
 }
 
-test("canonicalAddress: Ethereum is lowercased (checksum case is not identity), Solana is kept exact", () => {
-  assert.equal(canonicalAddress("ethereum", "  0x00000000219AB540356cBB839Cbe05303d7705Fa "), ETH_ADDR);
-  assert.equal(canonicalAddress("ethereum", "0x1234"), null);
-  assert.equal(canonicalAddress("ethereum", "0xzz000000219ab540356cbb839cbe05303d7705fa"), null);
-  assert.equal(canonicalAddress("ethereum", SOL_ADDR), null);
-  assert.equal(canonicalAddress("solana", SOL_ADDR), SOL_ADDR);
-  // Lowercasing a base58 address names a different account, so it must not match the original.
-  assert.notEqual(canonicalAddress("solana", SOL_ADDR.toLowerCase()), SOL_ADDR);
-  assert.equal(canonicalAddress("solana", "0OIl" + SOL_ADDR.slice(4)), null);
-  assert.equal(canonicalAddress("solana", ETH_ADDR), null);
-});
+// Address canonicalization/validation is @osstrace/core's own `canonicalAddress`/`isRealAddress`
+// now, not a copy in this package — see packages/core/tests/addressFormat.test.ts for that unit
+// coverage. "input errors (after auth)" below proves this service rejects a malformed address
+// through the real, full validation path, not just the shared helper in isolation.
 
 test("checkLabelText: free text, no source needed, but one non-empty line within the length cap", () => {
   assert.equal(checkLabelText("scammer from discord 🚩"), null);

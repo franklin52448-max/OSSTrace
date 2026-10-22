@@ -1,6 +1,5 @@
 import type { AuthResult, PublicUser } from "@osstrace/accounts";
-import type { ChainId } from "@osstrace/core";
-import { canonicalAddress, isChainId, SUPPORTED_CHAINS } from "./address.ts";
+import { canonicalAddress, isChainId, isRealAddress, SUPPORTED_CHAINS, type ChainId } from "@osstrace/core";
 import type { PrivateLabelStore } from "./store.ts";
 import {
   PRIVATE_LABEL_MAX_LENGTH,
@@ -65,8 +64,12 @@ export class PrivateLabelService {
     if (!isChainId(chain)) {
       return { ok: false, error: "invalid_chain", message: `chain must be one of: ${SUPPORTED_CHAINS.join(", ")}` };
     }
-    const canonical = typeof address === "string" ? canonicalAddress(chain, address) : null;
-    if (!canonical) return { ok: false, error: "invalid_address", message: `not a valid ${chain} address` };
+    // core's canonicalAddress only lowercases Ethereum (it doesn't validate); isRealAddress checks
+    // the shape. Validate first so a malformed address can never be canonicalized and stored.
+    if (typeof address !== "string" || !isRealAddress(chain, address.trim())) {
+      return { ok: false, error: "invalid_address", message: `not a valid ${chain} address` };
+    }
+    const canonical = canonicalAddress(chain, address.trim());
     return { ok: true, target: { userId: me.user.id, chain, address: canonical } };
   }
 

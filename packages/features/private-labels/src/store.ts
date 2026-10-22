@@ -13,7 +13,7 @@ export type SetPrivateLabelOutcome =
  * so no caller (a future feature, a careless refactor) can ask this store for someone else's label
  * by accident. The owner check is the shape of the interface, not a convention on top of it.
  *
- * `address` must already be canonical (`canonicalAddress` in `address.ts`); the service does that.
+ * `address` must already be canonical (`canonicalAddress` from `@osstrace/core`); the service does that.
  */
 export interface PrivateLabelStore {
   get(userId: string, chain: ChainId, address: string): Promise<StoredPrivateLabel | null>;

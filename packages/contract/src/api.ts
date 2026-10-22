@@ -37,21 +37,22 @@ export type ApiError = {
 };
 
 // ---------- Auth & account ----------
-export type User = { id: string; username: string; displayName: string; createdAt: string };
-export type SignupRequest = { username: string; password: string; displayName?: string };
-export type LoginRequest = { username: string; password: string };
+// Identity is the wallet: a user IS a (chain, walletAddress) pair, verified by a signed challenge.
+// `username` is an internal unique handle, never chosen or shown; `displayName` is the only
+// identity field a signed-in user can change (PATCH /api/settings).
+export type User = { id: string; username: string; displayName: string; createdAt: string; chain: "solana" | "ethereum" | null; walletAddress: string | null };
 export type AuthResponse = { user: User };
-export type ChangePasswordRequest = { currentPassword: string; newPassword: string };
-export type DeleteAccountRequest = { password: string };
+export type ChallengeRequest = { chain: "solana" | "ethereum"; address: string };
+export type ChallengeResponse = { message: string };
+export type VerifyRequest = { chain: "solana" | "ethereum"; address: string; signature: string };
 export type SessionInfo = { id: string; createdAt: string; lastSeenAt: string; userAgent: string | null; current: boolean };
-// POST /api/auth/signup | /login -> AuthResponse (sets cookie); POST /api/auth/logout -> 204
-// GET /api/auth/me -> AuthResponse | 401; POST /api/auth/change-password -> 204 (other sessions revoked)
+// POST /api/auth/challenge {chain,address} -> ChallengeResponse: a message to sign, valid 5 minutes, single-use.
+// POST /api/auth/verify {chain,address,signature} -> AuthResponse (sets cookie): verifies the signature over the
+// pending challenge for that wallet, then finds or creates the user for (chain, address).
+// POST /api/auth/logout -> 204; GET /api/auth/me -> AuthResponse | 401.
 // GET /api/auth/sessions -> SessionInfo[]; DELETE /api/auth/sessions/:id -> 204; DELETE /api/auth/account -> 204
-// Status rules: 401 only for a failed login or a missing/expired session. A wrong CURRENT password on an authenticated
-// re-auth step (change-password, delete account) is 400 `bad_request` with a clear message, never 401 (a 401 makes clients
-// treat the session as expired).
-// Rules: username 3-32 chars [a-z0-9_.-] case-insensitive unique; password >= 10 chars; login throttled per
-// (ip, username); signup can be disabled with ALLOW_SIGNUP=false.
+// (deleting the account just needs a valid session -- the wallet signature that started it already proved ownership).
+// Rate limits: challenges per ip; verify failures per (ip, chain:address), same backoff shape as the old login throttle.
 
 // ---------- Settings ----------
 export type Preferences = {

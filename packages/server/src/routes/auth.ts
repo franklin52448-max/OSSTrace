@@ -1,74 +1,89 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { AuthResponse, SessionInfo } from "@osstrace/contract";
+import type { AuthResponse, ChallengeResponse, SessionInfo } from "@osstrace/contract";
 import { requireUser, type Ctx } from "../context.ts";
-import { ApiErr, badRequest, conflict, notFound } from "../lib/errors.ts";
+import { ApiErr, conflict, notFound } from "../lib/errors.ts";
 import { nowIso } from "../lib/time.ts";
-import { displayName, parse, password, username } from "../schemas.ts";
+import { parse, walletAddress, walletSignature } from "../schemas.ts";
 import { cookieOpts, createSession, SESSION_COOKIE, toUser } from "../auth/sessions.ts";
-import { dummyHash, hashPassword, verifyPassword } from "../auth/password.ts";
-import { checkLoginAllowed, checkSignupAllowed, recordLogin } from "../auth/throttle.ts";
+import { createChallenge, isValidAddress, normalizeAddress, verifyChallenge, type WalletChain } from "../auth/wallet.ts";
+import { checkChallengeAllowed, checkVerifyAllowed, recordVerify } from "../auth/throttle.ts";
 
-const signupBody = z.object({ username, password, displayName: displayName.optional() });
-const loginBody = z.object({ username: z.string().trim().min(1).max(64).transform((s) => s.toLowerCase()), password: z.string().min(1).max(512) });
-const changeBody = z.object({ currentPassword: z.string().min(1).max(512), newPassword: password });
-const deleteBody = z.object({ password: z.string().min(1).max(512) });
+const walletChain = z.enum(["solana", "ethereum"]);
+const challengeBody = z.object({ chain: walletChain, address: walletAddress });
+const verifyBody = z.object({ chain: walletChain, address: walletAddress, signature: walletSignature });
 
-type UserRow = { id: string; username: string; display_name: string; created_at: string; password_hash: string };
+type UserRow = { id: string; username: string; display_name: string; created_at: string; chain: string | null; wallet_address: string | null };
+
+/** `sol_AbCdWxYz` / `eth_1234abcd` -- short, readable, and (bar an astronomically unlikely collision) stable per wallet. */
+function shortHandle(chain: WalletChain, address: string): string {
+  const tag = chain === "solana" ? "sol" : "eth";
+  const head = address.slice(0, 4);
+  const tail = address.slice(-4);
+  return `${tag}_${head}${tail}`;
+}
 
 export function registerAuth(app: FastifyInstance, ctx: Ctx) {
-  const { db, config } = ctx;
+  const { db } = ctx;
 
-  app.post("/api/auth/signup", async (req, reply) => {
-    if (!config.allowSignup) throw new ApiErr("forbidden", "Sign-up is disabled on this server");
-    const body = parse(signupBody, req.body);
-    checkSignupAllowed(db, req.ip);
-    if (db.get("SELECT 1 FROM users WHERE username = ?", body.username)) throw conflict("That username is taken");
-    const hash = await hashPassword(body.password);
-    const id = randomUUID();
-    const now = nowIso();
-    try {
-      db.tx(() => {
-        db.run(
-          "INSERT INTO users (id, username, display_name, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-          id,
-          body.username,
-          body.displayName ?? body.username,
-          hash,
-          now,
-          now,
-        );
-        db.run(
-          "INSERT INTO notification_methods (id, user_id, kind, name, url, secret, enabled, created_at) VALUES (?, ?, 'in_app', 'In-app inbox', NULL, NULL, 1, ?)",
-          randomUUID(),
-          id,
-          now,
-        );
-      });
-    } catch (e) {
-      if (String(e).includes("UNIQUE")) throw conflict("That username is taken");
-      throw e;
-    }
-    const s = createSession(db, id, req.headers["user-agent"] ?? null);
-    reply.setCookie(SESSION_COOKIE, s.token, cookieOpts(config));
-    const res: AuthResponse = { user: { id, username: body.username, displayName: body.displayName ?? body.username, createdAt: now } };
-    return reply.status(201).send(res);
+  app.post("/api/auth/challenge", async (req) => {
+    checkChallengeAllowed(db, req.ip);
+    const body = parse(challengeBody, req.body);
+    if (!isValidAddress(body.chain, body.address)) throw new ApiErr("bad_request", `That doesn't look like a ${body.chain} address`);
+    const message = createChallenge(body.chain, body.address);
+    const res: ChallengeResponse = { message };
+    return res;
   });
 
-  app.post("/api/auth/login", async (req, reply) => {
-    const body = parse(loginBody, req.body);
-    checkLoginAllowed(db, req.ip, body.username);
-    const row = db.get<UserRow>("SELECT id, username, display_name, created_at, password_hash FROM users WHERE username = ?", body.username);
-    // Same scrypt cost whether or not the user exists.
-    const ok = await verifyPassword(body.password, row?.password_hash ?? (await dummyHash()));
-    if (!row || !ok) {
-      recordLogin(db, req.ip, body.username, false);
-      throw new ApiErr("unauthorized", "Wrong username or password");
+  app.post("/api/auth/verify", async (req, reply) => {
+    const body = parse(verifyBody, req.body);
+    const normalized = normalizeAddress(body.chain, body.address);
+    const walletKey = `${body.chain}:${normalized}`;
+    checkVerifyAllowed(db, req.ip, walletKey);
+    const ok = isValidAddress(body.chain, body.address) && verifyChallenge(body.chain, body.address, body.signature);
+    if (!ok) {
+      recordVerify(db, req.ip, walletKey, false);
+      throw new ApiErr("unauthorized", "Signature didn't verify, or the sign-in request expired -- try again");
     }
-    recordLogin(db, req.ip, body.username, true);
+    recordVerify(db, req.ip, walletKey, true);
+
+    let row = db.get<UserRow>("SELECT id, username, display_name, created_at, chain, wallet_address FROM users WHERE chain = ? AND wallet_address = ?", body.chain, normalized);
+    if (!row) {
+      if (!ctx.config.allowSignup) throw new ApiErr("forbidden", "New sign-ups are disabled on this server");
+      const id = randomUUID();
+      const now = nowIso();
+      const handle = shortHandle(body.chain, body.address);
+      let uname = handle;
+      for (let i = 1; db.get("SELECT 1 FROM users WHERE username = ?", uname); i++) uname = `${handle}_${i}`;
+      try {
+        db.tx(() => {
+          db.run(
+            "INSERT INTO users (id, username, display_name, created_at, updated_at, chain, wallet_address) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            id,
+            uname,
+            handle,
+            now,
+            now,
+            body.chain,
+            normalized,
+          );
+          db.run(
+            "INSERT INTO notification_methods (id, user_id, kind, name, url, secret, enabled, created_at) VALUES (?, ?, 'in_app', 'In-app inbox', NULL, NULL, 1, ?)",
+            randomUUID(),
+            id,
+            now,
+          );
+        });
+      } catch (e) {
+        if (String(e).includes("UNIQUE")) throw conflict("That wallet is already registered");
+        throw e;
+      }
+      row = { id, username: uname, display_name: handle, created_at: now, chain: body.chain, wallet_address: normalized };
+    }
+
     const s = createSession(db, row.id, req.headers["user-agent"] ?? null);
-    reply.setCookie(SESSION_COOKIE, s.token, cookieOpts(config));
+    reply.setCookie(SESSION_COOKIE, s.token, cookieOpts(ctx.config));
     const res: AuthResponse = { user: toUser(row) };
     return res;
   });
@@ -81,26 +96,8 @@ export function registerAuth(app: FastifyInstance, ctx: Ctx) {
 
   app.get("/api/auth/me", async (req) => {
     const u = requireUser(req);
-    const res: AuthResponse = { user: { id: u.id, username: u.username, displayName: u.displayName, createdAt: u.createdAt } };
+    const res: AuthResponse = { user: { id: u.id, username: u.username, displayName: u.displayName, createdAt: u.createdAt, chain: u.chain, walletAddress: u.walletAddress } };
     return res;
-  });
-
-  app.post("/api/auth/change-password", async (req, reply) => {
-    const u = requireUser(req);
-    const body = parse(changeBody, req.body);
-    checkLoginAllowed(db, req.ip, u.username);
-    const row = db.get<UserRow>("SELECT password_hash FROM users WHERE id = ?", u.id)!;
-    if (!(await verifyPassword(body.currentPassword, row.password_hash))) {
-      recordLogin(db, req.ip, u.username, false);
-      throw new ApiErr("bad_request", "Current password is wrong");
-    }
-    if (body.currentPassword === body.newPassword) throw badRequest("New password must differ from the current one");
-    const hash = await hashPassword(body.newPassword);
-    db.tx(() => {
-      db.run("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", hash, nowIso(), u.id);
-      db.run("DELETE FROM sessions WHERE user_id = ? AND id <> ?", u.id, u.sessionId);
-    });
-    return reply.status(204).send();
   });
 
   app.get("/api/auth/sessions", async (req) => {
@@ -122,14 +119,9 @@ export function registerAuth(app: FastifyInstance, ctx: Ctx) {
   });
 
   app.delete("/api/auth/account", async (req, reply) => {
+    // No re-auth step needed: the wallet signature that started this session already proved
+    // ownership, and there's no password to re-check (unlike the old username+password flow).
     const u = requireUser(req);
-    const body = parse(deleteBody, req.body);
-    checkLoginAllowed(db, req.ip, u.username);
-    const row = db.get<UserRow>("SELECT password_hash FROM users WHERE id = ?", u.id)!;
-    if (!(await verifyPassword(body.password, row.password_hash))) {
-      recordLogin(db, req.ip, u.username, false);
-      throw new ApiErr("bad_request", "Password is wrong");
-    }
     // Every user-owned table cascades from users(id).
     db.run("DELETE FROM users WHERE id = ?", u.id);
     reply.clearCookie(SESSION_COOKIE, { path: "/" });

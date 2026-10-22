@@ -123,8 +123,10 @@ export const username = z
   .max(32, "username must be 3-32 characters")
   .regex(/^[A-Za-z0-9_.-]+$/, "username may only contain letters, digits, _ . -")
   .transform((s) => s.toLowerCase());
-export const password = z.string().min(10, "password must be at least 10 characters").max(512);
 export const displayName = z.string().trim().min(1).max(64);
+
+export const walletAddress = z.string().min(1).max(200);
+export const walletSignature = z.string().min(1).max(4000);
 
 export const preferences = z.object({
   theme: z.enum(["dark", "light"]),

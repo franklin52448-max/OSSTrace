@@ -11,7 +11,6 @@ import type { Config } from "./config.ts";
 import type { Ctx, WebhookSender } from "./context.ts";
 import { openDb, type Db } from "./db/index.ts";
 import { cookieOpts, resolveSession, SESSION_COOKIE } from "./auth/sessions.ts";
-import { dummyHash } from "./auth/password.ts";
 import { ApiErr, ProviderError } from "./lib/errors.ts";
 import { safePost, systemResolver, type Resolver } from "./lib/ssrf.ts";
 import { AlertWorker } from "./services/alerts.ts";
@@ -108,10 +107,7 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
                 "req.headers.cookie",
                 "req.headers.authorization",
                 'res.headers["set-cookie"]',
-                "password",
-                "*.password",
-                "currentPassword",
-                "newPassword",
+                "signature",
                 "*.secret",
                 "secret",
               ],
@@ -259,7 +255,6 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
     app.post("/api/_test/alerts/tick", async () => worker.tick());
   }
 
-  void dummyHash(); // warm the constant-time path for unknown usernames
   app.addHook("onClose", async () => {
     await worker.stop();
     if (!o.db) db.close();

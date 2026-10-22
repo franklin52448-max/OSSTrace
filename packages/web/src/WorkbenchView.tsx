@@ -5,10 +5,10 @@
 // run on the old services until they're actually cut over (ADR 0022's later chunks).
 import { useCallback, useEffect, useState } from "react";
 import type { ChainId } from "@osstrace/core";
-import { serverApiCall, serverSignIn, serverSignOut, useServerSession, type ServerUser } from "./serverSession.ts";
+import { serverApiCall, serverSignOut, useServerSession, type ServerUser } from "./serverSession.ts";
 import { ChainIcon, ChainSelect } from "./ChainSelect.tsx";
-import { EmptyState, Loading, Notice, PageHeader } from "./ui.tsx";
-import { Button, Input, SearchBar, Text, cx } from "./prism/components.tsx";
+import { EmptyState, Loading, Notice, PageHeader, SignInPrompt } from "./ui.tsx";
+import { Button, SearchBar, Text, cx } from "./prism/components.tsx";
 
 // --- The new server's own response shapes (packages/contract/src/api.ts) ----------------------
 interface EntityRef {
@@ -86,67 +86,11 @@ export default function WorkbenchView() {
       ) : session.status === "unreachable" ? (
         <Notice tone="danger">Can't reach the new server: {session.message}</Notice>
       ) : session.status === "anonymous" ? (
-        <WorkbenchAuthForm />
+        <SignInPrompt>Connect a wallet to use the Workbench.</SignInPrompt>
       ) : (
         <WorkbenchBody user={session.user} />
       )}
     </div>
-  );
-}
-
-function WorkbenchAuthForm() {
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSubmit(e: React.FormEvent): Promise<void> {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    const problem = await serverSignIn(mode === "signup" ? "signup" : "login", username.trim(), password);
-    setBusy(false);
-    if (problem) setError(problem);
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="card max-w-sm space-y-3 p-5" aria-label={mode === "login" ? "Log in" : "Sign up"}>
-      <div className="flex items-center gap-1">
-        {(["login", "signup"] as const).map((m) => (
-          <Button
-            key={m}
-            transparent={mode !== m}
-            className="small"
-            type="button"
-            onClick={() => {
-              setMode(m);
-              setError(null);
-            }}
-          >
-            {m === "login" ? "Log in" : "Sign up"}
-          </Button>
-        ))}
-      </div>
-      <Input aria-label="Workbench username" required autoComplete="username" placeholder="Username (3-32 chars)" value={username} onChange={(e) => setUsername(e.target.value)} />
-      <Input
-        type="password"
-        aria-label="Workbench password"
-        required
-        autoComplete={mode === "signup" ? "new-password" : "current-password"}
-        placeholder={mode === "signup" ? "Password (10+ chars)" : "Password"}
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
-      {error && (
-        <div role="alert" className="text-sm text-danger">
-          {error}
-        </div>
-      )}
-      <Button primary type="submit" disabled={busy} className="w-full">
-        {busy ? "…" : mode === "login" ? "Log in" : "Sign up"}
-      </Button>
-    </form>
   );
 }
 

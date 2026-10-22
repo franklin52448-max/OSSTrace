@@ -18,6 +18,8 @@ export interface ServerUser {
   username: string;
   displayName: string;
   createdAt: string;
+  chain: "solana" | "ethereum" | null;
+  walletAddress: string | null;
 }
 
 export type ServerSessionState =
@@ -93,9 +95,16 @@ export function useServerSession(): ServerSessionState {
   return useSyncExternalStore(subscribe, () => state);
 }
 
-/** Real signup/login against the new server. Returns an error message, or null on success. */
-export async function serverSignIn(mode: "signup" | "login", username: string, password: string): Promise<string | null> {
-  const result = await serverApiCall<{ user: ServerUser }>(`/api/auth/${mode}`, { method: "POST", body: { username, password } });
+export type WalletChain = "solana" | "ethereum";
+
+/** Step 1 of wallet sign-in: asks the server for a message to sign. */
+export async function serverChallenge(chain: WalletChain, address: string): Promise<ServerApiResult<{ message: string }>> {
+  return serverApiCall<{ message: string }>("/api/auth/challenge", { method: "POST", body: { chain, address } });
+}
+
+/** Step 2: sends the wallet's signature over that message. On success, updates the session. */
+export async function serverVerify(chain: WalletChain, address: string, signature: string): Promise<string | null> {
+  const result = await serverApiCall<{ user: ServerUser }>("/api/auth/verify", { method: "POST", body: { chain, address, signature } });
   if (!result.ok) return result.message;
   setState({ status: "signed-in", user: result.body.user });
   return null;
@@ -105,4 +114,9 @@ export async function serverSignIn(mode: "signup" | "login", username: string, p
 export async function serverSignOut(): Promise<void> {
   await serverApiCall("/api/auth/logout", { method: "POST" });
   setState({ status: "anonymous" });
+}
+
+/** Lets a successful `PATCH /api/settings` (settings/api.ts) push its updated User back into this store. */
+export function setServerUser(user: ServerUser): void {
+  setState({ status: "signed-in", user });
 }

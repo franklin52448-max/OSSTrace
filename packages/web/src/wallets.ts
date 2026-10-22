@@ -20,6 +20,14 @@ import {
   getAssociatedTokenAddress,
   getMint,
 } from "@solana/spl-token";
+import type { EthereumProvider as BaseEthereumProvider, SolanaProvider as BaseSolanaProvider } from "./walletConnect.ts";
+
+// Connect/sign-message live in walletConnect.ts (no chain-SDK imports, safe to use eagerly from
+// the header's AccountPanel.tsx) -- re-exported here so DepositPanel.tsx's existing imports don't
+// need to change, and this module just adds the real on-chain *sending* on top. getEthereumProvider
+// / getSolanaProvider are redeclared below (not re-exported) so they return the richer provider
+// shape -- including signAndSendTransaction -- that the send functions here need.
+export { connectEthereum, connectSolana, signEthereumMessage, signSolanaMessage } from "./walletConnect.ts";
 
 export type Chain = "ethereum" | "solana";
 
@@ -46,19 +54,10 @@ export function parseDecimalAmount(amountHuman: string, decimals: number): bigin
 
 // --- Ethereum (EIP-1193) -------------------------------------------------------------------
 
-export interface EthereumProvider {
-  request(args: { method: string; params?: unknown[] }): Promise<unknown>;
-}
+type EthereumProvider = BaseEthereumProvider;
 
 export function getEthereumProvider(): EthereumProvider | null {
   return (window as unknown as { ethereum?: EthereumProvider }).ethereum ?? null;
-}
-
-export async function connectEthereum(provider: EthereumProvider): Promise<string> {
-  const accounts = (await provider.request({ method: "eth_requestAccounts" })) as string[];
-  const address = accounts[0];
-  if (!address) throw new Error("the wallet returned no account");
-  return address;
 }
 
 /** keccak256("transfer(address,uint256)")'s first 4 bytes — the real, public ERC-20 selector (same one `deposits.ts` verifies against, via its own event topic). */
@@ -87,18 +86,12 @@ export async function sendEthereumToken(provider: EthereumProvider, from: string
 
 // --- Solana (the de facto injected provider most wallets expose for compatibility) ---------
 
-export interface SolanaProvider {
-  connect(): Promise<{ publicKey: { toString(): string } }>;
+interface SolanaProvider extends BaseSolanaProvider {
   signAndSendTransaction(transaction: Transaction): Promise<{ signature: string }>;
 }
 
 export function getSolanaProvider(): SolanaProvider | null {
   return (window as unknown as { solana?: SolanaProvider }).solana ?? null;
-}
-
-export async function connectSolana(provider: SolanaProvider): Promise<string> {
-  const { publicKey } = await provider.connect();
-  return publicKey.toString();
 }
 
 const SOLANA_RPC_URL: string = import.meta.env["VITE_SOLANA_RPC_URL"] ?? "https://api.mainnet-beta.solana.com";

@@ -7,6 +7,7 @@ import { ApiErr, badRequest, notFound } from "../lib/errors.ts";
 import { assertPublicUrl, SsrfError } from "../lib/ssrf.ts";
 import { nowIso } from "../lib/time.ts";
 import { displayName, parse, preferences } from "../schemas.ts";
+import { toUser } from "../auth/sessions.ts";
 
 export const DEFAULT_PREFS: Preferences = {
   theme: "dark",
@@ -59,8 +60,11 @@ export function registerSettings(app: FastifyInstance, ctx: Ctx) {
   const { db } = ctx;
 
   const settingsOf = (userId: string): Settings => {
-    const u = db.get<{ id: string; username: string; display_name: string; created_at: string }>("SELECT id, username, display_name, created_at FROM users WHERE id = ?", userId)!;
-    return { user: { id: u.id, username: u.username, displayName: u.display_name, createdAt: u.created_at }, preferences: loadPrefs(ctx, userId) };
+    const u = db.get<{ id: string; username: string; display_name: string; created_at: string; chain: string | null; wallet_address: string | null }>(
+      "SELECT id, username, display_name, created_at, chain, wallet_address FROM users WHERE id = ?",
+      userId,
+    )!;
+    return { user: toUser(u), preferences: loadPrefs(ctx, userId) };
   };
 
   app.get("/api/settings", async (req) => settingsOf(requireUser(req).id));

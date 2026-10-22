@@ -13,8 +13,15 @@ export const sha256 = (s: string) => createHash("sha256").update(s).digest("hex"
 
 export type SessionUser = User & { sessionId: string };
 
-type UserRow = { id: string; username: string; display_name: string; created_at: string };
-export const toUser = (r: UserRow): User => ({ id: r.id, username: r.username, displayName: r.display_name, createdAt: r.created_at });
+type UserRow = { id: string; username: string; display_name: string; created_at: string; chain: string | null; wallet_address: string | null };
+export const toUser = (r: UserRow): User => ({
+  id: r.id,
+  username: r.username,
+  displayName: r.display_name,
+  createdAt: r.created_at,
+  chain: r.chain as User["chain"],
+  walletAddress: r.wallet_address,
+});
 
 export function createSession(db: Db, userId: string, userAgent: string | null): { id: string; token: string } {
   const token = randomBytes(32).toString("base64url");
@@ -37,7 +44,7 @@ export function createSession(db: Db, userId: string, userAgent: string | null):
 export function resolveSession(db: Db, token: string): { user: SessionUser; slid: boolean } | null {
   if (!token || token.length > 100) return null;
   const row = db.get<UserRow & { sid: string; last_seen_at: string; expires_at: string }>(
-    `SELECT s.id AS sid, s.last_seen_at, s.expires_at, u.id, u.username, u.display_name, u.created_at
+    `SELECT s.id AS sid, s.last_seen_at, s.expires_at, u.id, u.username, u.display_name, u.created_at, u.chain, u.wallet_address
      FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?`,
     sha256(token),
   );

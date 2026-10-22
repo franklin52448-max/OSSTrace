@@ -1,7 +1,10 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
+import nacl from "tweetnacl";
+import bs58 from "bs58";
 import type { Chain } from "@osstrace/contract";
 import { buildApp } from "../src/app.ts";
 import { loadConfig, type Config } from "../src/config.ts";
@@ -184,9 +187,21 @@ export class Client {
   del = (url: string, body?: unknown) => this.req("DELETE", url, body);
 }
 
-export async function signup(app: FastifyInstance, username: string, password = "correct horse battery"): Promise<Client> {
+/** Deterministic Solana keypair from `seed`, for tests that need a stable address across calls. */
+export function testWallet(seed: string): { address: string; secretKey: Uint8Array } {
+  const kp = nacl.sign.keyPair.fromSeed(createHash("sha256").update(seed).digest());
+  return { address: bs58.encode(Buffer.from(kp.publicKey)), secretKey: kp.secretKey };
+}
+
+/** Runs the real challenge -> sign -> verify flow for a fresh, deterministic solana wallet and returns a signed-in client. */
+export async function signup(app: FastifyInstance, seed: string): Promise<Client> {
   const c = new Client(app);
-  const r = await c.post("/api/auth/signup", { username, password });
-  if (r.statusCode !== 201) throw new Error(`signup failed: ${r.statusCode} ${r.body}`);
+  const { address, secretKey } = testWallet(seed);
+  const chal = await c.post("/api/auth/challenge", { chain: "solana", address });
+  if (chal.statusCode !== 200) throw new Error(`challenge failed: ${chal.statusCode} ${chal.body}`);
+  const { message } = chal.json() as { message: string };
+  const signature = Buffer.from(nacl.sign.detached(new TextEncoder().encode(message), secretKey)).toString("base64");
+  const r = await c.post("/api/auth/verify", { chain: "solana", address, signature });
+  if (r.statusCode !== 200) throw new Error(`verify failed: ${r.statusCode} ${r.body}`);
   return c;
 }

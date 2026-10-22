@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ORIGIN, makeApp, type TestApp } from "./helpers.ts";
+import { ORIGIN, makeApp, testWallet, type TestApp } from "./helpers.ts";
 
 // The session is a cookie, not a bearer token, so a cross-origin browser client only gets to send
 // or read it at all if the server answers with real Access-Control-Allow-Origin/-Credentials
@@ -29,7 +29,7 @@ describe("CORS for a cross-origin browser client (cookie-based sessions)", () =>
   it("a preflight OPTIONS for an allowed origin gets a 204 with the method/header/credentials headers, not the 404 handler", async () => {
     const res = await t.app.inject({
       method: "OPTIONS",
-      url: "/api/auth/signup",
+      url: "/api/auth/challenge",
       headers: { origin: ORIGIN, "access-control-request-method": "POST" },
     });
     expect(res.statusCode).toBe(204);
@@ -43,7 +43,7 @@ describe("CORS for a cross-origin browser client (cookie-based sessions)", () =>
   it("a preflight from a disallowed origin gets a 204 (the browser's own request) but no CORS headers, so the browser still blocks the real request", async () => {
     const res = await t.app.inject({
       method: "OPTIONS",
-      url: "/api/auth/signup",
+      url: "/api/auth/challenge",
       headers: { origin: "http://evil.example.com", "access-control-request-method": "POST" },
     });
     expect(res.statusCode).toBe(204);
@@ -53,11 +53,11 @@ describe("CORS for a cross-origin browser client (cookie-based sessions)", () =>
   it("an allowed-origin mutating request still needs the CSRF Origin check to pass -- CORS headers alone don't bypass it", async () => {
     const res = await t.app.inject({
       method: "POST",
-      url: "/api/auth/signup",
+      url: "/api/auth/challenge",
       headers: { origin: ORIGIN, "content-type": "application/json" },
-      payload: JSON.stringify({ username: "corscheck1", password: "correct horse battery staple 9" }),
+      payload: JSON.stringify({ chain: "solana", address: testWallet("corscheck1").address }),
     });
-    expect(res.statusCode).toBe(201);
+    expect(res.statusCode).toBe(200);
     expect(res.headers["access-control-allow-origin"]).toBe(ORIGIN);
   });
 

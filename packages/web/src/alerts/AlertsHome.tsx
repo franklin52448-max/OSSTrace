@@ -3,7 +3,7 @@ import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Bell, LayoutGrid, List, MoreVertical, Pause, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useAlertLimits, useAlerts, useDeleteAlert, useUnreadCount, useUpdateAlert } from "./api.ts";
-import { useEntities } from "../entities/api.ts";
+import { useEntities } from "../labels/api.ts";
 import { useNotificationMethods } from "../settings/api.ts";
 import { usePrefs } from "../settings/prefs.ts";
 import { Button } from "../kit/Button.tsx";

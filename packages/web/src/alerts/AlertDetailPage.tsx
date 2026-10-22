@@ -3,7 +3,7 @@ import { Bell, MoreVertical, Pause, Pencil, Play, RefreshCw, Trash2, Webhook } f
 import { useState } from "react";
 import { useAlert, useAlertEvents, useAlertLimits, useDeleteAlert, useUpdateAlert } from "./api.ts";
 import { isApiError } from "../kit/api.ts";
-import { useEntities } from "../entities/api.ts";
+import { useEntities } from "../labels/api.ts";
 import { useNotificationMethods } from "../settings/api.ts";
 import { describeRule, noBackfillNote } from "./alertForm.ts";
 import { useDocumentTitle } from "../kit/hooks.ts";

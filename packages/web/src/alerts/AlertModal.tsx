@@ -3,7 +3,7 @@ import { ChevronDown, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useAlertLimits, useCreateAlert, useUpdateAlert } from "./api.ts";
 import { describeError } from "../kit/errors.ts";
-import { useEntities } from "../entities/api.ts";
+import { useEntities } from "../labels/api.ts";
 import { useNotificationMethods } from "../settings/api.ts";
 import {
   ALERT_NAME_MAX,

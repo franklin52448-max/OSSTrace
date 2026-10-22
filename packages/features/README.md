@@ -34,6 +34,10 @@ directly from Explorer's source.
   self-stated reward, anyone submits a PR against it, and a moderator records the winner (ADR
   0009). Tracks the workflow; never holds or moves the reward itself. Built on
   `@osstrace/accounts`, same pattern as private/community labels.
+- [`case-management/`](case-management/README.md) — a signed-in user groups real addresses, each
+  with their own note, into an owned open/closed case (ADR 0011). Private to its owner only — no
+  sharing, and no moderator/admin read path. Built on `@osstrace/accounts`' `authenticate()` and
+  `@osstrace/core`'s address checks.
 
 ## Adding a feature
 

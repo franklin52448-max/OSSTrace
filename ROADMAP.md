@@ -80,8 +80,18 @@ folders, separate agents, same plugin architecture that made this possible in th
         sources (sourced exploit/hacker lists, ADR 0005 §3) would each need their own row in ADR 0010.
   - [ ] Entity-level scores, cross-chain exposure, and a core "more history exists" signal on
         `TransactionsResult` (closes the Ethereum truncation edge in ADR 0010) — not built.
-- [ ] **Case Management** — group findings into a structured record; needs accounts (who owns a
-      case) so naturally sequenced after Wave 1's accounts work
+- [x] **Case Management** — group findings into a structured record (`packages/features/case-management/`,
+      [ADR 0011](docs/adr/0011-case-management-private-owner-only-cases.md)): create/list/get/edit,
+      close (read-only) / reopen, delete a case; add real addresses (validated + canonicalized via
+      `@osstrace/core`) with your own note, edit the note, remove them. **Private to the owner
+      only** — no sharing, and no moderator/admin read path (ADR 0011 §2–3); someone else's case
+      is indistinguishable from a nonexistent one. Adversarial cross-user isolation tests at the
+      service and full-HTTP level, and a real Cases tab in the web UI
+      (`packages/web/src/CasesView.tsx`).
+  - [ ] Sharing / collaborators — deliberately not in v1; needs its own ADR (ADR 0011 §2)
+  - [ ] "Add to case" from the Lookup / Graph / Trace views (today an address is pasted on the
+        Cases tab)
+  - [ ] Delete a user's cases when account deletion exists (ADR 0006 defers account deletion)
 
 ## Wave 4 — the hard one
 

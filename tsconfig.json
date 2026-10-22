@@ -11,6 +11,7 @@
     { "path": "packages/features/community-labels" },
     { "path": "packages/features/tracer" },
     { "path": "packages/features/bounties" },
-    { "path": "packages/features/risk-scoring" }
+    { "path": "packages/features/risk-scoring" },
+    { "path": "packages/features/case-management" }
   ]
 }

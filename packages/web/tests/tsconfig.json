@@ -3,5 +3,14 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": [".", "../src"]
+  "include": [
+    ".",
+    "../src",
+    // community-labels' package.json points "types" straight at its own src/index.ts (no build
+    // step needed to consume it), so this test harness's import of @osstrace/community-labels
+    // type-checks that package's source directly. Its local ambient `declare module "bs58"` (no
+    // published @types/bs58 exists) is only visible within a TS program that includes it -- this
+    // program doesn't otherwise reach into that package's src/, so it's named explicitly here.
+    "../../features/community-labels/src/bs58.d.ts"
+  ]
 }

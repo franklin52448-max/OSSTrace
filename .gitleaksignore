@@ -54,3 +54,10 @@ cd252154578b1ec57f84482b8b413a1464612650:packages/chains/solana/tests/fixtures/r
 913f6b0a7621799957ef031fae069ef2fa28002c:packages/features/tracer/tests/fixtures/wormholescan-operations-sol-AQFnRF.json:generic-api-key:642
 913f6b0a7621799957ef031fae069ef2fa28002c:packages/features/tracer/tests/fixtures/wormholescan-operations-sol-AQFnRF.json:generic-api-key:680
 913f6b0a7621799957ef031fae069ef2fa28002c:packages/features/tracer/tests/fixtures/wormholescan-operations-sol-AQFnRF.json:generic-api-key:727
+
+# Real, public addresses used as test token identifiers in the new unified server package: the
+# DAI contract address, two Solana token mints, and a real Solana account key from a recorded tx.
+ff43d186fd76c08362783fd38b976e9ba300279e:packages/server/tests/providers.test.ts:generic-api-key:52
+ff43d186fd76c08362783fd38b976e9ba300279e:packages/server/tests/providers.test.ts:generic-api-key:112
+ff43d186fd76c08362783fd38b976e9ba300279e:packages/server/tests/providers.test.ts:generic-api-key:137
+ff43d186fd76c08362783fd38b976e9ba300279e:packages/server/tests/fixtures/solana/tx.inner-token2022.json:generic-api-key:1154

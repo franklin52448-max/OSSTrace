@@ -326,7 +326,10 @@ function Report({
   onLabelSubmitted: () => void;
 }) {
   const sanctioned = report.tags.some((t) => t.tag === "sanctioned");
-  const live = useLiveTransactions<TransactionSummary>(EXPLORER_URL, report.address.chain, report.address.value);
+  const session = useSession();
+  // The stream requires a session (ADR 0013 §6); the Explorer checks the token itself.
+  const streamToken = session.status === "signed-in" || session.status === "unreachable" ? session.token : null;
+  const live = useLiveTransactions<TransactionSummary>(EXPLORER_URL, report.address.chain, report.address.value, streamToken);
   const fetched = report.transactions.available ? report.transactions.transactions : [];
   // Pushed transactions the last HTTP fetch didn't already include go on top, marked as new.
   const pushed = live.incoming.filter((t) => !fetched.some((f) => f.hash === t.hash));

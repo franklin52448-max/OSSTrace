@@ -1,0 +1,105 @@
+/* Graph-surface styling (tracer, visualizer, data panels). Only --trace-* tokens are read;
+   --traceg-* are local derived values with token fallbacks. Renamed from the design's own
+   --lk-*/--lkg-* prefixes -- see tokens.css's own note. */
+:root {
+  --traceg-card: var(--trace-surface);
+  --traceg-card-rule: var(--trace-border-strong);
+  --traceg-card-rule-hover: var(--trace-text-faint);
+  --traceg-edge: var(--trace-text-muted);
+  --traceg-tile: var(--trace-surface-2);
+}
+
+/* ---------- tracer node card ---------- */
+.kit-node {
+  background: var(--traceg-card);
+  border: 1px solid var(--traceg-card-rule);
+  border-radius: var(--trace-radius-lg) !important;
+  color: var(--trace-text);
+}
+.kit-node[data-color] {
+  background: color-mix(in srgb, var(--traceg-node) 9%, var(--traceg-card));
+  border-color: color-mix(in srgb, var(--traceg-node) 50%, var(--traceg-card-rule));
+}
+.kit-node:hover {
+  border-color: var(--traceg-card-rule-hover);
+}
+.kit-node[data-color]:hover {
+  border-color: color-mix(in srgb, var(--traceg-node) 80%, var(--traceg-card-rule));
+}
+.kit-node[aria-pressed="true"],
+.kit-node[aria-pressed="true"]:hover {
+  border-color: var(--trace-accent);
+  background: color-mix(in srgb, var(--trace-accent) 10%, var(--traceg-card));
+  box-shadow: 0 0 0 1px var(--trace-accent);
+}
+.kit-node:focus-visible {
+  outline: 2px solid var(--trace-accent);
+  outline-offset: 3px;
+}
+.kit-node-tile {
+  background: var(--traceg-tile);
+  border: 1px solid var(--trace-border);
+  color: var(--trace-text-muted);
+}
+.kit-node[data-color] .kit-node-tile {
+  background: color-mix(in srgb, var(--traceg-node) 18%, var(--traceg-card));
+  border-color: color-mix(in srgb, var(--traceg-node) 45%, transparent);
+  color: var(--traceg-node);
+}
+.kit-node[data-kind="entity"] .kit-node-tile {
+  color: var(--trace-text);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .kit-node {
+    transition: border-color 120ms ease-out, background-color 120ms ease-out, box-shadow 120ms ease-out;
+  }
+}
+
+/* ---------- tracer edge badge ---------- */
+.kit-edge-badge {
+  background: var(--trace-surface);
+  border: 1px solid var(--trace-border-strong);
+  color: var(--trace-text);
+}
+.kit-edge-badge:hover {
+  border-color: var(--traceg-card-rule-hover);
+}
+.kit-edge-badge[data-selected="true"] {
+  border-color: var(--trace-accent);
+  box-shadow: 0 0 0 1px var(--trace-accent);
+}
+.kit-edge-badge[data-dim="true"] {
+  opacity: 0.55;
+}
+
+/* ---------- floating chrome (toolbars, docked panels) ---------- */
+.kit-dock {
+  background: var(--trace-surface);
+  border: 1px solid var(--trace-border);
+  border-radius: var(--trace-radius);
+}
+.kit-dock-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 6px 2px;
+  background: var(--trace-border);
+}
+
+/* ---------- data tables ---------- */
+.kit-gtable thead th {
+  background: var(--trace-surface-2);
+  box-shadow: inset 0 -1px 0 var(--trace-border);
+}
+.kit-gtable tbody tr:not(.kit-tr) {
+  border-bottom: 1px solid var(--trace-border);
+}
+
+/* ---------- side panel sections ---------- */
+.kit-sect-h {
+  font-family: var(--trace-font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--trace-text-muted);
+}

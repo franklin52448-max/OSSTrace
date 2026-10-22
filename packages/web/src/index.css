@@ -2,6 +2,9 @@
 @import "@fontsource-variable/jetbrains-mono";
 @import "tailwindcss";
 @import "./prism/prism.css";
+@import "./kit/tokens.css";
+@import "./kit/base.css";
+@import "./kit/graph.css";
 
 /* ---------------------------------------------------------------------------------------------
    OSSTrace design system, built on Helium Prism (src/prism) for component structure/behaviour,

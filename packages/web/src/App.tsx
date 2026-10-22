@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { ChainId } from "@osstrace/core";
 import GraphView from "./GraphView.tsx";
+import { TracerRoute } from "./tracer/index.ts";
 import TracerView from "./TracerView.tsx";
 import BountiesView from "./BountiesView.tsx";
 import CasesView from "./CasesView.tsx";
@@ -104,10 +105,17 @@ const EXPLORERS: Record<ChainId, { name: string; tx: string; address: string }> 
 
 /* Routing ------------------------------------------------------------------------------------------
    The URL hash is the router (no router library): `#address/<chain>/<address>` is a Lookup report,
-   `#graph/<chain>/<address>` and `#trace/<chain>/<address>` open the Visualizer / Tracer on that
-   address, and the other views are a bare `#<view>`. Every address in the UI links to its own report, so lookups are shareable. */
+   `#graph/<chain>/<address>` opens the Visualizer on that address, and the other views are a bare
+   `#<view>`. Every address in the UI links to its own report, so lookups are shareable.
+   `#trace` is the Tracer investigation canvas (its own sub-router lives in tracer/TracerRoute.tsx:
+   `#trace/doc/<id>` edits a trace, `#trace/view/<id>` is the read-only share link, and
+   `#trace/<chain>/<address>` seeds a new trace from an address and jumps into it).
+   `#pathfind/<chain>/<address>` is the older multi-hop path-search + Wormhole-bridge-following
+   tool (TracerView) -- kept reachable on its own URL now that `#trace` is the canvas; ADR 0022
+   notes this gets folded back into the canvas as a feature later, rather than staying a separate
+   page for good. */
 
-type View = "lookup" | "graph" | "trace" | "cases" | "bounties" | "moderation" | "workbench";
+type View = "lookup" | "graph" | "trace" | "pathfind" | "cases" | "bounties" | "moderation" | "workbench";
 interface Route {
   view: View;
   target: { chain: ChainId; address: string } | null;
@@ -119,13 +127,14 @@ function routeFromHash(): Route {
   const target = isChain(chain) && address ? { chain, address } : null;
   if (head === "address") return { view: "lookup", target };
   if (head === "graph") return { view: "graph", target };
-  if (head === "trace") return { view: "trace", target };
+  if (head === "trace") return { view: "trace", target: null };
+  if (head === "pathfind") return { view: "pathfind", target };
   if (head === "cases" || head === "bounties" || head === "moderation" || head === "workbench") return { view: head, target: null };
   return { view: "lookup", target: null };
 }
 
 export const addressHref = (chain: ChainId, address: string): string => `#address/${chain}/${encodeURIComponent(address)}`;
-const viewHref = (view: "graph" | "trace", chain: ChainId, address: string): string => `#${view}/${chain}/${encodeURIComponent(address)}`;
+const viewHref = (view: "graph" | "trace" | "pathfind", chain: ChainId, address: string): string => `#${view}/${chain}/${encodeURIComponent(address)}`;
 
 const NAV: readonly { id: View; label: string; href: string }[] = [
   { id: "lookup", label: "Explorer", href: "#" },
@@ -155,6 +164,8 @@ function Wordmark() {
 export default function App() {
   const [route, setRoute] = useState<Route>(routeFromHash);
   const session = useSession();
+  const headerRef = useRef<HTMLElement>(null);
+  const [headerH, setHeaderH] = useState(0);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -163,6 +174,18 @@ export default function App() {
     };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  // The Tracer canvas needs a real pixel height (not "auto"), so it's measured off the sticky
+  // header's actual rendered height -- which varies by breakpoint (a second nav row below lg) --
+  // rather than a hardcoded or breakpoint-guessed constant.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setHeaderH(el.offsetHeight));
+    ro.observe(el);
+    setHeaderH(el.offsetHeight);
+    return () => ro.disconnect();
   }, []);
 
   const home = route.view === "lookup" && !route.target;
@@ -174,7 +197,7 @@ export default function App() {
       {/* Top bar: wordmark, views, global address search, account. Pinned to the original look
           while on the home route too (see HOME_PINNED_STYLE) -- it's the one page asked to stay
           exactly as it was, header included, not just the content below it. */}
-      <header className="sticky top-0 z-30 border-b border-line bg-ground/85 backdrop-blur-md" style={home ? HOME_PINNED_STYLE : undefined}>
+      <header ref={headerRef} className="sticky top-0 z-30 border-b border-line bg-ground/85 backdrop-blur-md" style={home ? HOME_PINNED_STYLE : undefined}>
         <div className="mx-auto flex h-16 w-full max-w-[96rem] items-center gap-4 px-4 sm:px-6">
           <a href="#" className="shrink-0 rounded-md transition-opacity duration-150 hover:opacity-85">
             <Wordmark />
@@ -206,12 +229,16 @@ export default function App() {
 
       {home ? (
         <Home />
+      ) : route.view === "trace" ? (
+        // Full-bleed, viewport-height canvas: no page padding/max-width and no page scroll --
+        // the Tracer manages its own pan/zoom/scroll inside this box.
+        <div className="overflow-hidden" style={{ height: `calc(100dvh - ${headerH}px)` }}>
+          <TracerRoute />
+        </div>
       ) : (
         <main className="mx-auto w-full max-w-[96rem] px-4 py-6 sm:px-6 lg:py-8">
           {route.view === "graph" ? (
             <GraphView key={targetKey} initial={route.target} />
-          ) : route.view === "trace" ? (
-            <TracerView key={targetKey} initial={route.target} />
           ) : route.view === "cases" ? (
             <CasesView />
           ) : route.view === "bounties" ? (
@@ -220,6 +247,8 @@ export default function App() {
             <WorkbenchView />
           ) : route.view === "moderation" ? (
             <ModerationView />
+          ) : route.view === "pathfind" ? (
+            <TracerView key={targetKey} initial={route.target} />
           ) : route.target ? (
             <Lookup key={`${route.target.chain}:${route.target.address}`} chain={route.target.chain} address={route.target.address} />
           ) : null}
@@ -558,6 +587,9 @@ function Report({ report, onLabelSubmitted }: { report: AddressReport; onLabelSu
             </a>
             <a className="button small" href={viewHref("trace", chain, address)}>
               Trace funds
+            </a>
+            <a className="button small" href={viewHref("pathfind", chain, address)} title="Multi-hop path search and Wormhole bridge following">
+              Find a path
             </a>
             <a className="button small" href={explorer.address + address} target="_blank" rel="noopener noreferrer">
               <IconExternalLink />

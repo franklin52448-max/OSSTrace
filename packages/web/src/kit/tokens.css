@@ -1,0 +1,108 @@
+/* Design tokens for the ported investigation UI kit (Tracer canvas, Visualizer, Alerts). Renamed
+   from the design's own --lk-* prefix to --trace-*, with no mention of where this came from
+   anywhere in the name or in code. Colors/radii/fonts alias the site's own theme tokens
+   (index.css's @theme block, driven at runtime by ../theme.ts) wherever a token here is the same
+   concept the Customize Theme panel already exposes -- so this kit follows Dark/Light and any
+   per-token customization automatically, the same as every other page, with nothing new to keep
+   in sync. The remaining tokens here (node colors, scrim, overlay shadow, the rail, ...) are
+   specific to this kit's own surfaces and aren't exposed in that panel. */
+
+/* Tailwind utility names this kit's ported components use (bg-surface, text-muted, rounded-sm, ...)
+   that don't already exist as OSSTrace's own utility names -- registered here, pointed at the
+   --trace-* tokens below, so the component source needed no className rewriting. Checked against
+   the site's existing @theme block first: warn/danger/info already exist there and (after the
+   site-wide reskin) already hold the same values this kit wants, so they're deliberately not
+   re-registered here -- bg-warn etc. already resolves correctly, registering it twice would just
+   be redundant, not unsafe, but there's no reason to. */
+@theme inline {
+  --color-bg: var(--trace-bg);
+  --color-surface: var(--trace-surface);
+  --color-surface-2: var(--trace-surface-2);
+  --color-surface-3: var(--trace-surface-3);
+  --color-text: var(--trace-text);
+  --color-muted: var(--trace-text-muted);
+  --color-faint: var(--trace-text-faint);
+  --color-accent: var(--trace-accent);
+  --color-accent-strong: var(--trace-accent-strong);
+  --color-accent-ink: var(--trace-accent-ink);
+  --color-accent-soft: var(--trace-accent-soft);
+  --color-in: var(--trace-in);
+  --color-in-soft: var(--trace-in-soft);
+  --color-out: var(--trace-out);
+  --color-out-soft: var(--trace-out-soft);
+  --color-border: var(--trace-border);
+  --color-border-strong: var(--trace-border-strong);
+  /* danger/warn/info already exist as OSSTrace's own utility names (index.css's @theme) and, after
+     the site-wide reskin, already hold these same values -- only their "-soft" variants are new. */
+  --color-danger-soft: var(--trace-danger-soft);
+  --color-warn-soft: var(--trace-warn-soft);
+  --radius-sm: var(--trace-radius-sm);
+  --radius-md: var(--trace-radius);
+  --radius-lg: var(--trace-radius-lg);
+}
+
+:root {
+  --trace-bg: var(--color-ground);
+  --trace-surface: var(--color-panel);
+  --trace-surface-2: var(--color-raised);
+  --trace-surface-3: color-mix(in srgb, var(--color-raised) 70%, var(--color-ink) 6%);
+  --trace-border: var(--color-line);
+  --trace-border-strong: var(--color-line-strong);
+  --trace-text: var(--color-ink);
+  --trace-text-muted: var(--color-ink-dim);
+  --trace-text-faint: var(--color-ink-faint);
+  --trace-accent: var(--color-helium);
+  --trace-accent-strong: color-mix(in srgb, var(--color-helium) 85%, white);
+  --trace-accent-ink: #032529;
+  --trace-accent-soft: color-mix(in srgb, var(--color-helium) 12%, transparent);
+  --trace-in: var(--color-inbound);
+  --trace-in-soft: color-mix(in srgb, var(--color-inbound) 10%, transparent);
+  --trace-out: var(--color-outbound);
+  --trace-out-soft: color-mix(in srgb, var(--color-outbound) 10%, transparent);
+  --trace-danger: var(--color-danger);
+  --trace-danger-soft: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  --trace-warn: var(--color-warn);
+  --trace-warn-soft: color-mix(in srgb, var(--color-warn) 10%, transparent);
+  --trace-info: var(--color-info);
+  --trace-node-blue: #7f9fe0;
+  --trace-node-green: #74b88c;
+  --trace-node-amber: #d2a85a;
+  --trace-node-red: #dc7a70;
+  --trace-node-purple: #a993d8;
+  --trace-node-gray: #9a9993;
+  --trace-grid-dot: rgba(160, 168, 167, 0.12);
+  --trace-radius-sm: 5px;
+  --trace-radius: var(--radius-card);
+  --trace-radius-lg: 12px;
+  --trace-font-sans: var(--font-sans);
+  --trace-font-mono: var(--font-mono);
+  --trace-topbar-h: 56px;
+  --trace-page-gutter: 24px;
+  --trace-page-max: 1440px;
+  --trace-sidebar-w: 300px;
+  --trace-zebra: rgba(255, 255, 255, 0.014);
+  --trace-rail: #0c1b1e;
+  --trace-rail-text: #e4eded;
+  --trace-rail-muted: #8e9d9e;
+  --trace-rail-hover: rgba(228, 237, 237, 0.06);
+  --trace-rail-active: color-mix(in srgb, var(--color-helium) 13%, transparent);
+  --trace-rail-border: #182a2e;
+  --trace-rail-accent: var(--color-helium);
+  --trace-danger-soft-strong: color-mix(in srgb, var(--color-danger) 35%, transparent);
+  --trace-shadow-overlay: 0 18px 44px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--trace-border-strong);
+  --trace-scrim: rgba(4, 8, 9, 0.62);
+  --trace-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23a0a8a7' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");
+}
+@media (max-width: 1023px) {
+  :root {
+    --trace-page-gutter: 16px;
+  }
+}
+:root[data-theme="light"] {
+  --trace-accent-ink: #ffffff;
+  --trace-zebra: rgba(18, 23, 24, 0.018);
+  --trace-grid-dot: rgba(18, 23, 24, 0.1);
+  --trace-shadow-overlay: 0 18px 44px rgba(16, 33, 37, 0.16), 0 2px 6px rgba(16, 33, 37, 0.08), 0 0 0 1px var(--trace-border-strong);
+  --trace-scrim: rgba(16, 33, 37, 0.38);
+  --trace-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%234f5859' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");
+}

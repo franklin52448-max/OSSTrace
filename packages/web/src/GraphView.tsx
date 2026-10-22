@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChainId } from "@osstrace/core";
 import { forceLayout, type Point } from "./layout.ts";
 import { ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
+import { formatTimestamp } from "./timeDisplay.ts";
 
 const VISUALIZER_URL = import.meta.env["VITE_VISUALIZER_URL"] ?? "http://localhost:5302";
 
@@ -46,11 +47,12 @@ interface GraphEdge {
   kind: "native" | "token";
   valueNative: string;
   token?: { address: string | null; symbol: string | null; amount: string | null; rawAmount: string };
-  timestamp: string;
+  /** `null` when the chain didn't report when it happened (ADR 0016). */
+  timestamp: string | null;
 }
 interface OmittedTransaction {
   hash: string;
-  timestamp: string;
+  timestamp: string | null;
   direction: "in" | "out" | "self";
   valueNative: string;
   reason: "self-transfer" | "no-counterparty" | "counterparty-unresolved" | "failed";
@@ -633,7 +635,7 @@ function NodePanel({ node, report, onRecenter }: { node: GraphNode; report: Grap
                     </span>
                   </div>
                   <div className="mt-0.5 text-[11px] text-ink-faint">
-                    {incoming ? "from" : "to"} {short(incoming ? e.source : e.target)} · {new Date(e.timestamp).toLocaleString()}
+                    {incoming ? "from" : "to"} {short(incoming ? e.source : e.target)} · {formatTimestamp(e.timestamp)}
                   </div>
                 </li>
               );

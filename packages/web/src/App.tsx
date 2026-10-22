@@ -11,6 +11,7 @@ import ModerationView from "./ModerationView.tsx";
 import { LabelSubmitForm, ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
 import { isModerator, useSession } from "./session.ts";
 import { amountDisplay, type AmountDisplay, type Direction, type TxStatus } from "./txDisplay.ts";
+import { formatTimestamp } from "./timeDisplay.ts";
 import { LiveBadge, useLiveTransactions } from "./LiveStream.tsx";
 
 const EXPLORER_URL = import.meta.env["VITE_EXPLORER_URL"] ?? "http://localhost:5300";
@@ -29,7 +30,8 @@ interface TokenTransfer {
 }
 interface TransactionSummary {
   hash: string;
-  timestamp: string;
+  /** `null` when the chain didn't report when it happened (ADR 0016). */
+  timestamp: string | null;
   from: string;
   to: string | null;
   valueNative: string;
@@ -412,7 +414,7 @@ function Report({
                       <div className="hash truncate text-xs text-ink-dim">{tx.hash}</div>
                     </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-faint">
-                      {new Date(tx.timestamp).toLocaleString()}
+                      {formatTimestamp(tx.timestamp)}
                       {native.failed && (
                         <span
                           className="chip border-danger/40 bg-danger/10 text-danger"

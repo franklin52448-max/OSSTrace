@@ -38,7 +38,8 @@ test("getRecentTransactions returns real, well-formed transactions with no API k
     for (const tx of result.transactions) {
       assert.equal(tx.chain, "solana");
       assert.match(tx.hash, /^[1-9A-HJ-NP-Za-km-z]+$/, "hash should be base58");
-      assert.doesNotThrow(() => new Date(tx.timestamp).toISOString());
+      // `null` is the honest "the RPC didn't say when" (ADR 0016); anything else must be a real ISO date.
+      if (tx.timestamp !== null) assert.equal(new Date(tx.timestamp).toISOString(), tx.timestamp);
       assert.match(tx.valueNative, /^\d+(\.\d+)?$/);
       assert.ok(["in", "out", "self"].includes(tx.direction));
     }

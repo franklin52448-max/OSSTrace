@@ -158,16 +158,30 @@ function neighborChain(edge: TraceEdge, nodeId: string, nodeChain: ChainId): Cha
   return edge.source === nodeId ? edge.targetChain : edge.sourceChain;
 }
 
-/** Distinct neighbors of `nodeId` among `edges`, most-recently-active first. */
+/** When an edge happened, as a sortable number. Unknown (ADR 0016) or unparseable is `-Infinity`: least recent. */
+function edgeTime(edge: TraceEdge): number {
+  if (edge.timestamp === null) return -Infinity;
+  const t = Date.parse(edge.timestamp);
+  return Number.isNaN(t) ? -Infinity : t;
+}
+
+/**
+ * Distinct neighbors of `nodeId` among `edges`, most-recently-active first. A neighbor reached
+ * only through edges with no known timestamp can't be dated, so it ranks after every neighbor that
+ * can (ADR 0016); ties, including all-unknown, keep first-seen order (`sort` is stable). The
+ * comparator never sees `NaN`, so the ordering is always well defined.
+ */
 function rankNeighbors(edges: readonly TraceEdge[], nodeId: string): string[] {
   const latest = new Map<string, number>();
   for (const edge of edges) {
     const neighbor = neighborOf(edge, nodeId);
-    const t = Date.parse(edge.timestamp);
+    const t = edgeTime(edge);
     const prev = latest.get(neighbor);
     if (prev === undefined || t > prev) latest.set(neighbor, t);
   }
-  return [...latest.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
+  return [...latest.entries()]
+    .sort((a, b) => (a[1] === b[1] ? 0 : b[1] > a[1] ? 1 : -1))
+    .map(([id]) => id);
 }
 
 export type FrontierReason = "depth-cap" | "breadth-cap" | "budget-exhausted" | "unavailable";

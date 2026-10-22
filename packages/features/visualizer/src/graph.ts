@@ -47,7 +47,8 @@ export interface GraphEdge {
   valueNative: string;
   /** Present only for `kind: "token"` edges. */
   token?: { address: string | null; symbol: string | null; amount: string | null; rawAmount: string };
-  timestamp: string;
+  /** The transaction's own timestamp — `null` when the chain didn't report one (ADR 0016). */
+  timestamp: string | null;
 }
 
 export type OmissionReason = "self-transfer" | "no-counterparty" | "counterparty-unresolved" | "failed";
@@ -58,7 +59,8 @@ export type OmissionReason = "self-transfer" | "no-counterparty" | "counterparty
  */
 export interface OmittedTransaction {
   hash: string;
-  timestamp: string;
+  /** `null` when the chain didn't report one (ADR 0016). */
+  timestamp: string | null;
   direction: TransactionSummary["direction"];
   valueNative: string;
   reason: OmissionReason;

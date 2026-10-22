@@ -25,6 +25,8 @@ interface ChainAdapter {
   `@osstrace/core`), never in `valueNative`, which is always the chain's native currency. Omit
   the key entirely when you decoded none. Any `TokenTransfer` field you couldn't resolve from real
   data (decimals, symbol, owner, ...) is `null` — and `amount` is `null` when decimals are unknown.
+- `timestamp` is `null` when the data source didn't say when the transaction happened. Never
+  substitute the Unix epoch, "now", or any other default (ADR 0016).
 
 ## Adding a new chain
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ChainId } from "@osstrace/core";
+import { formatTimestamp } from "./timeDisplay.ts";
 
 const TRACER_URL = import.meta.env["VITE_TRACER_URL"] ?? "http://localhost:5303";
 
@@ -35,7 +36,8 @@ interface ChainEdge {
   kind: "native" | "token";
   valueNative: string;
   token?: { address: string | null; symbol: string | null; amount: string | null; rawAmount: string };
-  timestamp: string;
+  /** `null` when the chain didn't report when it happened (ADR 0016). */
+  timestamp: string | null;
 }
 /** A cross-chain hop (ADR 0012): two real transactions, one per chain. */
 interface BridgeEdge {
@@ -309,7 +311,7 @@ function EdgeRow({ edge, chain }: { edge: TraceEdge; chain: ChainId }) {
           {edge.hash}
         </a>
         <div className="hash text-xs text-ink-faint">
-          {short(edge.source)} → {short(edge.target)} · {new Date(edge.timestamp).toLocaleString()}
+          {short(edge.source)} → {short(edge.target)} · {formatTimestamp(edge.timestamp)}
         </div>
       </div>
       <div className={`num shrink-0 text-right text-sm ${edge.direction === "in" ? "text-inbound" : "text-outbound"}`}>{edgeAmountText(edge)}</div>

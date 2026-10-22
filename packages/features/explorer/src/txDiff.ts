@@ -11,8 +11,9 @@ export interface TransactionDiff {
   windowOverflow: boolean;
 }
 
+/** `NaN` when the transaction has no reported timestamp (ADR 0016) or it doesn't parse. */
 function timeOf(tx: TransactionSummary): number {
-  return Date.parse(tx.timestamp);
+  return tx.timestamp === null ? Number.NaN : Date.parse(tx.timestamp);
 }
 
 /**
@@ -40,7 +41,10 @@ export function diffTransactions(
   let fresh = current.filter((tx) => !previousHashes.has(tx.hash));
 
   if (previous.length >= limit && previous.length > 0) {
-    const oldestPrevious = Math.min(...previous.map(timeOf));
+    // Only datable transactions can mark where the previous window ended. An undated one (ADR 0016)
+    // used to turn the whole minimum into NaN and silently switch this guard off.
+    const datedPrevious = previous.map(timeOf).filter((t) => !Number.isNaN(t));
+    const oldestPrevious = datedPrevious.length > 0 ? Math.min(...datedPrevious) : Number.NaN;
     if (Number.isFinite(oldestPrevious)) {
       // NaN timestamps fail `>=` and are dropped: an undatable transaction can't be shown to be newer.
       fresh = fresh.filter((tx) => timeOf(tx) >= oldestPrevious);
@@ -51,9 +55,15 @@ export function diffTransactions(
     previous.length > 0 && current.length >= limit && current.every((tx) => !previousHashes.has(tx.hash));
 
   // Oldest first, so a client applying events in order ends up with the same order the API returns.
+  // Undated transactions go after every dated one (keeping their own relative order), so the
+  // comparator stays consistent — a NaN-means-equal comparator isn't, and can scramble the rest.
   const newTransactions = [...fresh].sort((a, b) => {
-    const delta = timeOf(a) - timeOf(b);
-    return Number.isNaN(delta) ? 0 : delta;
+    const ta = timeOf(a);
+    const tb = timeOf(b);
+    const aUnknown = Number.isNaN(ta);
+    const bUnknown = Number.isNaN(tb);
+    if (aUnknown || bUnknown) return aUnknown === bUnknown ? 0 : aUnknown ? 1 : -1;
+    return ta - tb;
   });
   return { newTransactions, windowOverflow };
 }

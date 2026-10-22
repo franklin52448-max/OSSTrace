@@ -11,9 +11,9 @@ export interface TraceFilters {
   token?: string;
   /** Minimum amount, inclusive, as a decimal string in that token's own units. */
   minAmount?: string;
-  /** ISO 8601 — only edges at or after this instant count. */
+  /** ISO 8601 — only edges at or after this instant count. An edge with no known timestamp never does. */
   sinceTimestamp?: string;
-  /** ISO 8601 — only edges at or before this instant count. */
+  /** ISO 8601 — only edges at or before this instant count. An edge with no known timestamp never does. */
   untilTimestamp?: string;
 }
 
@@ -40,8 +40,17 @@ function edgeTokenSymbol(edge: TraceEdge): string | null {
  * meant as "$100 of ETH" does not exist here and isn't claimed to.
  */
 export function edgeMatchesFilters(edge: TraceEdge, filters: TraceFilters): boolean {
-  if (filters.sinceTimestamp !== undefined && Date.parse(edge.timestamp) < Date.parse(filters.sinceTimestamp)) return false;
-  if (filters.untilTimestamp !== undefined && Date.parse(edge.timestamp) > Date.parse(filters.untilTimestamp)) return false;
+  if (filters.sinceTimestamp !== undefined || filters.untilTimestamp !== undefined) {
+    // An edge whose transaction has no reported timestamp (ADR 0016) can't be shown to fall inside
+    // a time window, so it fails any `since`/`until` filter — the same "unknown fails the filter"
+    // rule as an unresolved amount or symbol below (ADR 0012). Explicit, rather than leaving it to
+    // whatever a `NaN` comparison happens to do.
+    if (edge.timestamp === null) return false;
+    const at = Date.parse(edge.timestamp);
+    if (Number.isNaN(at)) return false;
+    if (filters.sinceTimestamp !== undefined && at < Date.parse(filters.sinceTimestamp)) return false;
+    if (filters.untilTimestamp !== undefined && at > Date.parse(filters.untilTimestamp)) return false;
+  }
 
   if (filters.token !== undefined) {
     if (filters.token.toLowerCase() === "native") {

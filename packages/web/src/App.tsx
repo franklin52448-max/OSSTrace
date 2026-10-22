@@ -10,6 +10,7 @@ import AccountPanel from "./AccountPanel.tsx";
 import ModerationView from "./ModerationView.tsx";
 import { LabelSubmitForm, ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
 import { isModerator, useSession } from "./session.ts";
+import { LiveBadge, useLiveTransactions } from "./LiveStream.tsx";
 
 const EXPLORER_URL = import.meta.env["VITE_EXPLORER_URL"] ?? "http://localhost:5300";
 
@@ -318,6 +319,12 @@ function Report({
   onLabelSubmitted: () => void;
 }) {
   const sanctioned = report.tags.some((t) => t.tag === "sanctioned");
+  const live = useLiveTransactions<TransactionSummary>(EXPLORER_URL, report.address.chain, report.address.value);
+  const fetched = report.transactions.available ? report.transactions.transactions : [];
+  // Pushed transactions the last HTTP fetch didn't already include go on top, marked as new.
+  const pushed = live.incoming.filter((t) => !fetched.some((f) => f.hash === t.hash));
+  const pushedHashes = new Set(pushed.map((t) => t.hash));
+  const shown = [...pushed, ...fetched];
   return (
     <div className="mt-5 space-y-4">
       {/* Queried address header — the real chain + address from the response. */}
@@ -363,23 +370,38 @@ function Report({
       <section className="card overflow-hidden" aria-label="Recent transactions">
         <div className="card-header">
           <h2 className="section-title">Recent transactions</h2>
-          {report.transactions.available && (
-            <span className="num text-xs text-ink-faint">{report.transactions.transactions.length} shown</span>
-          )}
+          <span className="flex items-center gap-2">
+            {report.transactions.available && <span className="num text-xs text-ink-faint">{shown.length} shown</span>}
+            <LiveBadge state={live} />
+          </span>
         </div>
+        {live.status && !live.status.live && report.transactions.available && (
+          <div className="border-b border-line px-4 py-2 text-xs leading-relaxed text-ink-faint">
+            Not receiving live updates: {live.status.reason}
+          </div>
+        )}
+        {live.gap && (
+          <div className="border-b border-line px-4 py-2 text-xs leading-relaxed text-warn">
+            More transactions landed between two indexer refreshes than could be pushed. Look up the address again for
+            the full recent list.
+          </div>
+        )}
         {!report.transactions.available ? (
           <div className="px-4 py-3 text-sm text-ink-dim">Unavailable — {report.transactions.reason}</div>
-        ) : report.transactions.transactions.length === 0 ? (
+        ) : shown.length === 0 ? (
           <div className="px-4 py-3 text-sm text-ink-dim">No recent transactions found.</div>
         ) : (
           <ul className="divide-y divide-line">
-            {report.transactions.transactions.map((tx) => (
+            {shown.map((tx) => (
               <li
                 key={tx.hash}
                 className="flex items-center justify-between gap-4 px-4 py-3 transition-colors duration-150 hover:bg-raised/60"
               >
                 <div className="min-w-0">
-                  <div className="hash truncate text-xs text-ink-dim">{tx.hash}</div>
+                  <div className="flex items-center gap-2">
+                    {pushedHashes.has(tx.hash) && <span className="chip shrink-0 border-signal/30 bg-signal/10 text-signal">NEW</span>}
+                    <div className="hash truncate text-xs text-ink-dim">{tx.hash}</div>
+                  </div>
                   <div className="mt-0.5 text-xs text-ink-faint">{new Date(tx.timestamp).toLocaleString()}</div>
                 </div>
                 <div className="shrink-0 text-right">

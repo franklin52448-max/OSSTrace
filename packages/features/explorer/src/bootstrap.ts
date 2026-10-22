@@ -4,6 +4,8 @@ import { CompositeLabelStore, InMemoryCache, JsonFileLabelStore, type Cache, typ
 import { CommunityLabelReader, communityLabelsPath, JsonFileSubmissionStore } from "@osstrace/community-labels";
 import { buildRegistry, type RegistryConfig } from "./registry.ts";
 import { RedisCache } from "./redisCache.ts";
+import { InMemoryEventBus, type IndexerEventBus } from "./events.ts";
+import { RedisEventBus } from "./redisEventBus.ts";
 
 /** Shared setup between the API server and the background indexer, so they never drift apart. */
 
@@ -48,4 +50,14 @@ export function buildLabelStore(): LabelStore {
 export function buildCache(): Cache {
   const redisUrl = process.env["REDIS_URL"];
   return redisUrl ? new RedisCache(redisUrl) : new InMemoryCache();
+}
+
+/**
+ * The indexer → websocket event channel. Same rule as the cache: Redis pub/sub when REDIS_URL is
+ * set (indexer and API server can be separate processes), in-process otherwise (only useful when
+ * the indexer runs embedded in the API server — `EXPLORER_EMBEDDED_INDEXER=1`).
+ */
+export function buildEventBus(): IndexerEventBus {
+  const redisUrl = process.env["REDIS_URL"];
+  return redisUrl ? new RedisEventBus(redisUrl) : new InMemoryEventBus();
 }

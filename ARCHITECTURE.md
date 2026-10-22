@@ -104,5 +104,5 @@ Solana's code to do their work.
 ## What's explicitly not solved yet
 
 See the status table in [`README.md`](README.md). Most importantly: this only covers two chains,
-has a small seed labelset, and has no real-time layer — all deliberate scope cuts for a one-day
-first build, not hidden limitations.
+has a small seed labelset, and its real-time layer only covers the addresses the background
+indexer already refreshes (ADR 0013) — all deliberate scope cuts, not hidden limitations.

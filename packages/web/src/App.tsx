@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import type { ChainId } from "@osstrace/core";
 import GraphView from "./GraphView.tsx";
 import TracerView from "./TracerView.tsx";
@@ -10,11 +10,17 @@ import AccountPanel from "./AccountPanel.tsx";
 import ModerationView from "./ModerationView.tsx";
 import { LabelSubmitForm, ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
 import { isModerator, useSession } from "./session.ts";
+import { Notice, SignInPrompt } from "./ui.tsx";
 import { amountDisplay, type AmountDisplay, type Direction, type TxStatus } from "./txDisplay.ts";
 import { LiveBadge, useLiveTransactions } from "./LiveStream.tsx";
 import { CopyButton, Dropdown, SearchBar, Skeleton, Text, cx } from "./prism/components.tsx";
 import { IconArrowRight, IconExternalLink } from "./prism/icons.tsx";
-import Ferrofluid, { type FerrofluidProps } from "./vendor/Ferrofluid.tsx";
+import type { AeroShardsProps } from "./vendor/AeroShards.tsx";
+import type { FerrofluidProps } from "./vendor/Ferrofluid.tsx";
+
+// The hero effects are big and only used on the home page, so they load in their own chunks.
+const AeroShards = lazy(() => import("./vendor/AeroShards.tsx"));
+const Ferrofluid = lazy(() => import("./vendor/Ferrofluid.tsx"));
 
 const EXPLORER_URL = import.meta.env["VITE_EXPLORER_URL"] ?? "http://localhost:5300";
 
@@ -88,8 +94,8 @@ const EXPLORERS: Record<ChainId, { name: string; tx: string; address: string }> 
 
 /* Routing ------------------------------------------------------------------------------------------
    The URL hash is the router (no router library): `#address/<chain>/<address>` is a Lookup report,
-   `#graph/<chain>/<address>` opens the Visualizer on that address, and the other views are a bare
-   `#<view>`. Every address in the UI links to its own report, so lookups are shareable. */
+   `#graph/<chain>/<address>` and `#trace/<chain>/<address>` open the Visualizer / Tracer on that
+   address, and the other views are a bare `#<view>`. Every address in the UI links to its own report, so lookups are shareable. */
 
 type View = "lookup" | "graph" | "trace" | "cases" | "bounties" | "moderation";
 interface Route {
@@ -103,11 +109,13 @@ function routeFromHash(): Route {
   const target = isChain(chain) && address ? { chain, address } : null;
   if (head === "address") return { view: "lookup", target };
   if (head === "graph") return { view: "graph", target };
-  if (head === "trace" || head === "cases" || head === "bounties" || head === "moderation") return { view: head, target: null };
+  if (head === "trace") return { view: "trace", target };
+  if (head === "cases" || head === "bounties" || head === "moderation") return { view: head, target: null };
   return { view: "lookup", target: null };
 }
 
 export const addressHref = (chain: ChainId, address: string): string => `#address/${chain}/${encodeURIComponent(address)}`;
+const viewHref = (view: "graph" | "trace", chain: ChainId, address: string): string => `#${view}/${chain}/${encodeURIComponent(address)}`;
 
 const NAV: readonly { id: View; label: string; href: string }[] = [
   { id: "lookup", label: "Explorer", href: "#" },
@@ -146,6 +154,8 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  const home = route.view === "lookup" && !route.target;
+  const targetKey = route.target ? `${route.target.chain}:${route.target.address}` : "empty";
   const nav = NAV.filter((tab) => tab.id !== "moderation" || isModerator(session) || route.view === "moderation");
 
   return (
@@ -161,10 +171,13 @@ export default function App() {
               <NavLink key={tab.id} tab={tab} active={route.view === tab.id} />
             ))}
           </nav>
-          <div className="ml-auto hidden w-full max-w-md md:block">
-            <GlobalSearch key={route.target ? `${route.target.chain}:${route.target.address}` : "empty"} initial={route.target} small />
-          </div>
-          <div className="ml-auto shrink-0 md:ml-0">
+          {/* Home has its own big search; everywhere else the bar carries it. */}
+          {!home && (
+            <div className="ml-auto hidden w-full max-w-md md:block">
+              <GlobalSearch key={targetKey} initial={route.target} small />
+            </div>
+          )}
+          <div className={cx("ml-auto shrink-0", !home && "md:ml-0")}>
             <AccountPanel />
           </div>
         </div>
@@ -176,14 +189,14 @@ export default function App() {
         </nav>
       </header>
 
-      {route.view === "lookup" && !route.target ? (
+      {home ? (
         <Home />
       ) : (
         <main className="mx-auto w-full max-w-[96rem] px-4 py-6 sm:px-6 lg:py-8">
           {route.view === "graph" ? (
-            <GraphView key={route.target ? `${route.target.chain}:${route.target.address}` : "empty"} initial={route.target} />
+            <GraphView key={targetKey} initial={route.target} />
           ) : route.view === "trace" ? (
-            <TracerView />
+            <TracerView key={targetKey} initial={route.target} />
           ) : route.view === "cases" ? (
             <CasesView />
           ) : route.view === "bounties" ? (
@@ -251,7 +264,16 @@ function GlobalSearch({ initial, small }: { initial: Route["target"]; small?: bo
   );
 }
 
-/** Settings from reactbits.dev/backgrounds/ferrofluid?preset=peaks&sharpness=4&fluidity=0.85&spikeHeight=0.45, in neutral chrome. */
+/** reactbits.dev/backgrounds/aero-shards, "graphite" preset: chrome shards in neutral greys. */
+const HERO_SHARDS = {
+  shardColor: "#a1a1aa",
+  accentColor: "#e4e4e7",
+  material: "chrome",
+  billow: 0.7,
+  glow: 0.25,
+} satisfies AeroShardsProps;
+
+/** Fallback where WebGPU isn't available. From reactbits.dev/backgrounds/ferrofluid?preset=peaks&sharpness=4&fluidity=0.85&spikeHeight=0.45, in neutral chrome. */
 const HERO_FLUID = {
   colors: ["#ffffff", "#d4d4d8", "#52525b"],
   brightness: 1,
@@ -265,19 +287,29 @@ const HERO_FLUID = {
   spikeHeight: 0.45,
 } satisfies FerrofluidProps;
 
+/** Aero Shards needs WebGPU; where it can't start, the WebGL2 ferrofluid takes its place. */
+function HeroBackground() {
+  const [webgpuFailed, setWebgpuFailed] = useState(false);
+  return (
+    <Suspense fallback={null}>
+      {webgpuFailed ? <Ferrofluid {...HERO_FLUID} /> : <AeroShards {...HERO_SHARDS} onError={() => setWebgpuFailed(true)} />}
+    </Suspense>
+  );
+}
+
 function Home() {
   return (
     <div className="pb-16">
-      {/* Full-bleed hero: the ferrofluid field, scrims for legibility, then the search on top. */}
+      {/* Full-bleed hero: the shard field, scrims for legibility, then the search on top. */}
       <section className="relative isolate overflow-hidden border-b border-line">
         <div className="absolute inset-0 -z-10">
-          <Ferrofluid {...HERO_FLUID} />
+          <HeroBackground />
         </div>
         <div
           className="pointer-events-none absolute inset-0 -z-10"
           style={{
             background:
-              "radial-gradient(60% 55% at 50% 38%, rgb(0 0 0 / 0.82) 0%, rgb(0 0 0 / 0.35) 60%, transparent 100%), linear-gradient(to bottom, var(--color-ground) 0%, transparent 18%, transparent 70%, var(--color-ground) 100%)",
+              "radial-gradient(48% 42% at 50% 46%, rgb(0 0 0 / 0.9) 0%, rgb(0 0 0 / 0.6) 55%, transparent 100%), linear-gradient(to bottom, var(--color-ground) 0%, transparent 18%, transparent 70%, var(--color-ground) 100%)",
           }}
           aria-hidden="true"
         />
@@ -349,9 +381,9 @@ function Lookup({ chain, address }: { chain: ChainId; address: string }) {
   if (state.status === "loading") return <ReportSkeleton />;
   if (state.status === "error") {
     return (
-      <div role="alert" className="mx-auto max-w-2xl rounded-card border border-danger/35 bg-danger/10 px-4 py-3 text-sm text-danger">
+      <Notice tone="danger" className="mx-auto max-w-2xl">
         Couldn't look up <span className="hash break-all">{address}</span> on {chain}: {state.message}
-      </div>
+      </Notice>
     );
   }
   return <Report report={state.report} onLabelSubmitted={() => void load(true)} />;
@@ -360,17 +392,17 @@ function Lookup({ chain, address }: { chain: ChainId; address: string }) {
 function ReportSkeleton() {
   return (
     <div className="space-y-4" aria-busy="true" aria-label="Loading address">
-      <div className="card flex items-center gap-4 p-5">
-        <Skeleton width="56px" height="56px" className="!rounded-full" />
-        <div className="flex-1 space-y-2.5">
-          <Skeleton width="220px" height="22px" />
-          <Skeleton width="min(420px, 100%)" height="14px" />
+      <div className="card overflow-hidden">
+        <div className="flex items-center gap-4 p-5">
+          <Skeleton width="48px" height="48px" className="!rounded-full" />
+          <div className="flex-1 space-y-2.5">
+            <Skeleton width="220px" height="22px" />
+            <Skeleton width="min(420px, 100%)" height="14px" />
+          </div>
         </div>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-3">
-        {[0, 1, 2].map((i) => (
-          <Skeleton key={i} height="92px" className="!rounded-card" />
-        ))}
+        <div className="border-t border-line p-5">
+          <Skeleton width="min(520px, 100%)" height="40px" />
+        </div>
       </div>
       <Skeleton height="420px" className="!rounded-card" />
     </div>
@@ -380,16 +412,24 @@ function ReportSkeleton() {
 function ChainGlyph({ chain }: { chain: ChainId }) {
   return (
     <span
-      className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[var(--helium-elevated-10)] text-2xl text-signal"
-      aria-hidden="true"
+      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--helium-elevated-10)] text-xl text-signal"
+      title={chain === "ethereum" ? "Ethereum" : "Solana"}
     >
       {chain === "ethereum" ? "Ξ" : "◎"}
     </span>
   );
 }
 
+/** At most `places` decimals, cut (never rounded up) so the shown balance never overstates; the exact value is in the title. */
+function trimDecimals(amount: string, places: number): string {
+  const [whole = amount, fraction = ""] = amount.split(".");
+  const kept = fraction.slice(0, places).replace(/0+$/, "");
+  return kept ? `${whole}.${kept}` : whole;
+}
+
 function Report({ report, onLabelSubmitted }: { report: AddressReport; onLabelSubmitted: () => void }) {
   const { chain, value: address } = report.address;
+  const session = useSession();
   const sanctioned = report.tags.some((t) => t.tag === "sanctioned");
   const live = useLiveTransactions<TransactionSummary>(EXPLORER_URL, chain, address);
   const fetched = report.transactions.available ? report.transactions.transactions : [];
@@ -402,42 +442,76 @@ function Report({ report, onLabelSubmitted }: { report: AddressReport; onLabelSu
 
   return (
     <div className="space-y-4">
-      {/* Entity header: who this is (only if a sourced label says so), the address, and actions. */}
-      <section className="card p-5" aria-label="Address">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+      {/* Entity header: who this is (only if a sourced label says so), the address, key figures, actions. */}
+      <section className="card overflow-hidden" aria-label="Address">
+        <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center">
           <div className="flex min-w-0 flex-1 items-center gap-4">
             <ChainGlyph chain={chain} />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className={cx("text-2xl font-semibold tracking-tight", report.label ? "text-ink" : "text-ink-dim")}>
+                <h1 className={cx("text-xl font-semibold tracking-tight sm:text-2xl", report.label ? "text-ink" : "text-ink-dim")}>
                   {report.label?.name ?? "Unlabeled address"}
                 </h1>
-                <span className="chip border-line-strong bg-raised capitalize text-ink-dim">{chain}</span>
                 {report.label && <span className="chip border-line-strong bg-raised text-ink-dim">{report.label.confidence}</span>}
                 {report.label && <ReviewBadge label={report.label} />}
                 {sanctioned && <span className="chip border-danger/40 bg-danger/15 text-danger">SANCTIONED</span>}
               </div>
-              <div className="mt-1.5 flex min-w-0 items-center gap-1">
+              <div className="mt-1 flex min-w-0 items-center gap-1">
                 <span className="hash min-w-0 truncate text-sm text-ink-dim">{address}</span>
                 <CopyButton value={address} label="Copy address" className="small shrink-0 !text-ink-faint" />
               </div>
             </div>
           </div>
           <div className="action-buttons shrink-0 flex-wrap">
-            <a className="button primary" href={`#graph/${chain}/${encodeURIComponent(address)}`}>
+            <a className="button primary small" href={viewHref("graph", chain, address)}>
               Visualize
             </a>
-            <a className="button" href="#trace">
+            <a className="button small" href={viewHref("trace", chain, address)}>
               Trace funds
             </a>
-            <a className="button" href={explorer.address + address} target="_blank" rel="noopener noreferrer">
+            <a className="button small" href={explorer.address + address} target="_blank" rel="noopener noreferrer">
               <IconExternalLink />
               {explorer.name}
             </a>
           </div>
         </div>
+
+        {/* Key figures, as one strip rather than separate cards. */}
+        <dl className="grid grid-cols-2 border-t border-line sm:grid-cols-3">
+          <Figure className="border-r border-line" title="Balance" footer={`as of ${new Date(report.balance.asOf).toLocaleString()}`}>
+            <span title={`${report.balance.native.amount} ${symbol}`}>{trimDecimals(report.balance.native.amount, 6)}</span>{" "}
+            <span className="text-sm font-medium text-ink-dim">{symbol}</span>
+          </Figure>
+          <Figure className="sm:border-r sm:border-line" title="Recent transactions" footer={report.transactions.available ? "most recent first" : "history unavailable"}>
+            {report.transactions.available ? shown.length : <span className="text-ink-faint">—</span>}
+          </Figure>
+          <Figure className="col-span-2 border-t border-line sm:col-span-1 sm:border-t-0" title="Tags" footer={report.tags.length ? "each with a cited source" : "no sourced tags"}>
+            {report.tags.length === 0 ? (
+              <span className="font-sans text-lg font-medium text-ink-faint">None</span>
+            ) : (
+              <span className="flex flex-wrap gap-1.5 pt-1">
+                {report.tags.map((t) => (
+                  <a
+                    key={t.tag}
+                    href={t.source.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`${t.source.description} · added ${t.source.addedAt}`}
+                    className={cx(
+                      "chip text-xs",
+                      t.tag === "sanctioned" ? "border-danger/40 bg-danger/15 text-danger" : "border-line-strong bg-raised text-ink-dim",
+                    )}
+                  >
+                    {t.tag}
+                  </a>
+                ))}
+              </span>
+            )}
+          </Figure>
+        </dl>
+
         {report.label && (
-          <div className="mt-4 border-t border-line pt-3 text-xs text-ink-faint">
+          <div className="border-t border-line px-5 py-3 text-xs text-ink-faint">
             <a
               href={report.label.source.url}
               target="_blank"
@@ -451,71 +525,35 @@ function Report({ report, onLabelSubmitted }: { report: AddressReport; onLabelSu
         )}
       </section>
 
-      {/* Key figures. */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Stat title="Balance" footer={`as of ${new Date(report.balance.asOf).toLocaleString()}`}>
-          {report.balance.native.amount} <span className="text-base font-medium text-ink-dim">{symbol}</span>
-        </Stat>
-        <Stat title="Recent transactions" footer={report.transactions.available ? "most recent first" : "history unavailable"}>
-          {report.transactions.available ? shown.length : "—"}
-        </Stat>
-        <Stat title="Tags" footer={report.tags.length ? "each with a cited source" : "no sourced tags"}>
-          {report.tags.length === 0 ? (
-            <span className="font-sans text-xl font-medium text-ink-faint">None</span>
-          ) : (
-            <span className="flex flex-wrap gap-1.5 pt-1.5">
-              {report.tags.map((t) => (
-                <a
-                  key={t.tag}
-                  href={t.source.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={`${t.source.description} · added ${t.source.addedAt}`}
-                  className={cx(
-                    "chip text-xs",
-                    t.tag === "sanctioned" ? "border-danger/40 bg-danger/15 text-danger" : "border-line-strong bg-raised text-ink-dim",
-                  )}
-                >
-                  {t.tag}
-                </a>
-              ))}
-            </span>
-          )}
-        </Stat>
-      </div>
-
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         {/* Transactions table. */}
         <section className="card overflow-hidden" aria-label="Recent transactions">
           <div className="card-header">
-            <h2 className="section-title">Transactions</h2>
+            <h2 className="text-[15px] font-medium text-ink">Transactions</h2>
             <LiveBadge state={live} />
           </div>
-          {live.status && !live.status.live && report.transactions.available && (
-            <div className="border-b border-line px-4 py-2 text-xs leading-relaxed text-ink-faint">
-              Not receiving live updates: {live.status.reason}
-            </div>
-          )}
           {live.gap && (
             <div className="border-b border-line px-4 py-2 text-xs leading-relaxed text-warn">
-              More transactions landed between two indexer refreshes than could be pushed. Reload the page for the full recent
-              list.
+              More transactions landed than could be pushed live. Reload for the full recent list.
             </div>
           )}
           {!report.transactions.available ? (
-            <div className="px-4 py-6 text-sm text-ink-dim">Unavailable — {report.transactions.reason}</div>
+            <div className="px-5 py-10 text-center">
+              <div className="text-sm font-medium text-ink-dim">Transaction history unavailable</div>
+              <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-faint">{report.transactions.reason}</p>
+            </div>
           ) : shown.length === 0 ? (
-            <div className="px-4 py-6 text-sm text-ink-dim">No recent transactions found.</div>
+            <div className="px-5 py-10 text-center text-sm text-ink-faint">No recent transactions found.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-line text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
-                    <th className="px-4 py-2.5 font-semibold">Time</th>
-                    <th className="px-3 py-2.5 font-semibold">Transaction</th>
-                    <th className="px-3 py-2.5 font-semibold">From</th>
-                    <th className="px-3 py-2.5 font-semibold">To</th>
-                    <th className="px-4 py-2.5 text-right font-semibold">Value</th>
+                  <tr className="border-b border-line text-xs font-medium text-ink-faint">
+                    <th className="px-4 py-2.5 font-medium">Time</th>
+                    <th className="px-3 py-2.5 font-medium">Transaction</th>
+                    <th className="px-3 py-2.5 font-medium">From</th>
+                    <th className="px-3 py-2.5 font-medium">To</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Value</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -580,21 +618,27 @@ function Report({ report, onLabelSubmitted }: { report: AddressReport; onLabelSu
         {/* Side column: analysis + your own notes. */}
         <aside className="space-y-4">
           <RiskPanel chain={chain} address={address} />
-          <PrivateLabelPanel chain={chain} address={address} />
-          <LabelSubmitForm chain={chain} address={address} onSubmitted={onLabelSubmitted} />
+          {session.status === "anonymous" ? (
+            <SignInPrompt privateNote>Log in to keep a private note or suggest a public label.</SignInPrompt>
+          ) : (
+            <>
+              <PrivateLabelPanel chain={chain} address={address} />
+              <LabelSubmitForm chain={chain} address={address} onSubmitted={onLabelSubmitted} />
+            </>
+          )}
         </aside>
       </div>
     </div>
   );
 }
 
-function Stat({ title, footer, children }: { title: string; footer: string; children: React.ReactNode }) {
+function Figure({ title, footer, className, children }: { title: string; footer: string; className?: string; children: React.ReactNode }) {
   return (
-    <section className="card p-4" aria-label={title}>
-      <div className="section-title">{title}</div>
-      <div className="num mt-1.5 truncate font-mono text-2xl font-semibold tracking-tight text-ink">{children}</div>
-      <div className="mt-1 truncate text-xs text-ink-faint">{footer}</div>
-    </section>
+    <div className={cx("min-w-0 px-4 py-3.5 sm:px-5 sm:py-4", className)}>
+      <dt className="text-xs font-medium text-ink-faint">{title}</dt>
+      <dd className="num mt-1 truncate font-mono text-xl font-semibold tracking-tight text-ink">{children}</dd>
+      <dd className="mt-0.5 truncate text-xs text-ink-faint">{footer}</dd>
+    </div>
   );
 }
 

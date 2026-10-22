@@ -3,11 +3,26 @@
 Third-party UI code copied into the repo, each under its own license. Local changes are marked
 in the file.
 
+## AeroShards.tsx
+
+The WebGPU "Aero Shards" background from [React Bits](https://reactbits.dev/backgrounds/aero-shards)
+by David Haz ([source](https://github.com/DavidHDev/react-bits/tree/main/src/ts-tailwind/Backgrounds/AeroShards)),
+with the demo's "graphite" preset (chrome material, `#a1a1aa` / `#e4e4e7`, billow 0.7, glow 0.25).
+It's the home page hero (`src/App.tsx`, `HeroBackground`). Vendored unchanged apart from the header.
+
+It renders through `vgpu` (vercel-labs, MIT), pinned to 0.3.1 — the version upstream targets.
+`vgpu` lists its Node adapter as a regular dependency, which installs the native `webgpu` package
+(~70 MB, with a postinstall script); none of that reaches the browser bundle.
+
+Where WebGPU is unavailable (or fails to start), `HeroBackground` falls back to Ferrofluid below.
+
+License: **MIT + Commons Clause v1.0**, same terms and caveat as Ferrofluid below.
+
 ## Ferrofluid.tsx
 
 The animated WebGL2 ferrofluid background from [React Bits](https://reactbits.dev/backgrounds/ferrofluid)
 by David Haz ([source](https://github.com/DavidHDev/react-bits/tree/main/src/ts-tailwind/Backgrounds/Ferrofluid)).
-It's used only as the hero on the home page (`src/App.tsx`, `Home`).
+It's the home hero's fallback where WebGPU isn't available (`src/App.tsx`, `HeroBackground`).
 
 One local patch, marked `OSSTrace patch` in the file: upstream's cleanup always calls
 `loseContext()`. Under React StrictMode (dev), the effect is cleaned up and re-run on the same

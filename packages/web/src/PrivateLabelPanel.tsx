@@ -1,14 +1,8 @@
 import { useEffect, useState } from "react";
 import type { ChainId } from "@osstrace/core";
+import { LockIcon } from "./ui.tsx";
 import { apiCall, notifyPrivateLabelsChanged, PRIVATE_LABELS_URL, useSession, type PrivateLabel } from "./session.ts";
 
-export function LockIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" className="shrink-0 fill-current">
-      <path d="M8 1a3.5 3.5 0 0 0-3.5 3.5V6H4a1.5 1.5 0 0 0-1.5 1.5v6A1.5 1.5 0 0 0 4 15h8a1.5 1.5 0 0 0 1.5-1.5v-6A1.5 1.5 0 0 0 12 6h-.5V4.5A3.5 3.5 0 0 0 8 1Zm2 5H6V4.5a2 2 0 1 1 4 0V6Z" />
-    </svg>
-  );
-}
 
 type PanelState =
   | { status: "loading" }
@@ -55,13 +49,8 @@ export default function PrivateLabelPanel({ chain, address }: { chain: ChainId; 
     };
   }, [token, path]);
 
-  if (!token) {
-    return (
-      <div className="flex items-center gap-2 rounded-card border border-dashed border-line-strong px-4 py-2.5 text-xs text-ink-faint">
-        <LockIcon /> Log in (top right) to add a private label to this address — visible only to you.
-      </div>
-    );
-  }
+  // Signed out: the report shows one combined sign-in prompt instead.
+  if (!token) return null;
 
   async function save(event: React.FormEvent): Promise<void> {
     event.preventDefault();

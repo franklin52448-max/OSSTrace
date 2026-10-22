@@ -118,8 +118,8 @@
     align-items: center;
     justify-content: center;
     gap: 7px;
-    min-height: 38px;
-    border-radius: 19px;
+    min-height: 36px;
+    border-radius: 18px;
     background-color: var(--helium-blue);
     color: var(--white);
     padding: 0.5rem 1.125rem;
@@ -151,8 +151,9 @@
     border-radius: 999px;
     background-color: var(--helium-elevated-7);
     color: var(--color-ink);
-    padding: 0.375rem 0.875rem;
-    font-size: 0.8125rem;
+    min-height: 36px;
+    padding: 0.375rem 1rem;
+    font-size: 0.875rem;
     font-weight: 500;
     transition: background-color 0.2s, transform 0.2s;
   }
@@ -167,6 +168,35 @@
   }
 
   .btn-outline:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* Destructive action: quiet until hovered, never the visual default. */
+  .btn-danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);
+    color: var(--color-danger);
+    min-height: 36px;
+    padding: 0.375rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: background-color 0.2s, transform 0.2s;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  }
+
+  .btn-danger:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  .btn-danger:disabled {
     opacity: 0.5;
     cursor: default;
   }

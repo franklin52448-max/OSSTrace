@@ -2,8 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChainId } from "@osstrace/core";
 import { forceLayout, type Point } from "./layout.ts";
 import { ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
+import { CopyButton } from "./prism/components.tsx";
+import { Loading, Notice, PageHeader } from "./ui.tsx";
 
 const VISUALIZER_URL = import.meta.env["VITE_VISUALIZER_URL"] ?? "http://localhost:5302";
+/** Same `#address/<chain>/<address>` route App.tsx's router reads. */
+const addressHref = (chain: ChainId, address: string): string => `#address/${chain}/${encodeURIComponent(address)}`;
 
 // --- The Visualizer API's response shape (see packages/features/visualizer/README.md) ---------
 interface Source {
@@ -123,48 +127,45 @@ export default function GraphView({ initial = null }: { initial?: { chain: Chain
   }
 
   return (
-    <div>
-      {/* Toolbar: chain / address / hop-depth controls over the graph workspace. */}
-      <div className="card overflow-hidden">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-2 border-b border-line p-3 sm:flex-row">
-          <select value={chain} onChange={(e) => setChain(e.target.value as ChainId)} aria-label="Chain" className="ctl shrink-0">
-            <option value="ethereum">Ethereum</option>
-            <option value="solana">Solana</option>
-          </select>
-          <input
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder={chain === "ethereum" ? "0x…" : "a Solana address"}
-            aria-label="Address to graph"
-            className="ctl hash min-w-0 flex-1"
-          />
-          <select
-            value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
-            aria-label="How many recent transactions to graph"
-            className="ctl shrink-0"
-          >
-            {[5, 10, 25, 50].map((n) => (
-              <option key={n} value={n}>
-                last {n} txs
-              </option>
-            ))}
-          </select>
-          <button type="submit" disabled={state.status === "loading"} className="btn-accent shrink-0">
-            {state.status === "loading" ? "Building graph…" : "Graph it"}
-          </button>
-        </form>
-        <p className="px-4 py-2.5 text-xs leading-relaxed text-ink-faint">
-          One hop: the address and the counterparties in its most recent transactions. Click a counterparty, then “Graph this
-          address” to step outward one real query at a time.
-        </p>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Visualizer"
+        description="An address and the counterparties in its most recent transactions. Select a counterparty to step outward, one real query at a time."
+      />
 
-      {state.status === "error" && (
-        <div role="alert" className="mt-4 rounded-card border border-danger/35 bg-danger/10 px-4 py-3 text-sm text-danger">
-          {state.message}
-        </div>
-      )}
+      {/* Toolbar: chain / address / transaction-count controls over the graph workspace. */}
+      <form onSubmit={handleSubmit} className="card flex flex-col gap-2 p-3 sm:flex-row">
+        <select value={chain} onChange={(e) => setChain(e.target.value as ChainId)} aria-label="Chain" className="ctl shrink-0">
+          <option value="ethereum">Ethereum</option>
+          <option value="solana">Solana</option>
+        </select>
+        <input
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          placeholder={chain === "ethereum" ? "Address to graph (0x…)" : "Solana address to graph"}
+          aria-label="Address to graph"
+          spellCheck={false}
+          className="ctl hash min-w-0 flex-1"
+        />
+        <select
+          value={limit}
+          onChange={(e) => setLimit(Number(e.target.value))}
+          aria-label="How many recent transactions to graph"
+          className="ctl shrink-0"
+        >
+          {[5, 10, 25, 50].map((n) => (
+            <option key={n} value={n}>
+              Last {n} txs
+            </option>
+          ))}
+        </select>
+        <button type="submit" disabled={state.status === "loading"} className="btn-accent shrink-0">
+          {state.status === "loading" ? "Building…" : "Graph it"}
+        </button>
+      </form>
+
+      {state.status === "error" && <Notice tone="danger">{state.message}</Notice>}
+      {state.status === "loading" && <Loading label="Fetching transactions and building the graph…" />}
 
       {state.status === "done" && <GraphResult key={`${state.report.center.chain}:${state.report.center.value}`} report={state.report} onRecenter={recenter} />}
     </div>
@@ -192,19 +193,18 @@ function GraphResult({ report, onRecenter }: { report: GraphReport; onRecenter: 
   }, [report]);
 
   return (
-    <div className="mt-4 space-y-4">
+    <div className="space-y-4">
       {!report.transactions.available && (
-        <div className="rounded-card border border-warn/30 bg-warn/10 px-4 py-3 text-sm text-warn">
-          Transaction history unavailable — {report.transactions.reason}. Only the address itself (and anything on record about it) is
-          shown; no counterparties are drawn because none were fetched.
-        </div>
+        <Notice tone="warn">
+          No counterparties drawn: transaction history is unavailable ({report.transactions.reason}).
+        </Notice>
       )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         {/* Framed canvas: header strip carries the real fetch stats, the field below is the graph. */}
         <section className="card flex min-w-0 flex-col overflow-hidden" aria-label="Transaction graph">
           <div className="card-header">
-            <h2 className="section-title">Transaction graph</h2>
+            <h2 className="text-[15px] font-medium text-ink">Graph</h2>
             {report.transactions.available && (
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-faint">
                 <span>
@@ -214,11 +214,11 @@ function GraphResult({ report, onRecenter }: { report: GraphReport; onRecenter: 
                   <span className="num font-medium text-ink">{report.edges.length}</span> transfers drawn
                 </span>
                 <span>
-                  <span className="num font-medium text-ink">{report.transactions.fetched}</span> recent transactions fetched
+                  <span className="num font-medium text-ink">{report.transactions.fetched}</span> txs fetched
                 </span>
                 {report.omitted.length > 0 && (
                   <span>
-                    <span className="num font-medium text-ink">{report.omitted.length}</span> not drawn (see below)
+                    <span className="num font-medium text-ink">{report.omitted.length}</span> not drawn
                   </span>
                 )}
               </div>
@@ -541,8 +541,13 @@ function NodePanel({ node, report, onRecenter }: { node: GraphNode; report: Grap
   return (
     <aside className="card space-y-3 p-4 text-sm lg:max-h-[624px] lg:overflow-y-auto" aria-label="Selected node">
       <div>
-        <div className="section-title">{node.role === "center" ? "Queried address" : "Counterparty"}</div>
-        <div className="hash mt-1.5 break-all text-xs text-ink-dim">{node.id}</div>
+        <div className="text-xs font-medium text-ink-faint">{node.role === "center" ? "Queried address" : "Counterparty"}</div>
+        <div className="mt-1 flex min-w-0 items-center gap-1">
+          <a href={addressHref(node.address.chain, node.id)} title={node.id} className="hash min-w-0 truncate text-sm text-ink hover:text-signal">
+            {node.id}
+          </a>
+          <CopyButton value={node.id} label="Copy address" className="small shrink-0 !text-ink-faint" />
+        </div>
       </div>
 
       {node.label ? (
@@ -608,18 +613,14 @@ function NodePanel({ node, report, onRecenter }: { node: GraphNode; report: Grap
       </p>
 
       {node.role === "counterparty" && (
-        <button
-          type="button"
-          onClick={() => onRecenter(node)}
-          className="w-full rounded-ctl border border-signal/40 bg-signal/10 px-3 py-1.5 text-xs font-medium text-signal transition-colors duration-150 hover:bg-signal/20"
-        >
+        <button type="button" onClick={() => onRecenter(node)} className="btn-accent w-full">
           Graph this address
         </button>
       )}
 
       {edges.length > 0 && (
         <div>
-          <div className="section-title">Transfers</div>
+          <div className="text-xs font-medium text-ink-faint">Transfers</div>
           <ul className="mt-1 divide-y divide-line border-t border-line">
             {edges.map((e) => {
               // Direction from this node's point of view.

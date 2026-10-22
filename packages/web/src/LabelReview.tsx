@@ -72,24 +72,17 @@ export function LabelSubmitForm({ chain, address, onSubmitted }: { chain: ChainI
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ kind: "ok" | "error"; message: string } | null>(null);
 
-  if (session.status !== "signed-in") {
-    return session.status === "anonymous" ? (
-      <div className="text-xs text-ink-faint">Log in to suggest a label for this address.</div>
-    ) : null;
-  }
+  // Signed out: the report shows one combined sign-in prompt instead.
+  if (session.status !== "signed-in") return null;
   const token = session.token;
 
   if (!open) {
     return (
-      <div className="text-xs">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="font-medium text-signal underline-offset-2 transition-colors duration-150 hover:text-ink hover:underline"
-        >
-          Suggest a label for this address
+      <div className="space-y-2">
+        <button type="button" onClick={() => setOpen(true)} className="btn-outline w-full">
+          Suggest a public label
         </button>
-        {result?.kind === "ok" && <span className="ml-2 text-ink-dim">{result.message}</span>}
+        {result?.kind === "ok" && <p className="text-xs text-ink-dim">{result.message}</p>}
       </div>
     );
   }
@@ -174,8 +167,7 @@ export function LabelSubmitForm({ chain, address, onSubmitted }: { chain: ChainI
         </select>
       </label>
       <p className="text-xs leading-relaxed text-ink-faint">
-        It's public right away, marked unreviewed, until a moderator confirms or rejects it. Your account id (not your email)
-        is recorded with it.
+        Public right away, marked unreviewed until a moderator checks it. Your account id (not your email) is recorded.
       </p>
       <div className="flex items-center gap-3">
         <button type="submit" disabled={busy} className="btn-accent">

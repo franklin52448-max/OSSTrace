@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "./session.ts";
 import { Button, Input, Spinner } from "./prism/components.tsx";
 import { IconChevronDown, IconX } from "./prism/icons.tsx";
+import { OPEN_LOGIN_EVENT } from "./ui.tsx";
 
 /** Header account menu: log in / sign up / log out, against the real accounts API (`@osstrace/accounts`). */
 export default function AccountPanel() {
@@ -26,6 +27,16 @@ export default function AccountPanel() {
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [open]);
+
+  // Any view's "Log in" prompt opens this menu on the log-in form.
+  useEffect(() => {
+    const onOpenLogin = () => {
+      setMode("login");
+      setOpen(true);
+    };
+    window.addEventListener(OPEN_LOGIN_EVENT, onOpenLogin);
+    return () => window.removeEventListener(OPEN_LOGIN_EVENT, onOpenLogin);
+  }, []);
 
   if (session.status === "checking") {
     return <Spinner size={18} className="text-ink-faint" />;

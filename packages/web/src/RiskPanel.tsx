@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ChainId } from "@osstrace/core";
+import { Notice } from "./ui.tsx";
 
 const RISK_URL = import.meta.env["VITE_RISK_SCORING_URL"] ?? "http://localhost:5305";
 
@@ -102,22 +103,22 @@ export default function RiskPanel({ chain, address }: { chain: ChainId; address:
   return (
     <section className="card p-4" aria-label="Risk score">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="section-title">Risk score</div>
+        <h2 className="text-[15px] font-medium text-ink">Risk score</h2>
         <button type="button" onClick={() => void compute()} disabled={state.status === "loading"} className="btn-outline">
-          {state.status === "loading" ? "Scoring…" : state.status === "done" ? "Recompute" : "Compute risk score"}
+          {state.status === "loading" ? "Scoring…" : state.status === "done" ? "Recompute" : "Compute"}
         </button>
       </div>
 
       {state.status === "idle" && (
-        <p className="mt-1.5 text-xs text-ink-faint">
-          From real tags only (today: the sanctions lists this project ingests), the address itself or the nearest flagged address within a few hops.
+        <p className="mt-1.5 text-xs leading-relaxed text-ink-faint">
+          Based only on sourced tags (today: ingested sanctions lists) on this address or the nearest flagged one within a few hops.
         </p>
       )}
 
       {state.status === "error" && (
-        <div role="alert" className="mt-3 rounded-card border border-danger/35 bg-danger/10 px-4 py-3 text-sm text-danger">
+        <Notice tone="danger" className="mt-3 text-xs">
           {state.message}
-        </div>
+        </Notice>
       )}
 
       {state.status === "done" && <RiskResult result={state.result} />}

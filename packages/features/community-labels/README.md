@@ -60,9 +60,14 @@ Field rules:
 - `name` can be up to 120 characters.
 - `confidence` is `verified` when the source states the claim outright, or `predicted` when the
   claim is inferred from the source.
-- `source.url` must be an absolute http(s) URL with a real host and no credentials. The server
-  never fetches it, and a moderator checks it.
+- `source.url` must be an absolute http(s) URL with a real, public host and no credentials:
+  `localhost`/`*.localhost`/`*.local`/`*.internal`, loopback, private and link-local IPs, and IPv6
+  literals are refused, since nobody but the submitter could open them to check the claim. The
+  server never fetches it, and a moderator checks it.
 - `source.description` can be up to 500 characters.
+- `name`, `source.description` and a rejection `reason` must be plain text: control characters
+  and Unicode text-direction controls (e.g. U+202E) are refused, since a community label is public
+  before review and a direction override would make it display as different text.
 - `source.addedAt` is set by the server to the submission date.
 
 Error codes:

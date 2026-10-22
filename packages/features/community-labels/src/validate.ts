@@ -15,18 +15,54 @@ export interface SubmissionInput {
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; message: string };
 
+/**
+ * Control characters (after whitespace is collapsed: NUL, ESC, DEL, ...) and Unicode bidi
+ * controls. A community label is public the moment it's submitted, before any review, and a
+ * right-to-left override (U+202E) makes the text *display* differently from what it says, so an
+ * unreviewed label could visually read as a different name.
+ */
+const UNSAFE_TEXT = /[\p{Cc}؜‎‏‪-‮⁦-⁩]/u;
+
 function text(value: unknown, field: string, max: number): Parsed<string> {
   if (typeof value !== "string") return { ok: false, message: `${field} is required` };
   const trimmed = value.trim().replace(/\s+/g, " ");
   if (!trimmed) return { ok: false, message: `${field} is required` };
   if ([...trimmed].length > max) return { ok: false, message: `${field} must be at most ${max} characters` };
+  if (UNSAFE_TEXT.test(trimmed)) {
+    return { ok: false, message: `${field} must be plain text (no control or text-direction characters)` };
+  }
   return { ok: true, value: trimmed };
 }
 
 /**
- * A source URL must be an absolute http(s) URL with a real-looking host. This checks shape only —
- * the server never fetches it (fetching a user-supplied URL from the server is an SSRF hole), so
- * whether it actually supports the claim is exactly what a moderator checks before confirming.
+ * Hosts nobody but the submitter can open: `localhost` and friends, and loopback, private,
+ * carrier-grade-NAT and link-local IPv4. A citation there can't be checked by a moderator or any
+ * reader (ADR 0002), and every IPv6 literal is already refused by the "has a dot" check below.
+ * (`new URL` has already normalised forms like `127.1` or `2130706433` to dotted-quad.)
+ */
+function isNonPublicHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return true;
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!v4) return false;
+  const a = Number(v4[1]);
+  const b = Number(v4[2]);
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168)
+  );
+}
+
+/**
+ * A source URL must be an absolute http(s) URL with a real, publicly reachable host. This checks
+ * shape only — the server never fetches it (fetching a user-supplied URL from the server is an
+ * SSRF hole), so whether it actually supports the claim is exactly what a moderator checks before
+ * confirming.
  */
 export function parseSourceUrl(value: unknown): Parsed<string> {
   if (typeof value !== "string" || !value.trim()) return { ok: false, message: "source.url is required" };
@@ -41,8 +77,8 @@ export function parseSourceUrl(value: unknown): Parsed<string> {
   if (url.protocol !== "https:" && url.protocol !== "http:") {
     return { ok: false, message: "source.url must be an http or https URL" };
   }
-  if (!url.hostname.includes(".") && url.hostname !== "localhost") {
-    return { ok: false, message: "source.url must point at a real host" };
+  if (!url.hostname.includes(".") || isNonPublicHost(url.hostname)) {
+    return { ok: false, message: "source.url must point at a real, public host" };
   }
   if (url.username || url.password) return { ok: false, message: "source.url must not contain credentials" };
   return { ok: true, value: url.toString() };

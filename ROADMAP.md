@@ -69,8 +69,17 @@ folders, separate agents, same plugin architecture that made this possible in th
 
 ## Wave 3 — next features
 
-- [ ] **Risk Scoring** — address/entity risk indicators (sanctions exposure, hop-distance from a
-      flagged address), builds on the label dataset + a new graph-traversal piece
+- [x] **Risk Scoring** — `packages/features/risk-scoring/`,
+      [ADR 0010](docs/adr/0010-risk-scoring-model.md): `GET /risk/:chain/:address` scores an address
+      0–100 from a real risk tag on the address itself (100) or the nearest risk-tagged address
+      within 1–3 hops, found with Tracer's own `traceGraph` (75/50/25). Returns the real tag, its
+      source and the real path as evidence. An unfinished search (breadth/budget cap, unavailable
+      node, or a full history page) is `inconclusive` with `searchIncomplete: true`, never `none`.
+      A "Risk score" card on the web UI's Lookup report.
+  - [ ] Only one risk tag exists in the real data today (`sanctioned`, OFAC + UK). More risk
+        sources (sourced exploit/hacker lists, ADR 0005 §3) would each need their own row in ADR 0010.
+  - [ ] Entity-level scores, cross-chain exposure, and a core "more history exists" signal on
+        `TransactionsResult` (closes the Ethereum truncation edge in ADR 0010) — not built.
 - [ ] **Case Management** — group findings into a structured record; needs accounts (who owns a
       case) so naturally sequenced after Wave 1's accounts work
 

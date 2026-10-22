@@ -10,6 +10,7 @@
     { "path": "packages/features/private-labels" },
     { "path": "packages/features/community-labels" },
     { "path": "packages/features/tracer" },
-    { "path": "packages/features/bounties" }
+    { "path": "packages/features/bounties" },
+    { "path": "packages/features/risk-scoring" }
   ]
 }

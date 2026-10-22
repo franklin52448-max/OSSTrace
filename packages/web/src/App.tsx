@@ -11,9 +11,10 @@ import ModerationView from "./ModerationView.tsx";
 import { LabelSubmitForm, ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
 import { isModerator, useSession } from "./session.ts";
 import { Notice, SignInPrompt } from "./ui.tsx";
+import { ChainIcon, ChainSelect } from "./ChainSelect.tsx";
 import { amountDisplay, type AmountDisplay, type Direction, type TxStatus } from "./txDisplay.ts";
 import { LiveBadge, useLiveTransactions } from "./LiveStream.tsx";
-import { CopyButton, Dropdown, SearchBar, Skeleton, Text, cx } from "./prism/components.tsx";
+import { CopyButton, SearchBar, Skeleton, Text, cx } from "./prism/components.tsx";
 import { IconArrowRight, IconExternalLink } from "./prism/icons.tsx";
 import type { AeroShardsProps } from "./vendor/AeroShards.tsx";
 import type { FerrofluidProps } from "./vendor/Ferrofluid.tsx";
@@ -244,13 +245,7 @@ function GlobalSearch({ initial, small }: { initial: Route["target"]; small?: bo
 
   return (
     <form onSubmit={handleSubmit} className="flex w-full items-center gap-2">
-      <Dropdown
-        aria-label="Chain"
-        value={chain}
-        onValueChange={(v) => isChain(v) && setChain(v)}
-        options={CHAINS}
-        className={cx("shrink-0", small && "[--dropdown-height:36px] text-sm")}
-      />
+      <ChainSelect value={chain} onChange={setChain} small={small} />
       <SearchBar
         aria-label="Search an address"
         small={small}
@@ -412,10 +407,10 @@ function ReportSkeleton() {
 function ChainGlyph({ chain }: { chain: ChainId }) {
   return (
     <span
-      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--helium-elevated-10)] text-xl text-signal"
+      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--helium-elevated-10)]"
       title={chain === "ethereum" ? "Ethereum" : "Solana"}
     >
-      {chain === "ethereum" ? "Ξ" : "◎"}
+      <ChainIcon chain={chain} size={22} />
     </span>
   );
 }

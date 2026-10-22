@@ -12,10 +12,11 @@ import { LabelSubmitForm, ReviewBadge, SubmissionByline, type LabelView } from "
 import { isModerator, useSession } from "./session.ts";
 import { Notice, SignInPrompt } from "./ui.tsx";
 import { ChainIcon, ChainSelect } from "./ChainSelect.tsx";
+import HomeFeatures from "./HomeFeatures.tsx";
 import { amountDisplay, type AmountDisplay, type Direction, type TxStatus } from "./txDisplay.ts";
 import { LiveBadge, useLiveTransactions } from "./LiveStream.tsx";
 import { CopyButton, SearchBar, Skeleton, Text, cx } from "./prism/components.tsx";
-import { IconArrowRight, IconExternalLink } from "./prism/icons.tsx";
+import { IconExternalLink } from "./prism/icons.tsx";
 import type { AeroShardsProps } from "./vendor/AeroShards.tsx";
 import type { FerrofluidProps } from "./vendor/Ferrofluid.tsx";
 
@@ -322,26 +323,11 @@ function Home() {
         </div>
       </section>
 
-      <div className="mx-auto max-w-3xl px-4">
-        <div className="mt-8 grid gap-3 sm:grid-cols-3">
-          {[
-            { href: "#graph", title: "Visualizer", desc: "See an address and its direct counterparties as a graph." },
-            { href: "#trace", title: "Tracer", desc: "Follow funds up to three hops, including Wormhole bridges." },
-            { href: "#bounties", title: "Bounties", desc: "Request a feature, or build one someone asked for." },
-          ].map((item) => (
-            <a key={item.href} href={item.href} className="button card !items-start border border-line">
-              <span className="link-text">
-                <span className="text-[15px] font-medium text-ink">{item.title}</span>
-                <span className="text-[13px] leading-snug text-ink-dim">{item.desc}</span>
-              </span>
-              <IconArrowRight className="mt-0.5 text-ink-faint" />
-            </a>
-          ))}
-        </div>
-        <p className="mt-10 text-center text-xs text-ink-faint">
-          Open source (AGPL-3.0). No affiliation with any proprietary platform.
-        </p>
-      </div>
+      <HomeFeatures />
+
+      <p className="mx-auto mt-20 max-w-3xl px-4 text-center text-xs text-ink-faint">
+        Open source (AGPL-3.0). No affiliation with any proprietary platform.
+      </p>
     </div>
   );
 }

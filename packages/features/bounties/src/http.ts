@@ -95,6 +95,22 @@ export function createBountiesHandler(
     send(req, res, okStatus, body);
   }
 
+  /**
+   * A malformed `%` escape (e.g. "%E0%A4%A") in a bounty id throws outside the shape this
+   * function's own caller expects. The outer try/catch below already keeps that from crashing the
+   * process, but it used to fall through to a generic 500 "internal error" — this gives it the
+   * same clean 400 every other route's bad input gets. Returns `null` after already sending the
+   * response, so the caller just needs to check for that and return.
+   */
+  function decodeBountyId(req: IncomingMessage, res: ServerResponse, raw: string): string | null {
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      send(req, res, 400, { error: "invalid_bounty", message: "malformed URL encoding in the bounty id" });
+      return null;
+    }
+  }
+
   return async function handle(req, res) {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
@@ -119,17 +135,22 @@ export function createBountiesHandler(
 
       const submissionsList = path.match(/^\/bounties\/([^/]+)\/submissions$/);
       if (submissionsList?.[1] && req.method === "GET") {
-        sendResult(req, res, await service.listSubmissions(decodeURIComponent(submissionsList[1])));
+        const id = decodeBountyId(req, res, submissionsList[1]);
+        if (id === null) return true;
+        sendResult(req, res, await service.listSubmissions(id));
         return true;
       }
       if (submissionsList?.[1] && req.method === "POST") {
-        sendResult(req, res, await service.submit(token, decodeURIComponent(submissionsList[1]), await readJsonBody(req)), 201);
+        const id = decodeBountyId(req, res, submissionsList[1]);
+        if (id === null) return true;
+        sendResult(req, res, await service.submit(token, id, await readJsonBody(req)), 201);
         return true;
       }
 
       const action = path.match(/^\/bounties\/([^/]+)\/(claim|cancel)$/);
       if (action?.[1] && req.method === "POST") {
-        const id = decodeURIComponent(action[1]);
+        const id = decodeBountyId(req, res, action[1]);
+        if (id === null) return true;
         const body = await readJsonBody(req);
         if (action[2] === "claim") {
           sendResult(req, res, await service.claim(token, id, body["submissionId"]));
@@ -141,7 +162,9 @@ export function createBountiesHandler(
 
       const detail = path.match(/^\/bounties\/([^/]+)$/);
       if (detail?.[1] && req.method === "GET") {
-        sendResult(req, res, await service.get(decodeURIComponent(detail[1])));
+        const id = decodeBountyId(req, res, detail[1]);
+        if (id === null) return true;
+        sendResult(req, res, await service.get(id));
         return true;
       }
 

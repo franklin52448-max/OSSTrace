@@ -108,3 +108,26 @@ test("status codes: 400 invalid body, 404 unknown bounty, CORS headers only for 
     assert.equal(disallowed.headers.get("access-control-allow-origin"), null);
   });
 });
+
+test("a malformed %-escape in a bounty id gets a clean 400, not a generic 500, and the server keeps serving", async () => {
+  await withServer(async (base) => {
+    // decodeURIComponent('%E0%A4%A') throws a real URIError. The outer try/catch here already
+    // kept that from crashing the process, but it used to fall through to a generic 500
+    // "internal error" instead of a specific 400 — checked against every route that decodes an
+    // id from the path.
+    for (const [method, path] of [
+      ["GET", "/bounties/%E0%A4%A"],
+      ["GET", "/bounties/%E0%A4%A/submissions"],
+      ["POST", "/bounties/%E0%A4%A/submissions"],
+      ["POST", "/bounties/%E0%A4%A/claim"],
+      ["POST", "/bounties/%E0%A4%A/cancel"],
+    ] as const) {
+      const res = await call(base, method, path, method === "POST" ? { body: {} } : {});
+      assert.equal(res.status, 400, `${method} ${path}`);
+      assert.equal(res.body.error, "invalid_bounty", `${method} ${path}`);
+    }
+
+    const stillUp = await call(base, "GET", "/bounties");
+    assert.equal(stillUp.status, 200, "the server must still be up after every malformed id");
+  });
+});

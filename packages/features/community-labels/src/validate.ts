@@ -89,12 +89,10 @@ export function parseSourceUrl(value: unknown): Parsed<string> {
  * applies to community submissions exactly as it does to ingested data.
  */
 export function parseSubmissionInput(body: Record<string, unknown>): Parsed<SubmissionInput> {
-  const chain = body["chain"];
-  if (!isChainId(chain)) return { ok: false, message: `chain must be one of: ${SUPPORTED_CHAINS.join(", ")}` };
-  const rawAddress = typeof body["address"] === "string" ? body["address"].trim() : null;
-  if (!isRealAddress(chain, rawAddress)) return { ok: false, message: `address is not a valid ${chain} address` };
+  const address = parseTarget(body);
+  if (!address.ok) return address;
 
-  const name = text(body["name"], "name", NAME_MAX_LENGTH);
+  const name = parseLabelName(body["name"]);
   if (!name.ok) return name;
 
   const confidence = body["confidence"];
@@ -114,7 +112,7 @@ export function parseSubmissionInput(body: Record<string, unknown>): Parsed<Subm
   return {
     ok: true,
     value: {
-      address: { chain, value: canonicalAddress(chain, rawAddress) },
+      address: address.value,
       name: name.value,
       confidence,
       source: { url: url.value, description: description.value },
@@ -124,4 +122,22 @@ export function parseSubmissionInput(body: Record<string, unknown>): Parsed<Subm
 
 export function parseRejectionReason(value: unknown): Parsed<string> {
   return text(value, "reason", REASON_MAX_LENGTH);
+}
+
+/**
+ * A label name on its own, under exactly the rules `parseSubmissionInput` applies to `name`. Used
+ * by self-attestation (ADR 0019), where the name goes into a signed statement: collapsing
+ * whitespace and refusing control characters also means it can't add lines to that statement.
+ */
+export function parseLabelName(value: unknown): Parsed<string> {
+  return text(value, "name", NAME_MAX_LENGTH);
+}
+
+/** `chain` + `address`, under exactly the rules `parseSubmissionInput` applies; the address comes back canonical. */
+export function parseTarget(body: Record<string, unknown>): Parsed<Address> {
+  const chain = body["chain"];
+  if (!isChainId(chain)) return { ok: false, message: `chain must be one of: ${SUPPORTED_CHAINS.join(", ")}` };
+  const rawAddress = typeof body["address"] === "string" ? body["address"].trim() : null;
+  if (!isRealAddress(chain, rawAddress)) return { ok: false, message: `address is not a valid ${chain} address` };
+  return { ok: true, value: { chain, value: canonicalAddress(chain, rawAddress) } };
 }

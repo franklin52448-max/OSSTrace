@@ -1,7 +1,14 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { addressKey, type AccountId, type Address } from "@osstrace/core";
-import type { ConfirmedSubmission, PendingSubmission, RejectedSubmission, Submission, SubmissionStatus } from "./types.ts";
+import type {
+  ConfirmedSubmission,
+  PendingSubmission,
+  RejectedSubmission,
+  SelfAttestedSubmission,
+  Submission,
+  SubmissionStatus,
+} from "./types.ts";
 
 export interface SubmissionFilter {
   status?: SubmissionStatus;
@@ -9,7 +16,21 @@ export interface SubmissionFilter {
   address?: Address;
 }
 
-export type CreateOutcome = { ok: true } | { ok: false; reason: "duplicate" };
+/**
+ * A per-account cap on how many submissions may be *created* after `since` (ISO 8601, exclusive:
+ * a submission made exactly one window ago has just aged out).
+ * Every status counts — a submission that was later rejected still took a moderator's time.
+ */
+export interface CreateRateLimit {
+  max: number;
+  since: string;
+}
+
+export type CreateOutcome =
+  | { ok: true }
+  | { ok: false; reason: "duplicate" }
+  /** `oldestInWindow`: submittedAt of the counted submission whose ageing out frees the next slot, so the caller can say when. */
+  | { ok: false; reason: "rate_limited"; oldestInWindow: string };
 
 /** A review decision, applied only if the submission is still pending. */
 export type ReviewDecision =
@@ -18,20 +39,24 @@ export type ReviewDecision =
 
 export type ReviewOutcome =
   | { ok: true; submission: ConfirmedSubmission | RejectedSubmission }
-  | { ok: false; reason: "not_found" | "already_reviewed" | "own_submission"; submission?: Submission };
+  | { ok: false; reason: "not_found" | "already_reviewed" | "own_submission" | "not_confirmable"; submission?: Submission };
 
 export interface SubmissionStore {
   get(id: string): Promise<Submission | null>;
   /** Matching submissions in submission order (oldest first). */
   list(filter?: SubmissionFilter): Promise<Submission[]>;
   /**
-   * Adds a pending submission. Refuses (`"duplicate"`) if the same account already has a
-   * *pending* submission for the same address — checked inside the write lock.
+   * Adds a pending community submission or a (signature-checked) self-attested one. Refuses
+   * (`"duplicate"`) a community submission if the same account already has a *pending* one for the
+   * same address, and (`"rate_limited"`) either kind if `limit` is given and the account already
+   * created `limit.max` submissions since `limit.since`. Both are checked inside the write lock,
+   * so concurrent requests can't each squeeze past the limit.
    */
-  create(submission: PendingSubmission): Promise<CreateOutcome>;
+  create(submission: PendingSubmission | SelfAttestedSubmission, limit?: CreateRateLimit): Promise<CreateOutcome>;
   /**
    * Applies a review decision atomically: refuses if the submission doesn't exist, was already
-   * reviewed (so two moderators can't both decide it), or was submitted by the reviewer.
+   * reviewed (so two moderators can't both decide it), or was submitted by the reviewer. A
+   * self-attested submission can be rejected but not confirmed (`"not_confirmable"`).
    */
   review(id: string, decision: ReviewDecision): Promise<ReviewOutcome>;
 }
@@ -118,13 +143,29 @@ export class JsonFileSubmissionStore implements SubmissionStore {
     return (await this.#read()).submissions.filter((s) => matches(s, filter));
   }
 
-  create(submission: PendingSubmission): Promise<CreateOutcome> {
+  create(submission: PendingSubmission | SelfAttestedSubmission, limit?: CreateRateLimit): Promise<CreateOutcome> {
     return this.#mutate((data): { result: CreateOutcome; changed: boolean } => {
       const key = addressKey(submission.address);
-      const duplicate = data.submissions.some(
-        (s) => s.status === "community" && s.submittedBy === submission.submittedBy && addressKey(s.address) === key,
-      );
+      // Only pending community submissions are capped at one per account per address. A newer
+      // self-attestation simply supersedes an older one for display (ADR 0019).
+      const duplicate =
+        submission.status === "community" &&
+        data.submissions.some(
+          (s) => s.status === "community" && s.submittedBy === submission.submittedBy && addressKey(s.address) === key,
+        );
       if (duplicate) return { result: { ok: false, reason: "duplicate" }, changed: false };
+      if (limit) {
+        const sinceMs = Date.parse(limit.since);
+        const recent = data.submissions
+          .filter((s) => s.submittedBy === submission.submittedBy && Date.parse(s.submittedAt) > sinceMs)
+          .map((s) => s.submittedAt)
+          .sort();
+        if (recent.length >= limit.max) {
+          // A slot frees up when enough of them age out that fewer than `max` remain.
+          const freesAt = recent[recent.length - limit.max] ?? limit.since;
+          return { result: { ok: false, reason: "rate_limited", oldestInWindow: freesAt }, changed: false };
+        }
+      }
       data.submissions.push(submission);
       return { result: { ok: true }, changed: true };
     });
@@ -135,7 +176,13 @@ export class JsonFileSubmissionStore implements SubmissionStore {
       const index = data.submissions.findIndex((s) => s.id === id);
       const existing = data.submissions[index];
       if (!existing) return { result: { ok: false, reason: "not_found" }, changed: false };
-      if (existing.status !== "community") {
+      // A self-attestation can be taken down (rejected) but not "confirmed": confirming means a
+      // moderator checked a cited source, and a self-attestation's evidence is its signature,
+      // which the server already checked (ADR 0019).
+      if (existing.status === "self-attested" && decision.status === "confirmed") {
+        return { result: { ok: false, reason: "not_confirmable", submission: existing }, changed: false };
+      }
+      if (existing.status !== "community" && existing.status !== "self-attested") {
         return { result: { ok: false, reason: "already_reviewed", submission: existing }, changed: false };
       }
       if (existing.submittedBy === decision.reviewedBy) {

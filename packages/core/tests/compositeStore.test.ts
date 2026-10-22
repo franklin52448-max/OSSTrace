@@ -74,7 +74,14 @@ test("isSubmittedLabel distinguishes ingested labels (no reviewStatus) from comm
     confirmedBy: "u2",
     confirmedAt: "2026-10-21T13:00:00.000Z",
   };
+  const selfAttested: Label = {
+    ...ingested,
+    ...submitted,
+    reviewStatus: "self-attested",
+    attestation: { scheme: "eip191-personal-sign", message: "signed statement", signature: "0x" },
+  };
   assert.equal(isSubmittedLabel(ingested), false);
   assert.equal(isSubmittedLabel(community), true);
   assert.equal(isSubmittedLabel(confirmed), true);
+  assert.equal(isSubmittedLabel(selfAttested), true);
 });

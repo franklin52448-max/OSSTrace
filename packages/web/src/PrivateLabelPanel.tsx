@@ -21,8 +21,20 @@ type PanelState =
  * Styled deliberately unlike the public label card and the SANCTIONED badge — violet, dashed
  * border, a lock and "only visible to you" — so a personal note can't be mistaken for a sourced,
  * public claim. It never carries a source, confidence or any public badge.
+ *
+ * `onShare` (ADR 0017) offers "Share as Community label": it opens the public submission form
+ * pre-filled with this label's text, where a real source is still required. Sharing never edits
+ * or removes the private label.
  */
-export default function PrivateLabelPanel({ chain, address }: { chain: ChainId; address: string }) {
+export default function PrivateLabelPanel({
+  chain,
+  address,
+  onShare,
+}: {
+  chain: ChainId;
+  address: string;
+  onShare?: () => void;
+}) {
   const session = useSession();
   const path = `/private-labels/${chain}/${encodeURIComponent(address)}`;
   const token = session.status === "signed-in" ? session.token : null;
@@ -131,6 +143,16 @@ export default function PrivateLabelPanel({ chain, address }: { chain: ChainId; 
             >
               {current ? "Edit" : "Add private label"}
             </button>
+            {current && onShare && (
+              <button
+                type="button"
+                onClick={onShare}
+                title="Opens the public label form pre-filled with this text. A public label needs a real source; your private label stays as it is."
+                className="rounded-ctl border border-private/45 px-3 py-1 text-xs font-medium text-private transition-colors duration-150 hover:bg-private/15"
+              >
+                Share as Community label
+              </button>
+            )}
             {current && (
               <button
                 type="button"
@@ -179,7 +201,8 @@ export default function PrivateLabelPanel({ chain, address }: { chain: ChainId; 
 
       {current && !editing && (
         <div className="mt-1.5 text-[11px] text-ink-faint">
-          Saved {new Date(current.updatedAt).toLocaleString()} · not a public label, has no source, never shared
+          Saved {new Date(current.updatedAt).toLocaleString()} · not a public label, has no source, only shared if you
+          choose to (sharing makes a separate public copy that needs a source)
         </div>
       )}
       {actionError && (

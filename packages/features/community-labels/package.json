@@ -11,7 +11,11 @@
   },
   "dependencies": {
     "@osstrace/core": "*",
-    "@osstrace/accounts": "*"
+    "@osstrace/accounts": "*",
+    "@osstrace/private-labels": "*",
+    "@noble/curves": "^1.9.7",
+    "@noble/hashes": "^1.8.0",
+    "bs58": "^4.0.1"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

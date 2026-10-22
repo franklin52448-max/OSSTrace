@@ -109,7 +109,7 @@ exactly that.
 ## Deferred (explicitly not built)
 
 - **Rate limiting** on submissions, the same gap as login in ADR 0006. It's needed before any
-  public deployment.
+  public deployment. *(Since built: 10 per account per rolling hour, ADR 0017.)*
 - **Editing or withdrawing** a pending submission, and **un-confirming** a confirmed one. Today a
   wrong confirmed label can only be superseded by a newer confirmed submission.
 - **Showing every submission for an address** (lookups show one label, per the core model).
@@ -117,7 +117,8 @@ exactly that.
   come only from ingested sources.
 - **Publishing confirmed labels into the open dataset** (`data/labels/`, ADR 0005). It needs a
   contributor licensing decision first.
-- **Self-attested tier 3** — still deferred by ADR 0004.
+- **Self-attested tier 3** — still deferred by ADR 0004. *(Since designed and built server-side:
+  ADR 0019.)*
 
 ## What would change this decision
 

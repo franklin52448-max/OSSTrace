@@ -30,6 +30,8 @@ good prior art, not something to reinvent differently for no reason.
    address (a signed message) and labels it themselves. **Not building this yet.** It needs real
    security design (proving ownership without opening a spoofing/impersonation hole) that
    deserves its own focused pass, not a bolt-on. Revisit as a dedicated piece of work later.
+   *(Since designed in ADR 0019 and built server-side; the private-label "share" action is
+   ADR 0017.)*
 
 **Private labels**: any user can label an address for themselves only — never shown to anyone
 else, no source requirement (it's not a public claim, so ADR 0002's sourcing rule doesn't apply

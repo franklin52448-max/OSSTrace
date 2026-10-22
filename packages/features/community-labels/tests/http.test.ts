@@ -6,7 +6,10 @@ import { createAccountsHandler } from "@osstrace/accounts";
 import { createLabelSubmissionsHandler } from "../src/http.ts";
 import { CommunityLabelReader } from "../src/reader.ts";
 import { JsonFileSubmissionStore } from "../src/store.ts";
-import { ETH_ADDRESS, GOOD_PASSWORD, validBody, withEnv, type Env } from "./helpers.ts";
+import { readFile } from "node:fs/promises";
+import { ed25519 } from "@noble/curves/ed25519";
+import bs58 from "bs58";
+import { ETH_ADDRESS, GOOD_PASSWORD, SOL_ADDRESS, validBody, withEnv, type Env } from "./helpers.ts";
 
 const WEB_ORIGIN = "http://localhost:5301";
 
@@ -137,6 +140,93 @@ test("HTTP status codes: 401 no session, 403 not a moderator / own submission, 4
     assert.equal((await call(base, "GET", "/labels/submissions?status=bogus", { token: mod.token })).status, 400);
     const rejectedList = await call(base, "GET", "/labels/submissions?status=rejected", { token: mod.token });
     assert.equal(rejectedList.body.submissions.length, 1);
+  });
+});
+
+test("share as Community label over real HTTP: draft → 400 without a source → 201 with one", async () => {
+  await withServer(async (base, env) => {
+    const alice = await signup(base, "alice@example.com");
+    assert.ok((await env.privateLabels.set(alice.token, "ethereum", ETH_ADDRESS, "my Safe singleton note")).ok);
+    const privateBefore = await readFile(env.privateLabelsPath, "utf8");
+
+    const draft = await call(base, "GET", `/labels/submissions/from-private-label/ethereum/${ETH_ADDRESS}`, { token: alice.token });
+    assert.equal(draft.status, 200);
+    assert.equal(draft.body.draft.name, "my Safe singleton note");
+    assert.equal(draft.body.draft.source, null);
+
+    const { source, ...noSource } = validBody({ name: draft.body.draft.name });
+    const refused = await call(base, "POST", "/labels/submissions/from-private-label", { token: alice.token, body: noSource });
+    assert.equal(refused.status, 400);
+    assert.equal(refused.body.error, "invalid_submission");
+    assert.match(refused.body.message, /source/);
+
+    const shared = await call(base, "POST", "/labels/submissions/from-private-label", {
+      token: alice.token,
+      body: { ...noSource, source },
+    });
+    assert.equal(shared.status, 201);
+    assert.equal(shared.body.submission.status, "community");
+    assert.equal(shared.body.submission.name, "my Safe singleton note");
+    assert.equal(await readFile(env.privateLabelsPath, "utf8"), privateBefore);
+
+    const none = await call(base, "GET", `/labels/submissions/from-private-label/solana/${SOL_ADDRESS}`, { token: alice.token });
+    assert.equal(none.status, 404);
+    assert.equal((await call(base, "GET", `/labels/submissions/from-private-label/ethereum/${ETH_ADDRESS}`)).status, 401);
+  });
+});
+
+test("over the submission rate limit is a real 429 with Retry-After, readable from the web origin", async () => {
+  await withServer(async (base) => {
+    const alice = await signup(base, "alice@example.com");
+    for (let i = 0; i < 10; i++) {
+      const address = `0x${(i + 1).toString(16).padStart(40, "0")}`;
+      assert.equal((await call(base, "POST", "/labels/submissions", { token: alice.token, body: validBody({ address }) })).status, 201);
+    }
+    const limited = await call(base, "POST", "/labels/submissions", {
+      token: alice.token,
+      origin: WEB_ORIGIN,
+      body: validBody({ address: `0x${"f".repeat(40)}` }),
+    });
+    assert.equal(limited.status, 429);
+    assert.equal(limited.body.error, "rate_limited");
+    assert.equal(limited.body.retryAfterSeconds, 3600);
+    assert.equal(limited.headers.get("retry-after"), "3600");
+    assert.match(limited.headers.get("access-control-expose-headers") ?? "", /retry-after/);
+  });
+});
+
+test("self-attestation over real HTTP: challenge 201 → bad signature 400 → valid signature 201, confirm 409", async () => {
+  await withServer(async (base, env) => {
+    const alice = await signup(base, "alice@example.com");
+    // A fresh, in-memory Solana keypair for this test only.
+    const secretKey = ed25519.utils.randomPrivateKey();
+    const address = bs58.encode(ed25519.getPublicKey(secretKey));
+    const sign = (message: string) => bs58.encode(ed25519.sign(new TextEncoder().encode(message), secretKey));
+
+    const ask = () => call(base, "POST", "/labels/submissions/self-attested/challenge", { token: alice.token, body: { chain: "solana", address, name: "my wallet" } });
+    const first = await ask();
+    assert.equal(first.status, 201);
+    const bad = await call(base, "POST", "/labels/submissions/self-attested", {
+      token: alice.token,
+      body: { nonce: first.body.challenge.nonce, signature: sign("some other message") },
+    });
+    assert.equal(bad.status, 400);
+    assert.equal(bad.body.error, "invalid_attestation");
+
+    const second = await ask();
+    const good = await call(base, "POST", "/labels/submissions/self-attested", {
+      token: alice.token,
+      body: { nonce: second.body.challenge.nonce, signature: sign(second.body.challenge.message) },
+    });
+    assert.equal(good.status, 201);
+    assert.equal(good.body.submission.status, "self-attested");
+
+    const mod = await signup(base, "mod@example.com");
+    assert.ok((await env.accounts.setRoleAsOperator("mod@example.com", "moderator")).ok);
+    const confirm = await call(base, "POST", `/labels/submissions/${good.body.submission.id}/confirm`, { token: mod.token });
+    assert.equal(confirm.status, 409);
+    assert.equal(confirm.body.error, "not_confirmable");
+    assert.equal((await call(base, "POST", "/labels/submissions/self-attested/challenge", { body: {} })).status, 401);
   });
 });
 

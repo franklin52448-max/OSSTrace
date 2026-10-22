@@ -7,9 +7,14 @@ so ADR 0002's sourcing rule doesn't apply. This mirrors Arkham's private-by-defa
 
 A private label is **not** a `Label` from `@osstrace/core`. It's a separate type in a separate
 store, keyed by `(userId, chain, address)`. It never goes into `data/labels/`, the Explorer's
-`/address` response, or the Explorer's Redis cache. Promoting one into a public Community label (a
-"share" action) is not built. If it gets built, the promoted label would need a real source like
-any other public label.
+`/address` response, or the Explorer's Redis cache.
+
+You can choose to **share** one as a public Community label
+([ADR 0017](../../../docs/adr/0017-share-private-labels-and-submission-rate-limit.md)). Its text
+pre-fills a normal Community submission, which still needs a real source like any other public
+label. The share is done by the community-labels server, which only *reads* your own label through
+`PrivateLabelService.get`. Sharing creates a separate public submission and never edits or removes
+the private label.
 
 ## Running it
 
@@ -112,7 +117,6 @@ injectable clock. The adversarial isolation tests (`ISOLATION:` in the names) ch
 
 ## What's not built here yet
 
-- **Share / promote to a Community label**: designed in ADR 0004, not built.
 - **Private labels in the Graph tab**: only the Lookup view shows your label.
 - **Bulk import/export** of your own labels.
 - **Label cleanup on account deletion.** Accounts can't be deleted yet (ADR 0006). When they can,

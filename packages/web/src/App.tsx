@@ -365,6 +365,10 @@ function Report({
   // The stream requires a session (ADR 0013 §6); the Explorer checks the token itself.
   const streamToken = session.status === "signed-in" || session.status === "unreachable" ? session.token : null;
   const live = useLiveTransactions<TransactionSummary>(EXPLORER_URL, report.address.chain, report.address.value, streamToken);
+  // "Share as Community label" clicks, tagged with the address they were made on, so looking up a
+  // different address never reopens the form in share mode for it.
+  const here = `${report.address.chain}:${report.address.value}`;
+  const [share, setShare] = useState<{ at: string; n: number }>({ at: "", n: 0 });
   const fetched = report.transactions.available ? report.transactions.transactions : [];
   // Pushed transactions the last HTTP fetch didn't already include go on top, marked as new.
   const pushed = live.incoming.filter((t) => !fetched.some((f) => f.hash === t.hash));
@@ -378,7 +382,7 @@ function Report({
         <span className="hash min-w-0 break-all text-sm text-ink-dim">{address}</span>
       </div>
 
-      <PrivateLabelPanel chain={chain} address={address} />
+      <PrivateLabelPanel chain={chain} address={address} onShare={() => setShare((s) => ({ at: here, n: s.n + 1 }))} />
 
       {report.label && (
         <section className="card p-4" aria-label="Public label">
@@ -400,7 +404,12 @@ function Report({
         </section>
       )}
 
-      <LabelSubmitForm chain={report.address.chain} address={report.address.value} onSubmitted={onLabelSubmitted} />
+      <LabelSubmitForm
+        chain={report.address.chain}
+        address={report.address.value}
+        onSubmitted={onLabelSubmitted}
+        shareRequest={share.at === here ? share.n : 0}
+      />
 
       <RiskPanel chain={report.address.chain} address={report.address.value} />
 

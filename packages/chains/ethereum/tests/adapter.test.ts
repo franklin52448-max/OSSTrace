@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { EthereumAdapter } from "../src/adapter.ts";
 
 // Real network test against a public RPC — no mocking, since this adapter's whole job is
@@ -37,6 +39,29 @@ test("getBalance returns a well-formed, real balance from a public RPC", async (
   assert.equal(balance.native.decimals, 18);
   assert.match(balance.native.amount, /^\d+(\.\d+)?$/);
   assert.doesNotThrow(() => new Date(balance.asOf).toISOString());
+});
+
+test("a failing RPC's error message never contains the RPC URL (hosted providers put the API key in it)", async () => {
+  // A real local HTTP server standing in for an RPC provider that rejects the request (e.g. a
+  // revoked key). The Explorer sends this error message back to the browser in its 502 body.
+  const server: Server = createServer((_req, res) => {
+    res.writeHead(401, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "unauthorized" }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  const secret = "SECRET-PROVIDER-KEY-123";
+  try {
+    const adapter = new EthereumAdapter({ rpcUrl: `http://127.0.0.1:${port}/v2/${secret}?api-key=${secret}` });
+    await assert.rejects(adapter.getBalance(KNOWN_ADDRESS), (err: Error) => {
+      assert.match(err.message, /HTTP 401/);
+      assert.ok(!err.message.includes(secret), `error message leaks the key: ${err.message}`);
+      assert.ok(!err.message.includes(String(port)), `error message leaks the RPC URL: ${err.message}`);
+      return true;
+    });
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });
 
 test("getRecentTransactions reports unavailable, with a reason, when no API key is configured", async () => {

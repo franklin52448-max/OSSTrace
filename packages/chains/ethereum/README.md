@@ -50,14 +50,37 @@ Etherscan's own field description says otherwise, so this was checked against a 
 **Completeness at page boundaries:** if either page came back full (`limit` rows), anything older
 than that page's oldest block might be on page 2, so merged entries older than the newer of the two
 cut-off blocks are dropped instead of being shown next to a hidden gap. A result can therefore hold
-fewer than `limit` transactions even when more history exists.
+fewer than `limit` transactions even when more history exists. Those dropped entries aren't lost:
+the result's `nextCursor` sits above them, so the next page starts with them.
+
+## Paging (`nextCursor` / `before`, ADR 0018)
+
+When there may be older history, the result carries `nextCursor`. Pass it back as
+`getRecentTransactions(address, limit, { before })` for the next-older page. The cursor is
+`block:txIndex:nativeSeen:tokenSeen` (opaque to callers), built on Etherscan's own block range,
+not `page=2`. The next page is fetched with `endblock` = the cursor's block (inclusive, so the
+rest of that block isn't skipped), and entries at or after the cursor's position are filtered back
+out. `nativeSeen`/`tokenSeen` count the rows of that block the caller has already been shown. The
+next fetch asks for `limit + seen` rows of each list, so those re-fetched rows can't use up the
+page. Without that, an address with `limit` or more entries in one block would page into the same
+block forever.
+
+`page=2` would be wrong here because the two lists are merged and trimmed to `limit`. Page 2 of
+`txlist` and page 2 of `tokentx` don't line up with each other, or with what the caller was
+shown, so entries would be skipped or repeated.
+
+A full page can only say "there may be more" (Etherscan doesn't say whether a full window was the
+last one), so the page after the true end can come back empty with no `nextCursor`. A cursor this
+adapter didn't produce is `available: false`. So is a block holding more of one address's rows
+than Etherscan returns in one query (10,000).
 
 ## Known limitations (real, disclosed — not hidden)
 
 - Only ERC-20 (`tokentx`) is decoded — ERC-721 (`tokennfttx`) and ERC-1155 (`token1155tx`)
   transfers aren't fetched yet.
 - A transaction sitting exactly in the cut-off block of a full `tokentx` page can still have a
-  further transfer on the next page, which won't appear in its `tokenTransfers`.
+  further transfer on the next page, which won't appear in its `tokenTransfers`. Paging treats
+  that transaction as already shown, so the next page doesn't add the missing transfer either.
 - `txlist` only covers "normal" transactions; internal transactions (contract-to-contract calls,
   `txlistinternal`) aren't included yet — so a token-only entry's `valueNative: "0"` doesn't account
   for ETH that moved via an internal call in the same transaction.
@@ -81,6 +104,12 @@ fewer than `limit` transactions even when more history exists.
   mainnet rows in `tests/fixtures/` (Etherscan's own documented `tokentx` example, and two real
   blocks of Uniswap Universal Router activity read from a public RPC; each fixture's `_provenance`
   says exactly where it came from).
+- `tests/paging.test.ts` — cursor paging over the recorded Universal Router rows at every page
+  size from 1 to 10, so page boundaries land inside a busy block: the concatenated pages must
+  equal the full history in order, with no overlap and no gap. Also runs the real adapter against
+  a local server answering `txlist`/`tokentx` from those rows the way Etherscan documents
+  `endblock`/`offset`/`sort`. With `ETHERSCAN_API_KEY` set, it also checks page 2 of a real
+  address against real Etherscan.
 - `tests/tokentx.live.test.ts` — re-checks every recorded token row against the live chain (the
   receipt must contain a matching ERC-20 Transfer log; `decimals()` must match), checks that an
   invalid Etherscan key surfaces Etherscan's real error reason, and — only when

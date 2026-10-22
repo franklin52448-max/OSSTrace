@@ -66,11 +66,12 @@ implements:
 interface ChainAdapter {
   readonly chain: ChainId;
   getBalance(address: string): Promise<Balance>;
-  getRecentTransactions(address: string, limit: number): Promise<TransactionsResult>;
+  // `before`: a `nextCursor` from a previous page, for the next-older page (ADR 0018).
+  getRecentTransactions(address: string, limit: number, options?: { before?: string }): Promise<TransactionsResult>;
 }
 
 type TransactionsResult =
-  | { available: true; transactions: TransactionSummary[] }
+  | { available: true; transactions: TransactionSummary[]; nextCursor?: string }
   | { available: false; reason: string };
 ```
 

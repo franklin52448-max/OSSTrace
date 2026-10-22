@@ -86,6 +86,15 @@ audit` flags a moderate-severity transitive issue in v1.x's `jayson`/`stream-jso
 chain, fixed only by the v3 upgrade. Accepted for now — re-evaluate if `@solana/kit` matures, or
 if a non-breaking patch lands upstream.
 
+## Paging (`nextCursor` / `before`, ADR 0018)
+
+Solana's own cursor: `getSignaturesForAddress` takes `before: <signature>` and returns only
+signatures older than it. A full page (`limit` signatures) sets `nextCursor` to its oldest
+signature. Pass that back as `getRecentTransactions(address, limit, { before })` for the next
+page. A shorter page is the end of the history and has no `nextCursor`. A page that's exactly
+full at the true end gets a `nextCursor` whose next page is empty. A `before` that isn't a
+base58 signature is `available: false` without an RPC call.
+
 ## Known limitations (real, disclosed — not hidden)
 
 - Only `transfer` / `transferChecked` are decoded as token movements. `mintTo`/`burn` (and their
@@ -120,6 +129,9 @@ if a non-breaking patch lands upstream.
   the transactions' own token-balance changes; plus live tests that re-fetch both transactions from
   the chain and check they decode identically, and a live `getRecentTransactions` run against
   Raydium's AMM authority.
+- `tests/paging.test.ts` — live: page 2 via `before` must be exactly the RPC's own next
+  signatures after page 1 (checked against an independent `getSignaturesForAddress` call anchored
+  on page 1's newest signature, so new activity can't shift it), plus the malformed-cursor case.
 
 Every live test skips (not fails) if the RPC is unreachable, rate-limits it (429), or rejects
 the batch size; set `SOLANA_RPC_URL` to a private endpoint to run them all reliably.

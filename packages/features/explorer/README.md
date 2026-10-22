@@ -13,7 +13,7 @@ npm run dev:explorer
 ```
 
 Reads `.env` from the repo root (`ETH_RPC_URL`, `ETHERSCAN_API_KEY`, `SOLANA_RPC_URL`, `PORT`,
-`REDIS_URL`) — see the root `.env.example`. Listens on `PORT` (default 5300, this project's
+`REDIS_URL`, `EXPLORER_ALLOWED_ORIGINS`) — see the root `.env.example`. Listens on `PORT` (default 5300, this project's
 assigned port block).
 
 ## Caching and the background indexer
@@ -212,7 +212,7 @@ Returns an `AddressReport`:
 ```json
 {
   "address": { "chain": "ethereum", "value": "0x..." },
-  "balance": { "chain": "ethereum", "address": "0x...", "native": { "symbol": "ETH", "amount": "1.5", "decimals": 18 }, "asOf": "..." },
+  "balance": { "available": true, "balance": { "chain": "ethereum", "address": "0x...", "native": { "symbol": "ETH", "amount": "1.5", "decimals": 18 }, "asOf": "..." } },
   "transactions": { "available": true, "transactions": [ { "hash": "...", "...": "..." } ] },
   "label": null,
   "tags": [],
@@ -224,20 +224,90 @@ Returns an `AddressReport`:
 underlying chain adapter couldn't fetch history (e.g. no `ETHERSCAN_API_KEY`) — see
 `packages/chains/README.md`.
 
+`balance` works the same way: `{ "available": false, "reason": "..." }` when the balance call
+failed (the RPC is down, say). The two chain calls are made independently, so one failing never
+hides the other, and never hides the label/tags/entity, which are local reads. That's still a
+`200`. A `502` now only means the lookup as a whole failed (e.g. the label store couldn't be
+read). A report with a failed balance isn't cached, so the next lookup retries right away.
+Reasoning: [ADR 0014](../../../docs/adr/0014-explorer-reports-balance-failure-without-hiding-the-rest.md).
+
+### Paging back through history: `?before=`
+
+When there may be older history, `transactions` carries a `nextCursor`. Pass it back unchanged as
+`?before=` (with the same `?limit=`, or a different one) for the next-older page. It never
+overlaps the page it came from and never skips anything between them. No `nextCursor` means
+that page reached the end. A page that was exactly full at the end can still carry one, whose
+next page is empty.
+
+```
+curl 'http://localhost:5300/address/solana/<address>?limit=10'
+# → "transactions": { "available": true, "transactions": [...], "nextCursor": "4Nd1m..." }
+curl 'http://localhost:5300/address/solana/<address>?limit=10&before=4Nd1m...'
+```
+
+The cursor is each chain's own native one, built by the chain adapter: a transaction signature on
+Solana (`getSignaturesForAddress`'s `before`), and a block position on Ethereum (Etherscan's
+`endblock`, see the [Ethereum README](../../chains/ethereum/README.md)). Treat it as opaque. A
+`?before=` that can't be any chain's cursor (characters other than letters, digits and `:`, or
+over 128 characters) is a `400`. A well-formed one the chain's adapter can't use comes back as
+`transactions: { "available": false, "reason": "..." }`, with a reason saying so. Without
+`?before=`, nothing changes: same request to the chain, same cache entry, the one the indexer
+keeps warm. Each `limit` + cursor pair is its own cache entry. Design:
+[ADR 0018](../../../docs/adr/0018-cursor-pagination-uses-each-chains-native-cursor.md).
+
 `GET /health` — `{ "ok": true }`.
+
+### CORS
+
+Browsers may call the API only from origins on an exact allowlist, the same pattern as the
+accounts API. Never `*`. An allowed `Origin` is reflected back in `Access-Control-Allow-Origin`.
+Any other origin gets no CORS header, so the browser blocks the page from reading the response.
+Every response carries `Vary: Origin`, and an `OPTIONS` preflight gets a `204`. Set
+`EXPLORER_ALLOWED_ORIGINS` (comma-separated). If it's unset or empty, the Explorer uses
+`ACCOUNTS_ALLOWED_ORIGINS`, and if that's also unset, the web UI's dev server,
+`http://localhost:5301`. The server logs the list it's using at startup. In code:
+`createExplorerHandler({ ..., allowedOrigins })`, with `allowedOriginsFromEnv()` in
+`src/bootstrap.ts`. CORS only governs browsers. `curl` and server-side callers aren't affected.
+
+## Running the indexer as a long-lived service
+
+`deploy/` has two ready-to-use configs for the background indexer. Both run the repo's own
+`npm run indexer --workspace packages/features/explorer` (the same thing `npm run dev:indexer`
+runs), restart it when it crashes but not after a clean exit, and read the repo root `.env`. Pick
+one:
+
+- **systemd**: [`deploy/osstrace-indexer.service`](deploy/osstrace-indexer.service). Assumes a
+  checkout at `/opt/osstrace` running as an `osstrace` system user, with
+  `EnvironmentFile=-/opt/osstrace/.env`, `Restart=on-failure` and `KillMode=control-group`, so
+  stopping it stops the node child too, not just npm. The install steps are in the file's header.
+  Change the three `/opt/osstrace` paths if your checkout lives elsewhere. Logs go to
+  `journalctl -u osstrace-indexer`.
+- **pm2**: [`deploy/ecosystem.config.cjs`](deploy/ecosystem.config.cjs). Finds the repo root from
+  its own location, so `pm2 start packages/features/explorer/deploy/ecosystem.config.cjs` works
+  from anywhere. Settings: `stop_exit_codes: [0]` (the on-failure policy), `treekill`, and one
+  instance.
+
+Either way, set `REDIS_URL` in `.env` to the same Redis the API server uses. Without it, the
+indexer warms only its own in-memory cache, which no API server can see, and says so at startup.
+Run exactly one indexer per Redis. Two would double RPC load and duplicate every live push.
 
 ## What's not built here yet
 
-- No pagination beyond a `?limit=` query param on transactions.
-- CORS is wide open (`*`) — correct for a local dev tool talking to a local web UI, wrong for any
-  public deployment. Flagging this explicitly so it isn't carried forward by accident.
-- No deployment story for the indexer as a long-running process (systemd/pm2/a Fly machine) —
-  today it's just a script you run in a terminal.
+- The web UI doesn't page yet. It shows the first page only; `?before=` is API-only for now.
+- The websocket (`/stream`) has its own `Origin` check, auth and per-IP cap (see Real-time
+  streaming → Limitations for what's still unbuilt there, e.g. reverse-proxy trust). The CORS
+  allowlist above is the separate, looser one for the public, read-only HTTP API.
+- No deploy config for the Explorer API server itself or for a hosted platform (e.g. a Fly
+  machine). `deploy/` covers the indexer, on a machine you run.
 
 ## Testing
 
 `tests/http.test.ts` runs the real request handler behind a real HTTP server: input validation,
-`?limit=` clamping, and that a malformed request can't take the server down.
+`?limit=` clamping, `?before=` validation and cache separation, and that a malformed request
+can't take the server down. `tests/paging.test.ts` pages through `?before=` end to end with the
+real chain adapters. On Ethereum the adapter talks to a local server answering `txlist`/`tokentx`
+from recorded real mainnet rows (no key needed), and the test walks the whole history page by
+page. On Solana it uses the live public RPC and skips if refused.
 
 Streaming tests: `txDiff.test.ts` (the new-transaction rule), `indexing.test.ts` (the real
 `Indexer` publishing events, with adapter call counts proving no extra RPC), `stream.test.ts`

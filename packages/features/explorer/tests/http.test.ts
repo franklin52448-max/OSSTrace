@@ -11,10 +11,12 @@ import {
   type Balance,
   type ChainAdapter,
   type ChainId,
+  type TransactionsPageOptions,
   type TransactionsResult,
 } from "@osstrace/core";
+import { allowedOriginsFromEnv } from "../src/bootstrap.ts";
 import { DEFAULT_TX_LIMIT, LOOKUP_POPULARITY_TOPIC } from "../src/cachedLookup.ts";
-import { createExplorerHandler, MAX_TX_LIMIT, parseTxLimit } from "../src/http.ts";
+import { createExplorerHandler, MAX_CURSOR_LENGTH, MAX_TX_LIMIT, parseBeforeCursor, parseTxLimit } from "../src/http.ts";
 
 /** A small, real ChainAdapter that records every call it gets — not a mocking framework. */
 class RecordingAdapter implements ChainAdapter {
@@ -33,8 +35,11 @@ class RecordingAdapter implements ChainAdapter {
     return { chain: this.chain, address, native: { symbol: "ETH", amount: "1", decimals: 18 }, asOf: "2026-10-22T00:00:00Z" };
   }
 
-  async getRecentTransactions(_address: string, limit: number): Promise<TransactionsResult> {
+  txBefore: (string | undefined)[] = [];
+
+  async getRecentTransactions(_address: string, limit: number, options?: TransactionsPageOptions): Promise<TransactionsResult> {
     this.txLimits.push(limit);
+    this.txBefore.push(options?.before);
     return { available: true, transactions: [] };
   }
 }
@@ -43,6 +48,7 @@ const VALID_ETH = "0x252a8bd2319d8a555b872990601221b3a2053bce";
 
 async function withExplorer(
   run: (ctx: { base: string; eth: RecordingAdapter; sol: RecordingAdapter; cache: InMemoryCache; store: JsonFileLabelStore }) => Promise<void>,
+  allowedOrigins?: readonly string[],
 ): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "explorer-http-test-"));
   const store = new JsonFileLabelStore(join(dir, "labels.json"));
@@ -56,6 +62,7 @@ async function withExplorer(
     ]),
     store,
     cache,
+    ...(allowedOrigins ? { allowedOrigins } : {}),
   });
   const server: Server = createServer((req, res) => {
     void handle(req, res);
@@ -132,14 +139,136 @@ test("?limit= is clamped to a whole number in [1, MAX_TX_LIMIT] before it reache
   });
 });
 
-test("an adapter failure is a 502, not a crash", async () => {
-  await withExplorer(async ({ base, eth }) => {
+test("a failed balance call is a 200 with balance unavailable, not a 502 that hides the rest", async () => {
+  await withExplorer(async ({ base, eth, store }) => {
+    await store.addLabel({
+      address: { chain: "ethereum", value: VALID_ETH },
+      name: "Local label",
+      confidence: "verified",
+      source: { description: "test source", url: "https://example.org/source", addedAt: "2026-10-22" },
+    });
     eth.failBalance = true;
     const res = await fetch(`${base}/address/ethereum/${VALID_ETH}`);
-    assert.equal(res.status, 502);
-    assert.equal(((await res.json()) as { error: string }).error, "upstream RPC failed");
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      balance: { available: boolean; reason?: string };
+      transactions: { available: boolean };
+      label: { name: string } | null;
+    };
+    assert.deepEqual(body.balance, { available: false, reason: "upstream RPC failed" });
+    assert.equal(body.transactions.available, true, "the successful transactions call is still in the response");
+    assert.equal(body.label?.name, "Local label", "locally stored data has nothing to do with the RPC");
+
+    // Not cached: once the RPC recovers, the very next lookup shows the real balance.
+    eth.failBalance = false;
+    const again = (await (await fetch(`${base}/address/ethereum/${VALID_ETH}`)).json()) as { balance: { available: boolean } };
+    assert.equal(again.balance.available, true);
+    assert.equal(eth.balanceCalls.length, 2);
     assert.equal((await fetch(`${base}/health`)).status, 200);
   });
+});
+
+test("without ?before= the adapter gets no cursor at all — the existing ?limit= behaviour is unchanged", async () => {
+  await withExplorer(async ({ base, eth }) => {
+    assert.equal((await fetch(`${base}/address/ethereum/${VALID_ETH}?limit=7`)).status, 200);
+    assert.equal((await fetch(`${base}/address/ethereum/${VALID_ETH}?before=`)).status, 200);
+    assert.deepEqual(eth.txLimits, [7, DEFAULT_TX_LIMIT]);
+    assert.deepEqual(eth.txBefore, [undefined, undefined]);
+  });
+});
+
+test("?before= reaches the adapter as-is, and each cursor is its own cache entry", async () => {
+  await withExplorer(async ({ base, eth }) => {
+    for (const path of ["", "?before=19000000:12:1:0", "?before=19000000:12:1:0", "?before=18999999:3:1:0&limit=10"]) {
+      assert.equal((await fetch(`${base}/address/ethereum/${VALID_ETH}${path}`)).status, 200, path);
+    }
+    // The repeated cursor is a cache hit; the no-cursor report is never served for a paged one.
+    assert.deepEqual(eth.txBefore, [undefined, "19000000:12:1:0", "18999999:3:1:0"]);
+    assert.deepEqual(eth.txLimits, [DEFAULT_TX_LIMIT, DEFAULT_TX_LIMIT, 10]);
+  });
+});
+
+test("a ?before= that can't be any chain's cursor gets a 400 before reaching the adapter", async () => {
+  await withExplorer(async ({ base, eth }) => {
+    for (const bad of ["has spaces", "semi;colon", "x".repeat(MAX_CURSOR_LENGTH + 1), "../.."]) {
+      const res = await fetch(`${base}/address/ethereum/${VALID_ETH}?before=${encodeURIComponent(bad)}`);
+      assert.equal(res.status, 400, bad);
+      assert.match(((await res.json()) as { error: string }).error, /malformed \?before= cursor/);
+    }
+    assert.equal(eth.balanceCalls.length, 0);
+  });
+});
+
+test("CORS: the web UI's dev origin is reflected back by default; any other origin gets no CORS header, never *", async () => {
+  await withExplorer(async ({ base }) => {
+    for (const path of ["/health", `/address/ethereum/${VALID_ETH}`, "/nope", "/address/ethereum/0x123"]) {
+      const allowed = await fetch(base + path, { headers: { origin: "http://localhost:5301" } });
+      assert.equal(allowed.headers.get("access-control-allow-origin"), "http://localhost:5301", path);
+      assert.equal(allowed.headers.get("vary"), "Origin", path);
+
+      const other = await fetch(base + path, { headers: { origin: "https://evil.example" } });
+      assert.equal(other.headers.get("access-control-allow-origin"), null, path);
+      assert.equal(other.headers.get("vary"), "Origin", path);
+
+      const none = await fetch(base + path);
+      assert.equal(none.headers.get("access-control-allow-origin"), null, path);
+    }
+  });
+});
+
+test("CORS: a configured allowlist replaces the default, and a preflight gets a real 204", async () => {
+  await withExplorer(
+    async ({ base }) => {
+      const res = await fetch(`${base}/health`, { headers: { origin: "https://osstrace.example" } });
+      assert.equal(res.headers.get("access-control-allow-origin"), "https://osstrace.example");
+      const dev = await fetch(`${base}/health`, { headers: { origin: "http://localhost:5301" } });
+      assert.equal(dev.headers.get("access-control-allow-origin"), null, "the default is replaced, not added to");
+
+      const preflight = await fetch(`${base}/address/ethereum/${VALID_ETH}`, {
+        method: "OPTIONS",
+        headers: { origin: "https://osstrace.example", "access-control-request-method": "GET" },
+      });
+      assert.equal(preflight.status, 204);
+      assert.equal(preflight.headers.get("access-control-allow-origin"), "https://osstrace.example");
+      assert.match(preflight.headers.get("access-control-allow-methods") ?? "", /GET/);
+    },
+    ["https://osstrace.example"],
+  );
+});
+
+test("allowedOriginsFromEnv: EXPLORER_ALLOWED_ORIGINS, else ACCOUNTS_ALLOWED_ORIGINS, else the web UI's dev origin", () => {
+  const saved = { explorer: process.env["EXPLORER_ALLOWED_ORIGINS"], accounts: process.env["ACCOUNTS_ALLOWED_ORIGINS"] };
+  const set = (name: string, value: string | undefined): void => {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  };
+  try {
+    set("EXPLORER_ALLOWED_ORIGINS", undefined);
+    set("ACCOUNTS_ALLOWED_ORIGINS", undefined);
+    assert.deepEqual(allowedOriginsFromEnv(), ["http://localhost:5301"]);
+
+    set("ACCOUNTS_ALLOWED_ORIGINS", "https://a.example, https://b.example");
+    assert.deepEqual(allowedOriginsFromEnv(), ["https://a.example", "https://b.example"]);
+
+    // An empty line in .env (`EXPLORER_ALLOWED_ORIGINS=`) is "unset", not "allow nothing".
+    set("EXPLORER_ALLOWED_ORIGINS", "");
+    assert.deepEqual(allowedOriginsFromEnv(), ["https://a.example", "https://b.example"]);
+
+    set("EXPLORER_ALLOWED_ORIGINS", "https://explorer.example");
+    assert.deepEqual(allowedOriginsFromEnv(), ["https://explorer.example"]);
+  } finally {
+    set("EXPLORER_ALLOWED_ORIGINS", saved.explorer);
+    set("ACCOUNTS_ALLOWED_ORIGINS", saved.accounts);
+  }
+});
+
+test("parseBeforeCursor", () => {
+  assert.equal(parseBeforeCursor(null), undefined);
+  assert.equal(parseBeforeCursor("  "), undefined);
+  assert.equal(parseBeforeCursor(" 19000000:12:1:0 "), "19000000:12:1:0");
+  assert.equal(parseBeforeCursor("5VERYreal1SolanaSig"), "5VERYreal1SolanaSig");
+  assert.equal(parseBeforeCursor("a/b"), null);
+  assert.equal(parseBeforeCursor("x".repeat(MAX_CURSOR_LENGTH + 1)), null);
 });
 
 test("parseTxLimit", () => {

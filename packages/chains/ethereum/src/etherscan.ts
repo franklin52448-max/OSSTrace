@@ -108,13 +108,70 @@ interface MergedEntry {
   summary: TransactionSummary;
 }
 
+/** Where one transaction sits in the chain's own order: newest first means highest (block, txIndex) first. */
+export interface HistoryPosition {
+  block: number;
+  txIndex: number;
+}
+
+/**
+ * The paging cursor (ADR 0018): "everything strictly older than `(block, txIndex)`". The next page
+ * is fetched with Etherscan's own `endblock = block` (inclusive, so the rest of that block isn't
+ * skipped), and the rows of that block the caller has already been shown are filtered back out.
+ *
+ * `nativeSeen`/`tokenSeen` say how many `txlist`/`tokentx` rows in `block` the caller has already
+ * been shown. The next fetch asks Etherscan for `limit + seen` rows of each, so those re-fetched,
+ * filtered-out rows can't use up the page: at least `limit` unseen rows still come back whenever
+ * that many exist. Without this, an address with `limit` or more entries in one block (any busy
+ * router) would page into the same block forever.
+ */
+export interface EthereumCursor extends HistoryPosition {
+  nativeSeen: number;
+  tokenSeen: number;
+}
+
+const CURSOR_FORMAT = /^(\d{1,10}):(\d{1,6}):(\d{1,6}):(\d{1,6})$/;
+
+/** `block:txIndex:nativeSeen:tokenSeen`. Opaque to callers; only this module reads it back. */
+export function encodeCursor(cursor: EthereumCursor): string {
+  return `${cursor.block}:${cursor.txIndex}:${cursor.nativeSeen}:${cursor.tokenSeen}`;
+}
+
+/** The cursor, or `null` if `raw` isn't one `encodeCursor` could have produced. */
+export function decodeCursor(raw: string): EthereumCursor | null {
+  const match = CURSOR_FORMAT.exec(raw);
+  if (!match) return null;
+  return { block: Number(match[1]), txIndex: Number(match[2]), nativeSeen: Number(match[3]), tokenSeen: Number(match[4]) };
+}
+
 function lowestBlock(rows: readonly { blockNumber: string }[]): number {
   return rows.reduce((min, row) => Math.min(min, Number(row.blockNumber)), Number.POSITIVE_INFINITY);
 }
 
+/** True when `(block, txIndex)` is strictly older than `cursor` — i.e. not yet shown to the caller. */
+function olderThan(block: number, txIndex: number, cursor: HistoryPosition | undefined): boolean {
+  return !cursor || block < cursor.block || (block === cursor.block && txIndex < cursor.txIndex);
+}
+
 /**
- * Merges one page of `txlist` and one page of `tokentx` (both fetched newest-first with
- * `offset = limit`) into at most `limit` transactions, newest first, one entry per hash:
+ * How many rows to ask Etherscan for, per list, for a page of `limit` after `before` (see
+ * `EthereumCursor`). The adapter fetches with these as `offset`; `mergeHistoryPage` uses the same
+ * numbers to tell whether a list came back full.
+ */
+export function requestedRows(limit: number, before: EthereumCursor | undefined): { native: number; token: number } {
+  return { native: limit + (before?.nativeSeen ?? 0), token: limit + (before?.tokenSeen ?? 0) };
+}
+
+export interface MergedPage {
+  transactions: TransactionSummary[];
+  /** Present when older history may exist; pass it back as `before` for the next page. */
+  nextCursor?: EthereumCursor;
+}
+
+/**
+ * Merges one page of `txlist` and one page of `tokentx` (both fetched newest-first, `offset` =
+ * `requestedRows(limit, before)`, and `endblock = before.block` when paging) into at most `limit`
+ * transactions, newest first, one entry per hash:
  *
  * - A hash in both lists → its native summary, with `tokenTransfers` attached.
  * - A hash only in `txlist` → its native summary, exactly as before (no `tokenTransfers` key).
@@ -125,29 +182,39 @@ function lowestBlock(rows: readonly { blockNumber: string }[]): number {
  *
  * Completeness: if a page came back full, anything older than that page's oldest block might be
  * missing from it (it'd be on page 2), so entries older than the newer of the two cut-off blocks
- * are dropped rather than shown with silently missing native/token data. Known edge: a
- * transaction *in* the cut-off block of a full `tokentx` page can still have a further transfer
- * on the next page.
+ * are dropped rather than shown with silently missing native/token data. They aren't lost: the
+ * `nextCursor` sits above them, so the next page starts with them. Known edge: a transaction *in*
+ * the cut-off block of a full `tokentx` page can still have a further transfer on the next page,
+ * and paging treats that transaction as already shown.
+ *
+ * Paging: rows at or after `before`'s position were on an earlier page and are filtered out.
  */
-export function mergeHistory(
+export function mergeHistoryPage(
   nativeRows: readonly EtherscanTx[],
   tokenRows: readonly EtherscanTokenTx[],
   address: string,
   limit: number,
-): TransactionSummary[] {
+  before?: EthereumCursor,
+): MergedPage {
+  const requested = requestedRows(limit, before);
+  const nativeFull = nativeRows.length > 0 && nativeRows.length >= requested.native;
+  const tokenFull = tokenRows.length > 0 && tokenRows.length >= requested.token;
   let cutoffBlock = 0;
-  if (nativeRows.length > 0 && nativeRows.length >= limit) cutoffBlock = Math.max(cutoffBlock, lowestBlock(nativeRows));
-  if (tokenRows.length > 0 && tokenRows.length >= limit) cutoffBlock = Math.max(cutoffBlock, lowestBlock(tokenRows));
+  if (nativeFull) cutoffBlock = Math.max(cutoffBlock, lowestBlock(nativeRows));
+  if (tokenFull) cutoffBlock = Math.max(cutoffBlock, lowestBlock(tokenRows));
+
+  const unseenNative = nativeRows.filter((row) => olderThan(Number(row.blockNumber), Number(row.transactionIndex), before));
+  const unseenTokens = tokenRows.filter((row) => olderThan(Number(row.blockNumber), Number(row.transactionIndex), before));
 
   const entries = new Map<string, MergedEntry>();
-  for (const row of nativeRows) {
+  for (const row of unseenNative) {
     entries.set(row.hash, {
       block: Number(row.blockNumber),
       txIndex: Number(row.transactionIndex),
       summary: summarizeNativeTx(row, address),
     });
   }
-  for (const row of tokenRows) {
+  for (const row of unseenTokens) {
     const transfer = decodeTokenTransfer(row, address);
     const existing = entries.get(row.hash);
     if (existing) {
@@ -173,9 +240,38 @@ export function mergeHistory(
     });
   }
 
-  return [...entries.values()]
+  const ordered = [...entries.values()]
     .filter((entry) => entry.block >= cutoffBlock)
-    .sort((a, b) => b.block - a.block || b.txIndex - a.txIndex)
-    .slice(0, limit)
-    .map((entry) => entry.summary);
+    .sort((a, b) => b.block - a.block || b.txIndex - a.txIndex);
+  const page = ordered.slice(0, limit);
+  const transactions = page.map((entry) => entry.summary);
+
+  const mayHaveMore = nativeFull || tokenFull || ordered.length > limit;
+  const last = page.at(-1);
+  if (!mayHaveMore || !last) return { transactions };
+
+  // Rows in the last entry's block, at or after it, that the caller has now been shown: this
+  // page's own, plus (when this page ended in the same block the previous one did) the earlier ones.
+  const atOrAfterLast = (row: { blockNumber: string; transactionIndex: string }): boolean =>
+    Number(row.blockNumber) === last.block && Number(row.transactionIndex) >= last.txIndex;
+  const carried = before && before.block === last.block ? before : undefined;
+  return {
+    transactions,
+    nextCursor: {
+      block: last.block,
+      txIndex: last.txIndex,
+      nativeSeen: (carried?.nativeSeen ?? 0) + unseenNative.filter(atOrAfterLast).length,
+      tokenSeen: (carried?.tokenSeen ?? 0) + unseenTokens.filter(atOrAfterLast).length,
+    },
+  };
+}
+
+/** `mergeHistoryPage` for the most recent page, transactions only. */
+export function mergeHistory(
+  nativeRows: readonly EtherscanTx[],
+  tokenRows: readonly EtherscanTokenTx[],
+  address: string,
+  limit: number,
+): TransactionSummary[] {
+  return mergeHistoryPage(nativeRows, tokenRows, address, limit).transactions;
 }

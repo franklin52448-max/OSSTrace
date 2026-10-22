@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CompositeLabelStore, InMemoryCache, JsonFileLabelStore, type Cache, type LabelStore } from "@osstrace/core";
 import { CommunityLabelReader, communityLabelsPath, JsonFileSubmissionStore } from "@osstrace/community-labels";
+import { DEFAULT_ALLOWED_ORIGINS } from "./http.ts";
 import { buildRegistry, type RegistryConfig } from "./registry.ts";
 import { RedisCache } from "./redisCache.ts";
 import { InMemoryEventBus, type IndexerEventBus } from "./events.ts";
@@ -18,6 +19,18 @@ export function loadRootEnv(): void {
       // A malformed .env must not crash the process — fall through to defaults/public endpoints.
     }
   }
+}
+
+/**
+ * The browser origins allowed to call the Explorer API (CORS), comma-separated:
+ * `EXPLORER_ALLOWED_ORIGINS`, else `ACCOUNTS_ALLOWED_ORIGINS` (the same fallback the other feature
+ * servers use), else the web UI's dev server. An empty value counts as unset, so the
+ * `EXPLORER_ALLOWED_ORIGINS=` line in `.env.example` falls through instead of allowing nothing.
+ */
+export function allowedOriginsFromEnv(): string[] {
+  const raw = process.env["EXPLORER_ALLOWED_ORIGINS"] || process.env["ACCOUNTS_ALLOWED_ORIGINS"];
+  const origins = (raw ?? "").split(",").map((o) => o.trim()).filter(Boolean);
+  return origins.length > 0 ? origins : [...DEFAULT_ALLOWED_ORIGINS];
 }
 
 export function buildRegistryFromEnv(): ReturnType<typeof buildRegistry> {

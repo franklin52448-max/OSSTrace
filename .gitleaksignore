@@ -17,3 +17,6 @@ cd252154578b1ec57f84482b8b413a1464612650:packages/chains/solana/tests/splToken.t
 cd252154578b1ec57f84482b8b413a1464612650:packages/chains/solana/tests/splToken.test.ts:generic-api-key:58
 cd252154578b1ec57f84482b8b413a1464612650:packages/chains/solana/tests/splToken.test.ts:generic-api-key:96
 cd252154578b1ec57f84482b8b413a1464612650:packages/chains/solana/tests/fixtures/raydium-v4-swap-transfer.json:generic-api-key:1
+
+# Ethereum address (0x...): the real, public USDC contract address used as a test fixture's token identifier
+89aec61b97a5acbe74c7b4675c3738fd9faf2b79:packages/features/tracer/tests/trace.test.ts:generic-api-key:50

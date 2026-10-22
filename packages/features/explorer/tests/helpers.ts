@@ -62,6 +62,9 @@ export class TestClient {
   readonly #queue: unknown[] = [];
   readonly #waiters: ((msg: unknown) => void)[] = [];
 
+  /** Settles when the socket closes, with the code and reason — recorded from the start, so a fast server close isn't missed. */
+  readonly #closed: Promise<{ code: number; reason: string }>;
+
   private constructor(socket: WebSocket) {
     this.socket = socket;
     socket.on("message", (data) => {
@@ -70,16 +73,38 @@ export class TestClient {
       if (waiter) waiter(msg);
       else this.#queue.push(msg);
     });
+    this.#closed = new Promise((resolve) => socket.once("close", (code, reason) => resolve({ code, reason: reason.toString() })));
   }
 
-  static async connect(url: string): Promise<TestClient> {
-    const socket = new WebSocket(url);
+  /** Opens the socket only (no auth). `origin` sets the upgrade's `Origin` header, as a browser would. */
+  static async connect(url: string, options: { origin?: string } = {}): Promise<TestClient> {
+    const socket = new WebSocket(url, options.origin ? { origin: options.origin } : {});
     const client = new TestClient(socket);
     await new Promise<void>((resolve, reject) => {
       socket.once("open", () => resolve());
       socket.once("error", reject);
     });
     return client;
+  }
+
+  /** Opens the socket and completes the `{ auth: { token } }` handshake, the way the web UI does. */
+  static async authed(url: string, token: string, options: { origin?: string } = {}): Promise<TestClient> {
+    const client = await TestClient.connect(url, options);
+    client.send({ auth: { token } });
+    const ack = await client.next<{ event: string; message?: string }>();
+    if (ack.event !== "authenticated") throw new Error(`auth handshake failed: ${JSON.stringify(ack)}`);
+    return client;
+  }
+
+  /** The server's close code and reason; rejects if the socket is still open after `timeoutMs`. */
+  closed(timeoutMs = 2000): Promise<{ code: number; reason: string }> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`socket still open after ${timeoutMs}ms`)), timeoutMs);
+      void this.#closed.then((result) => {
+        clearTimeout(timer);
+        resolve(result);
+      });
+    });
   }
 
   send(message: unknown): void {

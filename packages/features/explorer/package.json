@@ -10,6 +10,7 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
+    "@osstrace/accounts": "*",
     "@osstrace/chain-ethereum": "*",
     "@osstrace/chain-solana": "*",
     "@osstrace/community-labels": "*",

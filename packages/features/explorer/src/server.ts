@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { buildAccountService } from "@osstrace/accounts";
 import { buildCache, buildEventBus, buildLabelStore, buildRegistryFromEnv, loadRootEnv } from "./bootstrap.ts";
 import { createExplorerHandler } from "./http.ts";
 import { Indexer, indexerSettingsFromEnv } from "./indexing.ts";
@@ -20,8 +21,14 @@ const server = createServer((req, res) => {
 });
 
 // Real-time streaming (ADR 0013): a websocket on this same server, relaying what the indexer finds.
-const hub = await StreamHub.create(bus);
-attachStream(server, hub);
+// Sessions are checked against the same accounts file as the accounts server, so a token issued
+// there works here. Allowed browser origins fall back to the accounts server's list, like bounties.
+const allowedOrigins = (process.env["EXPLORER_STREAM_ALLOWED_ORIGINS"] ?? process.env["ACCOUNTS_ALLOWED_ORIGINS"] ?? "http://localhost:5301")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+const hub = await StreamHub.create(bus, { accounts: buildAccountService() });
+attachStream(server, hub, { allowedOrigins });
 
 // Optional: run the background indexer inside this process instead of as its own. The same
 // indexer, same RPC cost — just sharing this process's cache and event bus, which is what makes

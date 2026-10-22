@@ -50,6 +50,13 @@ router library.
   Edges are green into the queried address and orange out of it; labeled nodes are amber,
   sanctioned ones red. Fetched transactions that can't be drawn (self-transfers, unresolved
   counterparties) are listed under the graph rather than hidden.
+- **Risk score** (`src/RiskPanel.tsx`, a card on every Lookup result): press "Compute risk score"
+  to call the risk scoring API (`npm run dev:risk`, `VITE_RISK_SCORING_URL`, default
+  `http://localhost:5305`). On demand rather than automatic, because an untagged address costs a
+  real multi-hop Tracer search. Shows the 0–100 score, the tier, the nearest flagged address with
+  its real path, the cited sources, and a SEARCH INCOMPLETE chip plus every gap when the search
+  didn't finish. An `inconclusive` result shows "—", never 0. See
+  `packages/features/risk-scoring/README.md`.
 
 The layout (`src/layout.ts`) is a small hand-rolled, deterministic force-directed layout — no
 graph library dependency. A one-hop graph is a star of at most ~100 nodes, which doesn't need

@@ -4,6 +4,7 @@ import GraphView from "./GraphView.tsx";
 import TracerView from "./TracerView.tsx";
 import BountiesView from "./BountiesView.tsx";
 import PrivateLabelPanel from "./PrivateLabelPanel.tsx";
+import RiskPanel from "./RiskPanel.tsx";
 import AccountPanel from "./AccountPanel.tsx";
 import ModerationView from "./ModerationView.tsx";
 import { LabelSubmitForm, ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
@@ -336,6 +337,8 @@ function Report({
       )}
 
       <LabelSubmitForm chain={report.address.chain} address={report.address.value} onSubmitted={onLabelSubmitted} />
+
+      <RiskPanel chain={report.address.chain} address={report.address.value} />
 
       <section className="card p-4" aria-label="Balance">
         <div className="section-title">Balance</div>

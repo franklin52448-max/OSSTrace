@@ -51,7 +51,7 @@ harder for the next contributor to understand, it probably isn't. See
 | Visualizer (`GET /graph/:chain/:address` + interactive graph in the web UI) — **v1 is one hop**: the address and its direct counterparties only, draws both native and decoded ERC-20/SPL token transfers, and reports a reverted transaction as its own `"failed"` reason instead of lumping it in with genuinely undecodable activity | **Active** |
 | Label trust tiers ([ADR 0004](docs/adr/0004-label-trust-tiers-and-private-labels.md), [ADR 0007](docs/adr/0007-community-label-submissions-and-review.md)): logged-in users submit sourced **Community** labels; moderators confirm (✓ CONFIRMED badge) or reject them, in the API and web UI | **Active** (no submission rate limiting; self-attested tier 3 deferred) |
 | Tracer (`GET /trace/graph` + `GET /trace/path` — multi-hop fund tracing, ETH + Solana, up to 3 hops, filterable by token/amount/time — [ADR 0008](docs/adr/0008-tracer-multi-hop-search-design.md), [`packages/features/tracer`](packages/features/tracer/README.md)) | **Active** (single-chain only, no bridges/cross-chain tracing yet) |
-| Risk scoring | Not built |
+| Risk scoring (`GET /risk/:chain/:address` + a "Risk score" card on the Lookup report — [ADR 0010](docs/adr/0010-risk-scoring-model.md), [`packages/features/risk-scoring`](packages/features/risk-scoring/README.md)): 0–100 from a real risk tag on the address itself (100) or the nearest risk-tagged address within 1–3 hops via Tracer (75/50/25); an unfinished search is reported `inconclusive`, never `none` | **Active** (only risk source today is the ingested `sanctioned` tag; single-chain, address-level only, no entity scores) |
 | Case management | Not built |
 | Real-time streaming (websocket) | Not built |
 | More chains (Bitcoin, Tron, etc.) | Not built — see [Adding a chain](packages/chains/README.md) |
@@ -59,8 +59,8 @@ harder for the next contributor to understand, it probably isn't. See
 | Bounty board (`GET`/`POST /bounties`, web UI Bounties tab — [ADR 0009](docs/adr/0009-bounty-program-v1-is-tracking-only.md), [`packages/features/bounties`](packages/features/bounties/README.md)): anyone opens a bounty with a spec + their own stated reward, anyone submits a PR against it, a moderator records the winner | **Active** (tracks the workflow only — never holds or moves the reward; see "Bounties" below) |
 
 **The honest pitch today**: a real, working address-lookup tool across Ethereum and Solana, with a
-small, genuinely-sourced seed labelset, real multi-hop tracing, a live bounty board, and an
-architecture built so a new chain or a new feature (Risk Scoring, Case Management, ...) can be
+small, genuinely-sourced seed labelset, real multi-hop tracing, sanctions-exposure risk scoring, a live bounty board, and an
+architecture built so a new chain or a new feature (Case Management, ...) can be
 added as a self-contained module without touching the core. Everything past the table above is
 unbuilt — tracked honestly, not hidden.
 
@@ -99,7 +99,7 @@ first. Three rules make that true:
 1. **Chains are plugins.** Every chain lives in its own folder under `packages/chains/<chain>/`
    implementing one interface (`ChainAdapter` in `packages/core`). Adding a chain never requires
    touching core or any other chain.
-2. **Features are plugins.** Every feature (Explorer and Visualizer today; Tracer/Risk Scoring later)
+2. **Features are plugins.** Every feature (Explorer, Visualizer, Tracer, Risk Scoring today; Case Management later)
    lives in its own folder under `packages/features/<feature>/`, consuming the core data model and
    chain adapters, never reaching into another feature's internals.
 3. **Every folder explains itself.** Every package has its own `README.md` stating what it is, how
@@ -123,6 +123,7 @@ npm run check          # typecheck + tests
 npm run dev:explorer   # starts the Explorer API
 npm run dev:visualizer # starts the Visualizer (graph) API, in another terminal
 npm run dev:tracer     # starts the Tracer (multi-hop) API, in another terminal
+npm run dev:risk       # starts the Risk scoring API, in another terminal
 npm run dev:web        # starts the web UI, in another terminal
 npm run dev:accounts   # optional: the accounts API (see packages/features/accounts/README.md)
 npm run dev:private-labels # optional, with dev:accounts: your own private labels in the web UI
@@ -142,7 +143,7 @@ open source. See [ADR 0003](docs/adr/0003-license-choice.md) for why.
 ## Status
 
 Early, in development. Built in one focused session as a real, working vertical slice — not a
-mockup — with a lot of the product surface (Tracer, Risk Scoring, more chains) still
+mockup — with a lot of the product surface (Case Management, cross-chain tracing, more chains) still
 to build. Contributions welcome once this has a public home.
 
 ## More context

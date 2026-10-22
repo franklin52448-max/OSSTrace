@@ -27,6 +27,9 @@ directly from Explorer's source.
 - [`tracer/`](tracer/README.md) — follows fund flow further than one hop: a real multi-hop graph
   expansion, and a point-to-point "does a path exist from A to B matching these filters" query
   (ADR 0008). Builds directly on Visualizer's one-hop edge resolution rather than reimplementing it.
+- [`risk-scoring/`](risk-scoring/README.md) — scores an address 0–100 from a real risk tag on the
+  address itself or the nearest risk-tagged address within 1–3 hops (ADR 0010), reusing Tracer's
+  `traceGraph` directly. An unfinished search is reported `inconclusive`, never as a clean `none`.
 - [`bounties/`](bounties/README.md) — a public board where anyone funds a feature spec with a
   self-stated reward, anyone submits a PR against it, and a moderator records the winner (ADR
   0009). Tracks the workflow; never holds or moves the reward itself. Built on

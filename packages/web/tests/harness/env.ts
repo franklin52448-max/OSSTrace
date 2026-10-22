@@ -54,10 +54,15 @@ function viteEnv(): Record<string, string | boolean> {
 
 registerHooks({
   load(url, context, nextLoad) {
-    if (!url.startsWith(SRC_DIR) || !/\.tsx?$/.test(url)) return nextLoad(url, context);
-    const filename = fileURLToPath(url);
+    // A query string (`../src/session.ts?case=expired`) is ignored when picking and compiling the
+    // file, but still makes a separate module instance: that's how a test gets a fresh copy of a
+    // module with module-level state (session.ts's one-shot restore), read with the `VITE_*`
+    // values set at that moment.
+    const pathname = url.split("?")[0] ?? url;
+    if (!url.startsWith(SRC_DIR) || !/\.tsx?$/.test(pathname)) return nextLoad(url, context);
+    const filename = fileURLToPath(pathname);
     const result = transformSync(filename, readFileSync(filename, "utf8"), {
-      lang: url.endsWith(".tsx") ? "tsx" : "ts",
+      lang: pathname.endsWith(".tsx") ? "tsx" : "ts",
       sourceType: "module",
       jsx: { runtime: "automatic" },
     });

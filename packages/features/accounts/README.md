@@ -60,8 +60,48 @@ curl -X POST localhost:5310/accounts/signup -H 'content-type: application/json' 
 Error codes and statuses: `invalid_email` / `invalid_password` / `invalid_role` → 400,
 `invalid_credentials` / `unauthenticated` → 401, `forbidden` → 403, `not_found` → 404,
 `email_taken` / `last_admin` → 409, plus `bad_request` (400 for malformed JSON, 413 for a body
-over 16 KiB). A wrong password and an unknown email both return the same
-`invalid_credentials`.
+over 16 KiB), plus `rate_limited` → 429 (below). A wrong password and an unknown email both
+return the same `invalid_credentials`.
+
+### Rate limits
+
+Login and signup are rate limited in-process ([ADR 0015](../../../docs/adr/0015-accounts-login-and-signup-rate-limiting.md)
+has the reasoning). Every window is a true sliding window, not a fixed one.
+
+| Limit | Default |
+|---|---|
+| Failed logins for one email from one IP | 5 per 5 minutes. A successful login clears it. |
+| Failed logins for one email from all IPs combined | 20 per 15 minutes |
+| Failed logins from one IP across all emails | 30 per 5 minutes |
+| Login requests from one IP, whatever the outcome | 60 per minute |
+| Signup requests from one IP, whatever the outcome | 10 per hour |
+
+Only *failed* logins count against the first three, so logging in correctly over and over is
+never limited by them. The 60/minute cap is there so a flood of even-correct logins can't be used
+to make the server hash passwords non-stop. Parallel attempts are counted before the password is
+checked, so a burst of simultaneous guesses can't slip past the limit. A blocked request gets:
+
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 250
+
+{ "error": "rate_limited", "message": "too many attempts; try again in 250 seconds", "retryAfterSeconds": 250 }
+```
+
+`Retry-After` is the exact number of seconds until that caller would be allowed again (and it's
+CORS-exposed, so the web UI can read it). A blocked login stays blocked even with the right
+password. To change the limits, pass your own limiter:
+`createAccountsHandler(service, { rateLimiter: new AccountsRateLimiter({ signupRequestsPerIp: { limit: 50, windowMs: 3_600_000 } }) })`.
+
+Two caveats:
+
+- **The caller's IP is the TCP peer address (`req.socket.remoteAddress`). `X-Forwarded-For` is
+  not trusted**, because any client can set it. Behind a reverse proxy or load balancer every
+  request looks like it comes from the proxy, so the per-IP limits apply to all users combined
+  (the per-email ones still work). A proxied deployment needs an explicit trusted-proxy setting,
+  which isn't built yet. IPv6 callers are grouped by /64.
+- **Counters live in memory**, per process. A restart clears them, and several server instances
+  would each count separately.
 
 ## Using it from another package (Wave 2)
 
@@ -103,8 +143,10 @@ be mounted inside another server instead of running this one.
 
 - **No email verification and no password reset.** This package never sends email, so an email
   address is an identifier and isn't proven to belong to the person using it. A forgotten
-  password can't be reset yet (an admin can't reset it either).
-- **No login rate limiting.** Add it before any public deployment.
+  password can't be reset yet (an admin can't reset it either). This is waiting on a decision
+  about an outbound email provider (it needs an SMTP/provider account and credential), so it's
+  deliberately not built rather than faked.
+- **No trusted-proxy setting for rate limiting.** See the caveat under Rate limits above.
 - **No account deletion, email/password change, or "log out everywhere."**
 - **One writer process at a time.** Running several server instances on one accounts file needs
   a database-backed `AccountStore`.
@@ -112,17 +154,24 @@ be mounted inside another server instead of running this one.
   button (`packages/web/src/AccountPanel.tsx`, shared by the private-labels and community-labels
   features). There are no account-management screens (role granting is API/CLI only).
 - **No OAuth / "Sign in with GitHub."**
-- **Signup reveals whether an email is registered** (409 `email_taken`). Login doesn't.
+- **Signup reveals whether an email is registered** (409 `email_taken`), though probing it is
+  capped by the signup rate limit. Login doesn't.
 
-All of these are recorded with reasons in ADR 0006's "Deferred" section.
+All of these are recorded with reasons in ADR 0006's "Deferred" section (and ADR 0015 for the
+proxy caveat).
 
 ## Testing
 
-`npm test` runs 37 tests against the real thing: real argon2 hashing, a real temp-file
+`npm test` runs 52 tests against the real thing: real argon2 hashing, a real temp-file
 `JsonFileAccountStore`, a real HTTP server on an ephemeral port called with `fetch`, and the
 operator CLI run as a real child process. Nothing in the auth logic is mocked. The only test hook
-is an injectable clock, used to prove that sessions expire at exactly the right instant through
-the real code path. The tests cover:
+is an injectable clock, used to prove that sessions expire, and rate-limit windows reopen, at
+exactly the right instant through the real code path. The tests cover:
+- the 6th failed login for an email gets 429 with an exact `Retry-After`, and the window reopens on time
+- successful logins never count as failures, and one clears that email's failures
+- 12 simultaneous wrong-password logins give exactly 5 401s and 7 429s
+- the 11th signup from one IP within an hour gets 429
+- a limited email or IP doesn't affect other emails or other IPs (tested with real IPv4 and IPv6 peers)
 - wrong passwords and unknown emails are rejected identically
 - forged and logged-out tokens fail
 - each role check enforces the hierarchy

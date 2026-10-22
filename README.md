@@ -55,11 +55,39 @@ harder for the next contributor to understand, it probably isn't. See
 | Case management | Not built |
 | Real-time streaming (websocket) | Not built |
 | More chains (Bitcoin, Tron, etc.) | Not built — see [Adding a chain](packages/chains/README.md) |
+| AI agent for natural-language on-chain questions ("has wallet A sent wallet B more than $100 of USDC in the last 30 days?"), backed by Tracer's real traversal, never a guessed answer | Not built — see "Bounties" below |
+| Bounty program — anyone, no coding required, funds a feature idea with tokens; the first PR that matches the spec and gets merged claims it | Not built — see "Bounties" below |
 
 **The honest pitch today**: a real, working address-lookup tool across Ethereum and Solana, with a
 small, genuinely-sourced seed labelset and an architecture built so a new chain or a new feature
 (Tracer, Risk Scoring, ...) can be added as a self-contained module without touching
 the core. Everything past the table above is unbuilt — tracked honestly, not hidden.
+
+## Bounties
+
+**Planned, not live yet.** The idea: a feature doesn't have to come from someone who can code it.
+Anyone — technical or not — will be able to open a bounty on the site: write up the feature in
+depth (what it does, how it should behave, what "done" looks like), fund it with tokens, and it
+goes on a public bounties page. Whoever's pull request matches the spec, is clean and genuinely
+working (same bar as everything else in this project — see `FEATURE_GUIDELINES.md`), and gets
+merged, claims the bounty.
+
+**The first planned bounty** is an AI agent that answers real, specific on-chain questions in
+plain language — not by guessing, but by actually calling this project's own tools:
+
+> "Is wallet A connected to wallet B?" / "Did wallet A send wallet B more than $100 in USDC within
+> the last 30 days?"
+
+The agent would use **Tracer** (hop-by-hop fund tracing, itself not built yet — see the table
+above) to check the real transaction graph and answer with a real, checkable result, not an
+invented one. Because it depends on Tracer, this bounty is naturally gated on Tracer landing first.
+
+This is a real funding mechanism, not a cosmetic idea — it needs real token custody and payout,
+and that part is genuinely undecided: what token funds it, how it's escrowed until a bounty is
+claimed, and how a payout is verified are all open. See [`ROADMAP.md`](ROADMAP.md) ("Bounty
+program") and [`PRD.md`](PRD.md) (Open Questions) for the honest state of that design work,
+including the direct tension with this project's own non-goal of staying read-only /
+non-custodial — that has to be resolved before this is built, not papered over.
 
 ## Why the architecture looks like this
 

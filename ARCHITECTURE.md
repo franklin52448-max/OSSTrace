@@ -39,7 +39,9 @@ Deliberately mirrors the shape that on-chain intelligence tools converge on (thi
 shape, not an invention — see [ADR 0001](docs/adr/0001-plugin-architecture.md) for the research
 this came from):
 
-- **Address** — `{ chain, value }`. The base unit; always scoped to a specific chain.
+- **Address** — `{ chain, value }`. The base unit; always scoped to a specific chain. `value` is
+  canonical (`canonicalAddress` in `packages/core/src/addressFormat.ts`): lowercase hex on
+  Ethereum, exact base58 on Solana. Stores match addresses exactly, so new data must use this form.
 - **Entity** — a real-world actor, holding a set of `Address`es that can span multiple chains.
 - **Label** — at most one per address: a human-readable identity (`"Binance 14"`). Always carries
   a `Source`. Either an `IngestedLabel`, produced by an ingestion script from an official source,
@@ -61,8 +63,12 @@ implements:
 interface ChainAdapter {
   readonly chain: ChainId;
   getBalance(address: string): Promise<Balance>;
-  getRecentTransactions(address: string, limit: number): Promise<TransactionSummary[] | { unavailable: string }>;
+  getRecentTransactions(address: string, limit: number): Promise<TransactionsResult>;
 }
+
+type TransactionsResult =
+  | { available: true; transactions: TransactionSummary[] }
+  | { available: false; reason: string };
 ```
 
 `getRecentTransactions` returns a typed "unavailable" result (with a human-readable reason) rather

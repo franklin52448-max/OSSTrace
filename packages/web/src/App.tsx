@@ -16,7 +16,7 @@ import HomeFeatures from "./HomeFeatures.tsx";
 import { amountDisplay, type AmountDisplay, type Direction, type TxStatus } from "./txDisplay.ts";
 import { LiveBadge, useLiveTransactions } from "./LiveStream.tsx";
 import { CopyButton, SearchBar, Skeleton, Text, cx } from "./prism/components.tsx";
-import { IconExternalLink } from "./prism/icons.tsx";
+import { IconChevronDown, IconExternalLink } from "./prism/icons.tsx";
 import type { AeroShardsProps } from "./vendor/AeroShards.tsx";
 import type { FerrofluidProps } from "./vendor/Ferrofluid.tsx";
 
@@ -309,11 +309,12 @@ function Home() {
           }}
           aria-hidden="true"
         />
-        <div className="mx-auto flex min-h-[min(78vh,720px)] max-w-3xl flex-col justify-center px-4 py-20 text-center">
-          <Text variant="display" tone="primary" center className="sm:!text-[52px]">
+        {/* Fills the screen under the sticky header (103px tall while the nav wraps below lg, 65px above). */}
+        <div className="mx-auto flex min-h-[max(560px,calc(100svh-103px))] max-w-3xl flex-col justify-center px-4 py-20 text-center lg:min-h-[max(560px,calc(100svh-65px))]">
+          <Text variant="display" tone="primary" center className="[text-shadow:0_2px_24px_rgb(0_0_0/0.9)] sm:!text-[52px]">
             On-chain intelligence, in the open.
           </Text>
-          <Text tone="secondary" center className="mx-auto mt-4 max-w-xl">
+          <Text tone="secondary" center className="mx-auto mt-4 max-w-xl [text-shadow:0_1px_12px_rgb(0_0_0),0_0_4px_rgb(0_0_0)]">
             Look up any Ethereum or Solana address: real balances, recent transactions, and only labels with a cited public
             source.
           </Text>
@@ -321,6 +322,14 @@ function Home() {
             <GlobalSearch initial={null} />
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}
+          className="group absolute inset-x-0 bottom-6 mx-auto flex w-fit flex-col items-center gap-1 text-xs font-medium text-ink-faint transition-colors duration-150 hover:text-ink"
+        >
+          How it works
+          <IconChevronDown className="h-5 w-5 motion-safe:animate-bounce" />
+        </button>
       </section>
 
       <HomeFeatures />

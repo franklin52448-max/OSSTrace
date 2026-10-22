@@ -29,7 +29,7 @@ function focusHeroSearch(): void {
 
 export default function HomeFeatures() {
   return (
-    <section className="mx-auto max-w-6xl px-4 pt-20 sm:px-6" aria-labelledby="features-title">
+    <section id="features" className="mx-auto max-w-6xl scroll-mt-[103px] px-4 pt-20 sm:px-6 lg:scroll-mt-[65px]" aria-labelledby="features-title">
       <div className="mx-auto max-w-2xl text-center">
         <h2 id="features-title" className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
           Every answer shows its evidence

@@ -56,38 +56,39 @@ harder for the next contributor to understand, it probably isn't. See
 | Real-time streaming (websocket) | Not built |
 | More chains (Bitcoin, Tron, etc.) | Not built — see [Adding a chain](packages/chains/README.md) |
 | AI agent for natural-language on-chain questions ("has wallet A sent wallet B more than $100 of USDC in the last 30 days?"), backed by Tracer's real traversal, never a guessed answer | Not built — see "Bounties" below |
-| Bounty program — anyone, no coding required, funds a feature idea with tokens; the first PR that matches the spec and gets merged claims it | Not built — see "Bounties" below |
+| Bounty board (`GET`/`POST /bounties`, web UI Bounties tab — [ADR 0009](docs/adr/0009-bounty-program-v1-is-tracking-only.md), [`packages/features/bounties`](packages/features/bounties/README.md)): anyone opens a bounty with a spec + their own stated reward, anyone submits a PR against it, a moderator records the winner | **Active** (tracks the workflow only — never holds or moves the reward; see "Bounties" below) |
 
 **The honest pitch today**: a real, working address-lookup tool across Ethereum and Solana, with a
-small, genuinely-sourced seed labelset, real multi-hop tracing, and an architecture built so a new
-chain or a new feature (Risk Scoring, Case Management, ...) can be added as a self-contained module
-without touching the core. Everything past the table above is unbuilt — tracked honestly, not hidden.
+small, genuinely-sourced seed labelset, real multi-hop tracing, a live bounty board, and an
+architecture built so a new chain or a new feature (Risk Scoring, Case Management, ...) can be
+added as a self-contained module without touching the core. Everything past the table above is
+unbuilt — tracked honestly, not hidden.
 
 ## Bounties
 
-**Planned, not live yet.** The idea: a feature doesn't have to come from someone who can code it.
-Anyone — technical or not — will be able to open a bounty on the site: write up the feature in
-depth (what it does, how it should behave, what "done" looks like), fund it with tokens, and it
-goes on a public bounties page. Whoever's pull request matches the spec, is clean and genuinely
-working (same bar as everything else in this project — see `FEATURE_GUIDELINES.md`), and gets
-merged, claims the bounty.
+**Live.** The idea: a feature doesn't have to come from someone who can code it. Anyone —
+technical or not — opens a bounty on the [Bounties tab](packages/features/bounties/README.md):
+write up the feature in depth (what it does, how it should behave, what "done" looks like), state
+your own reward offer in your own words, and it goes on the public board. Anyone submits a PR
+against it; a moderator records which submission wins.
 
-**The first planned bounty** is an AI agent that answers real, specific on-chain questions in
-plain language — not by guessing, but by actually calling this project's own tools:
+**What it does *not* do — on purpose:** hold, escrow, or move any funds. A bounty's reward is
+free text exactly as the poster wrote it ("100,000 tokens", "$500, token TBD"), never parsed as a
+real currency amount. The actual payout happens off-platform, between the bounty's opener and
+whoever a moderator marks as the winning submission. See
+[ADR 0009](docs/adr/0009-bounty-program-v1-is-tracking-only.md) for why: a real token-escrow
+system would be custody, which conflicts with this project's own non-goal of staying read-only /
+non-custodial — so v1 ships the real, honest part (the board and its workflow) without pretending
+to be a bank it isn't.
+
+**The first bounty posted** is an AI agent that answers real on-chain questions in plain language
+by actually calling this project's own tools, not by guessing:
 
 > "Is wallet A connected to wallet B?" / "Did wallet A send wallet B more than $100 in USDC within
 > the last 30 days?"
 
-The agent would use **Tracer** (hop-by-hop fund tracing, itself not built yet — see the table
-above) to check the real transaction graph and answer with a real, checkable result, not an
-invented one. Because it depends on Tracer, this bounty is naturally gated on Tracer landing first.
-
-This is a real funding mechanism, not a cosmetic idea — it needs real token custody and payout,
-and that part is genuinely undecided: what token funds it, how it's escrowed until a bounty is
-claimed, and how a payout is verified are all open. See [`ROADMAP.md`](ROADMAP.md) ("Bounty
-program") and [`PRD.md`](PRD.md) (Open Questions) for the honest state of that design work,
-including the direct tension with this project's own non-goal of staying read-only /
-non-custodial — that has to be resolved before this is built, not papered over.
+The agent would use **Tracer**'s `tracePath` (now built — see the table above) to check the real
+transaction graph and answer with a real, checkable result.
 
 ## Why the architecture looks like this
 
@@ -126,6 +127,7 @@ npm run dev:web        # starts the web UI, in another terminal
 npm run dev:accounts   # optional: the accounts API (see packages/features/accounts/README.md)
 npm run dev:private-labels # optional, with dev:accounts: your own private labels in the web UI
 npm run dev:community-labels # optional, with accounts: label submission + moderation API
+npm run dev:bounties   # optional, with accounts: the bounty board API
 ```
 
 Without `ETHERSCAN_API_KEY`, the Ethereum adapter still returns a real balance (via public RPC)

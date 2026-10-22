@@ -1,0 +1,20 @@
+{
+  "name": "@osstrace/bounties",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "dev": "node --experimental-strip-types src/server.ts",
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@osstrace/core": "*",
+    "@osstrace/accounts": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^24.9.1"
+  }
+}

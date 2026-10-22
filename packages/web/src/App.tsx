@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactElement } from "react";
 import type { ChainId } from "@osstrace/core";
 import GraphView from "./GraphView.tsx";
 import TracerView from "./TracerView.tsx";
+import BountiesView from "./BountiesView.tsx";
 import PrivateLabelPanel from "./PrivateLabelPanel.tsx";
 import AccountPanel from "./AccountPanel.tsx";
 import ModerationView from "./ModerationView.tsx";
@@ -62,11 +63,12 @@ type LookupState =
   | { status: "error"; message: string }
   | { status: "done"; report: AddressReport; chain: ChainId; address: string };
 
-type View = "lookup" | "graph" | "trace" | "moderation";
+type View = "lookup" | "graph" | "trace" | "bounties" | "moderation";
 
 function viewFromHash(): View {
   if (window.location.hash === "#graph") return "graph";
   if (window.location.hash === "#trace") return "trace";
+  if (window.location.hash === "#bounties") return "bounties";
   if (window.location.hash === "#moderation") return "moderation";
   return "lookup";
 }
@@ -112,6 +114,19 @@ const TAB_ICONS: Record<View, ReactElement> = {
       <circle cx="13.2" cy="4.6" r="1.3" fill="currentColor" />
     </svg>
   ),
+  bounties: (
+    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" className="shrink-0">
+      <path
+        d="M8 1.6 2.6 4.3v4.1c0 3.1 2.2 5.4 5.4 6-1.3-1.1-2-2.6-2-4.1 0-2.4 2-4.3 4.4-4.3.9 0 1.7.3 2.4.7V4.3L8 1.6Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <circle cx="10" cy="11" r="3.1" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M10 9.5v1.5l1 .6" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
   moderation: (
     <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" className="shrink-0">
       <path d="M8 1.8 13 3.6v4.1c0 3.1-2.1 5.6-5 6.5-2.9-.9-5-3.4-5-6.5V3.6L8 1.8Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
@@ -154,6 +169,7 @@ export default function App() {
                 { id: "lookup", label: "Lookup", href: "#" },
                 { id: "graph", label: "Graph", href: "#graph" },
                 { id: "trace", label: "Trace", href: "#trace" },
+                { id: "bounties", label: "Bounties", href: "#bounties" },
                 { id: "moderation", label: "Moderation", href: "#moderation" },
               ] as const
             )
@@ -186,6 +202,8 @@ export default function App() {
             <GraphView />
           ) : view === "trace" ? (
             <TracerView />
+          ) : view === "bounties" ? (
+            <BountiesView />
           ) : view === "moderation" ? (
             <ModerationView />
           ) : (

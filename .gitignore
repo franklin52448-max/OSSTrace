@@ -23,3 +23,5 @@ data/private/
 # Community label submissions written by a running instance (links account ids to submissions).
 # Runtime data for that instance, not repo seed data -- see ADR 0007.
 data/community/
+# Bounty postings + submissions written by a running instance. Runtime data, not repo seed data -- see ADR 0009.
+data/bounties/

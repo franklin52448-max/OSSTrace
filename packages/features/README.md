@@ -27,6 +27,10 @@ directly from Explorer's source.
 - [`tracer/`](tracer/README.md) — follows fund flow further than one hop: a real multi-hop graph
   expansion, and a point-to-point "does a path exist from A to B matching these filters" query
   (ADR 0008). Builds directly on Visualizer's one-hop edge resolution rather than reimplementing it.
+- [`bounties/`](bounties/README.md) — a public board where anyone funds a feature spec with a
+  self-stated reward, anyone submits a PR against it, and a moderator records the winner (ADR
+  0009). Tracks the workflow; never holds or moves the reward itself. Built on
+  `@osstrace/accounts`, same pattern as private/community labels.
 
 ## Adding a feature
 

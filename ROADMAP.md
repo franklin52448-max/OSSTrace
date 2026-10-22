@@ -100,35 +100,35 @@ folders, separate agents, same plugin architecture that made this possible in th
 - [ ] Everything in `SCALING-AND-COSTS.md` (local only, not in this repo) once there's a real
       hosting target to plan against
 
-## Wave 7 — Bounty program (idea stage — launches after Wave 6, not before)
+## Wave 7 — Bounty program
 
 **The idea:** a feature request shouldn't require the person who wants it to be able to build it.
-Any user — technical or not — opens a bounty on the site: a written-up feature spec (what it does,
-how it should behave, what "done" looks like), funded with tokens. A separate public page lists
-open bounties. Whoever's pull request matches the spec, is clean, tested, and up to the same bar
-as everything else in this project (`FEATURE_GUIDELINES.md`), and gets merged, claims the bounty.
-Not scoped to this list yet — it's a real idea with real open design work, not a committed build.
+Any user — technical or not — opens a bounty: a written-up feature spec (what it does, how it
+should behave, what "done" looks like) and their own stated reward. A public board lists open
+bounties. Anyone submits a PR against one; a moderator records which submission wins.
 
-- [ ] **Decide the funding/custody model before writing any code.** This directly conflicts with
-      PRD.md's current non-goal ("read-only / observational, never custodial or transactional") —
-      holding a bounty's tokens until a PR merges *is* custody. That conflict has to be resolved
-      explicitly (a new ADR, most likely) before this is built, not quietly worked around.
-- [ ] **Decide what token funds a bounty.** No OSSTrace token exists today. Whether this uses an
-      existing chain-native token/stablecoin, or a new token, is completely undecided — do not
-      assume or invent one while scoping this.
-- [ ] **Decide how a payout is verified and triggered** — "the PR that gets merged claims it" is
-      the stated rule, but who adjudicates "matches the spec" when more than one PR is close, and
-      what happens to a disputed or abandoned bounty, aren't designed yet.
-- [ ] A bounties page in the web UI: list open bounties, their spec and funded amount, submit
-      against one, show its status (open / claimed / disputed).
-- [ ] **First planned bounty, once this is live:** an AI agent that answers real on-chain questions
-      in plain language by actually calling this project's own tools — not by guessing. Example:
-      *"is wallet A connected to wallet B?"* / *"did wallet A send wallet B more than $100 in USDC
-      within the last 30 days?"* The agent uses **Tracer**'s `tracePath` (Wave 4, now built —
+- [x] **The board itself: live** (`packages/features/bounties/`,
+      [ADR 0009](docs/adr/0009-bounty-program-v1-is-tracking-only.md)) — open/list/get a bounty,
+      submit a PR against one, a moderator claims the winner, the opener or a moderator cancels.
+      A real web UI tab (`packages/web/src/BountiesView.tsx`). Real tests throughout.
+  - [x] **The funding/custody question is resolved for v1 by scoping it out, not deferred
+        forever.** ADR 0009: this system never holds or moves a reward — `reward` is the poster's
+        own free-text claim, and payout happens off-platform after a moderator records the claim.
+        This directly avoids the custody conflict with `PRD.md`'s non-goal, rather than resolving
+        it the way that non-goal would otherwise require (a real token + escrow design).
+  - [ ] **A real token + escrow system, if this project ever builds one, is new scope** needing
+        its own ADR — not an extension of ADR 0009. Still fully undecided: whether this ever
+        happens, what token, and how a payout would be verified on-chain.
+  - [ ] No rate limiting on opening bounties or submitting PRs; no automatic PR-status checking;
+        no structured dispute process beyond a moderator's judgment call on which submission wins.
+- [x] **First bounty posted:** an AI agent that answers real on-chain questions in plain language
+      by actually calling this project's own tools — not by guessing. Example: *"is wallet A
+      connected to wallet B?"* / *"did wallet A send wallet B more than $100 in USDC within the
+      last 30 days?"* The agent uses **Tracer**'s `tracePath` (Wave 4, built —
       `packages/features/tracer/`) to check the real transaction graph and answer with a real,
       checkable result, honestly surfacing `budgetExhausted` rather than flattening "didn't finish
-      searching" into the same "no" as "proven not connected" (ADR 0008 §4). The tool this bounty
-      needs now exists; the funding/custody/agent work above is still fully undecided.
+      searching" into the same "no" as "proven not connected" (ADR 0008 §4). The agent itself is
+      not built — this is the spec posted to the board, waiting for a submission.
 
 ---
 

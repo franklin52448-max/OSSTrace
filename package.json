@@ -25,7 +25,8 @@
     "dev:accounts": "npm run dev --workspace packages/features/accounts",
     "dev:private-labels": "npm run dev --workspace packages/features/private-labels",
     "dev:community-labels": "npm run dev --workspace packages/features/community-labels",
-    "dev:tracer": "npm run dev --workspace packages/features/tracer"
+    "dev:tracer": "npm run dev --workspace packages/features/tracer",
+    "dev:bounties": "npm run dev --workspace packages/features/bounties"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

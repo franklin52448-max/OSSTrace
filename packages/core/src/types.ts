@@ -168,7 +168,13 @@ export interface TokenTransfer {
 export interface TransactionSummary {
   chain: ChainId;
   hash: string;
-  timestamp: string;
+  /**
+   * ISO 8601, or `null` when the chain didn't report when this transaction happened (Solana's RPC
+   * returns `blockTime: null` for some very recent signatures). Never fabricated: a consumer must
+   * treat `null` as "unknown" — it fails a time filter, sorts as least recent, and is shown as
+   * unknown, never as some default date. See ADR 0016.
+   */
+  timestamp: string | null;
   from: string;
   to: string | null;
   /** Decimal string, native-token units. */

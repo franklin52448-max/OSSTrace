@@ -35,7 +35,13 @@ export function summarizeTransaction(
   tx: ParsedTransactionWithMeta | null,
   address: string,
 ): TransactionSummary {
-  const timestamp = sigInfo.blockTime ? new Date(sigInfo.blockTime * 1000).toISOString() : new Date(0).toISOString();
+  // `blockTime` is null when the RPC doesn't know when the slot was produced (it happens for real
+  // on very recent signatures). The fetched transaction carries its own `blockTime` too, so that's
+  // used when the signature list didn't have one. If neither does, the timestamp is `null` — never
+  // replaced with the Unix epoch or "now", which would put a made-up date on a real transaction
+  // (ADR 0016).
+  const blockTime = typeof sigInfo.blockTime === "number" ? sigInfo.blockTime : typeof tx?.blockTime === "number" ? tx.blockTime : null;
+  const timestamp = blockTime === null ? null : new Date(blockTime * 1000).toISOString();
   if (!tx || !tx.meta) {
     // The details didn't come back, so nothing about what moved is known. But
     // getSignaturesForAddress already said whether the transaction failed (`err`), and dropping
@@ -62,7 +68,7 @@ export function summarizeTransaction(
   return { ...summary, ...(tokenTransfers.length > 0 ? { tokenTransfers } : {}), status };
 }
 
-function summarizeNative(signature: string, timestamp: string, tx: ParsedTransactionWithMeta, address: string): TransactionSummary {
+function summarizeNative(signature: string, timestamp: string | null, tx: ParsedTransactionWithMeta, address: string): TransactionSummary {
   // Primary path: directly decode a native SOL transfer instruction (top-level or inner)
   // involving this address — gives a real, specific counterparty, not just a balance delta.
   const allInstructions = [

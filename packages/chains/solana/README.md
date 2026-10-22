@@ -42,6 +42,11 @@ never mix: top-level `valueNative` is always SOL, token amounts only ever appear
 the RPC returned no details for a signature, the entry says `from: "unknown"`, `valueNative: "0"`
 and still carries the `status` from `getSignaturesForAddress`'s own `err` field.
 
+`timestamp` comes from `getSignaturesForAddress`'s `blockTime`, or the fetched transaction's own
+`blockTime` when the signature list has none. The RPC really does return `blockTime: null` for
+some very recent signatures; when neither has a value, `timestamp` is `null`. It used to be
+`1970-01-01T00:00:00.000Z` in that case, a made-up date (ADR 0016).
+
 ## How SPL token transfers are decoded
 
 `src/splToken.ts` (pure, no RPC calls of its own) reads the RPC's own `jsonParsed` decoding of

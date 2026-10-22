@@ -48,3 +48,25 @@ test("an empty previous history is a real baseline: the first transaction ever i
   assert.deepEqual(diff.newTransactions.map((t) => t.hash), ["0xtx1"]);
   assert.equal(diff.windowOverflow, false);
 });
+
+// --- transactions with no reported timestamp (ADR 0016) ---
+
+test("an undated transaction in the previous full window doesn't switch off the edge-of-window guard", () => {
+  // Before, one null timestamp turned the window's oldest time into NaN, which skipped the guard
+  // entirely and let tx1 (older than anything the previous window reached) through as "new".
+  const previous = [tx(9, { timestamp: null }), tx(5), tx(4)];
+  const current = [tx(6), tx(9, { timestamp: null }), tx(1)];
+  assert.deepEqual(diffTransactions(previous, current, 3).newTransactions.map((t) => t.hash), ["0xtx6"]);
+});
+
+test("full window: an unseen undated transaction can't be shown to be newer, so it isn't reported", () => {
+  const previous = [tx(5), tx(4), tx(3)];
+  const current = [tx(9, { timestamp: null }), tx(6), tx(5)];
+  assert.deepEqual(diffTransactions(previous, current, 3).newTransactions.map((t) => t.hash), ["0xtx6"]);
+});
+
+test("window not full: undated new transactions are reported, after every dated one, in a stable order", () => {
+  const current = [tx(8, { timestamp: null }), tx(4), tx(9, { timestamp: null }), tx(3), tx(2), tx(1)];
+  const diff = diffTransactions([tx(1)], current, 25);
+  assert.deepEqual(diff.newTransactions.map((t) => t.hash), ["0xtx2", "0xtx3", "0xtx4", "0xtx8", "0xtx9"]);
+});

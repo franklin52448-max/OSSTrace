@@ -97,6 +97,10 @@ different from `:chain` needs `bridges=wormhole`, otherwise the request gets a `
 - `breadth` limits which neighbours get *expanded*. If an edge Tracer has already fetched reaches
   `to` directly, it counts even when `to` isn't among that node's `breadth` most recent
   neighbours.
+- An edge whose transaction has no reported timestamp (`timestamp: null`, e.g. a very recent
+  Solana signature) **fails** any `since`/`until` filter, since it can't be shown to fall inside
+  the window. The same rule as an unresolved amount or symbol. In `breadth` ranking, a neighbour
+  reached only through such edges counts as least recent. See ADR 0016.
 
 `GET /health` returns `{ "ok": true }`.
 

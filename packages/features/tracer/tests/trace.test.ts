@@ -39,7 +39,7 @@ function ethTx(
   to: string,
   valueNative: string,
   direction: TransactionSummary["direction"],
-  timestamp: string,
+  timestamp: string | null,
   tokenTransfers?: TokenTransfer[],
 ): TransactionSummary {
   return { chain: "ethereum", hash, timestamp, from, to, valueNative, direction, ...(tokenTransfers ? { tokenTransfers } : {}) };
@@ -282,3 +282,82 @@ test("buildTraceGraph/buildTracePath attach real label/tag/entity lookups from t
     assert.equal(pathReport.found, true);
     assert.equal(pathReport.nodes.find((n) => n.id === A)?.label?.name, "Known Exchange");
   }));
+
+// --- transactions with no reported timestamp (ADR 0016) ---
+
+const N = `0x${"9".repeat(40)}`;
+
+/** CENTER's history lists the undated edge to N first, then A (older) and B (newer), all dead ends. */
+function centerWithOneUndatedNeighbor(): MapChainAdapter {
+  return new MapChainAdapter(
+    "ethereum",
+    new Map([
+      [
+        CENTER,
+        {
+          available: true,
+          transactions: [
+            ethTx("h-n", CENTER, N, "1", "out", null),
+            ethTx("h-a", CENTER, A, "1", "out", "2026-01-01T00:00:00Z"),
+            ethTx("h-b", CENTER, B, "1", "out", "2026-01-05T00:00:00Z"),
+          ],
+        },
+      ],
+      [A, { available: true, transactions: [] }],
+      [B, { available: true, transactions: [] }],
+      [N, { available: true, transactions: [] }],
+    ]),
+  );
+}
+
+test("traceGraph breadth ranking: a neighbor reached only via an undated edge ranks after every dated one", async () => {
+  const adapter = centerWithOneUndatedNeighbor();
+  const result = await traceGraph({ chain: "ethereum", value: CENTER }, adapter, { ...DEFAULT_OPTS, maxHops: 2, breadth: 2 });
+  // The two dated neighbors (B, then A, even though A's edge is older) take the breadth, never N.
+  assert.deepEqual([...adapter.calls].sort(), [A, B, CENTER].sort());
+  assert.equal(new Map(result.frontier.map((f) => [f.id, f.reason])).get(N), "breadth-cap");
+  // The undated edge itself is still kept, with its timestamp honestly null.
+  assert.equal(result.edges.find((e) => e.id === "h-n")?.timestamp, null);
+});
+
+test("traceGraph breadth ranking: when every edge is undated, nothing throws and first-seen order is kept", async () => {
+  const adapter = new MapChainAdapter(
+    "ethereum",
+    new Map([
+      [
+        CENTER,
+        {
+          available: true,
+          transactions: [
+            ethTx("h-a", CENTER, A, "1", "out", null),
+            ethTx("h-b", CENTER, B, "1", "out", null),
+            ethTx("h-c", CENTER, C, "1", "out", null),
+          ],
+        },
+      ],
+      [A, { available: true, transactions: [] }],
+      [B, { available: true, transactions: [] }],
+      [C, { available: true, transactions: [] }],
+    ]),
+  );
+  const result = await traceGraph({ chain: "ethereum", value: CENTER }, adapter, { ...DEFAULT_OPTS, maxHops: 2, breadth: 2 });
+  // All tied at "unknown": the stable sort keeps first-seen order, so A and B take the breadth.
+  assert.deepEqual([...adapter.calls].sort(), [A, B, CENTER].sort());
+  assert.equal(new Map(result.frontier.map((f) => [f.id, f.reason])).get(C), "breadth-cap");
+  assert.equal(result.edges.length, 3);
+  assert.ok(result.edges.every((e) => e.timestamp === null));
+});
+
+test("tracePath: an undated edge can't satisfy a since/until filter, so the path is not found", async () => {
+  const adapter = new MapChainAdapter(
+    "ethereum",
+    new Map([[CENTER, { available: true, transactions: [ethTx("h-t", CENTER, TARGET, "1", "out", null)] }]]),
+  );
+  const from = { chain: "ethereum", value: CENTER } as const;
+  const to = { chain: "ethereum", value: TARGET } as const;
+  const opts = { ...DEFAULT_OPTS, maxHops: 1 };
+  assert.equal((await tracePath(from, to, adapter, { sinceTimestamp: "2000-01-01T00:00:00Z" }, opts)).found, false);
+  assert.equal((await tracePath(from, to, adapter, { untilTimestamp: "2100-01-01T00:00:00Z" }, opts)).found, false);
+  // Without a time filter, the same undated edge is a real hop and the path is found.
+  assert.equal((await tracePath(from, to, adapter, {}, opts)).found, true);
+});

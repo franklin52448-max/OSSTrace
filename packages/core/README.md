@@ -10,6 +10,10 @@ imports from nothing chain- or feature-specific.
   there, not duplicated here. `TransactionSummary.tokenTransfers` is an optional, additive field
   added for ERC-20/SPL decoding. It's backward compatible: it's absent whenever a chain decoded
   no token movement, and no existing field changed meaning (`valueNative` is still native-only).
+  `TransactionSummary.timestamp` is `string | null`: `null` means the chain didn't report when the
+  transaction happened, and it is never filled in with a made-up date. Consumers must handle it:
+  it fails any time filter, sorts as least recent, and is shown as unknown — never passed to
+  `new Date(...)`, which turns `null` into 1970. See ADR 0016.
 - **`src/chainAdapter.ts`** — the `ChainAdapter` interface every chain package implements.
 - **`src/store.ts`** — `LabelStore` interface + `JsonFileLabelStore`, a file-backed implementation.
   See the file's docstring for why JSON-file rather than a database for v1.

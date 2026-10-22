@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./theme.ts"; // applies the saved theme before first paint — must stay the first import (see theme.ts)
+import "./motion.ts"; // likewise applies the saved reduce-motion choice before first paint
 import App from "./App.tsx";
 import { ToastProvider } from "./kit/Toast.tsx";
 import "./index.css";

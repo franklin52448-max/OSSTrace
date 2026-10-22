@@ -1,8 +1,9 @@
 import { useState } from "react";
 import type { ChainId } from "@osstrace/core";
-import { formatTimestamp } from "./timeDisplay.ts";
 import { Checkbox } from "./prism/components.tsx";
+import { ChainSelect } from "./ChainSelect.tsx";
 import { Loading, Notice, PageHeader } from "./ui.tsx";
+import { formatTimestamp } from "./timeDisplay.ts";
 
 const TRACER_URL = import.meta.env["VITE_TRACER_URL"] ?? "http://localhost:5303";
 const ADR_URL = "https://github.com/OpenTraceIntelligence/OSSTrace/blob/main/docs/adr/";
@@ -214,11 +215,8 @@ export default function TracerView({ initial = null }: { initial?: { chain: Chai
 
       <form onSubmit={handleSubmit} className="card overflow-hidden">
         <div className="grid gap-3 p-4 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]">
-          <Field label="Chain">
-            <select value={chain} onChange={(e) => setChain(e.target.value as ChainId)} className="ctl w-full">
-              <option value="ethereum">Ethereum</option>
-              <option value="solana">Solana</option>
-            </select>
+          <Field label="Chain" control="picker">
+            <ChainSelect value={chain} onChange={setChain} fullWidth className="sm:min-w-[10.5rem]" />
           </Field>
           <Field label="From">
             <input
@@ -271,11 +269,8 @@ export default function TracerView({ initial = null }: { initial?: { chain: Chai
             <input type="datetime-local" value={since} onChange={(e) => setSince(e.target.value)} disabled={!pathMode} className="ctl w-full disabled:opacity-40" />
           </Field>
           {followBridges && pathMode ? (
-            <Field label="To chain">
-              <select value={toChain} onChange={(e) => setToChain(e.target.value as ChainId)} className="ctl w-full">
-                <option value="ethereum">Ethereum</option>
-                <option value="solana">Solana</option>
-              </select>
+            <Field label="To chain" control="picker">
+              <ChainSelect value={toChain} onChange={setToChain} label="To chain" fullWidth />
             </Field>
           ) : (
             <div />
@@ -316,15 +311,21 @@ export default function TracerView({ initial = null }: { initial?: { chain: Chai
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string | undefined; children: React.ReactNode }) {
+/**
+ * A labelled form field. Native controls sit inside a real `<label>`; a `picker` (ChainSelect) gets
+ * a plain wrapper instead, since a click anywhere in a `<label>` re-activates its button, which
+ * would reopen the list the moment an option is chosen. The picker names itself for assistive tech.
+ */
+function Field({ label, hint, control = "native", children }: { label: string; hint?: string | undefined; control?: "native" | "picker"; children: React.ReactNode }) {
+  const Wrapper = control === "picker" ? "div" : "label";
   return (
-    <label className="flex min-w-0 flex-col gap-1.5">
-      <span className="flex items-baseline justify-between gap-2 text-xs font-medium text-ink-faint">
+    <Wrapper className="flex min-w-0 flex-col gap-1.5">
+      <span className="flex items-baseline justify-between gap-2 text-xs font-medium text-ink-faint" aria-hidden={control === "picker" || undefined}>
         {label}
         {hint && <span className="font-normal text-ink-faint/70">{hint}</span>}
       </span>
       {children}
-    </label>
+    </Wrapper>
   );
 }
 

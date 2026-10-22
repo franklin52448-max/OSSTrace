@@ -11,7 +11,9 @@ import WorkbenchView from "./WorkbenchView.tsx";
 import PrivateLabelPanel from "./PrivateLabelPanel.tsx";
 import RiskPanel from "./RiskPanel.tsx";
 import AccountPanel from "./AccountPanel.tsx";
-import ThemeCustomizer, { ThemeToggle } from "./ThemeCustomizer.tsx";
+import ThemeCustomizer from "./ThemeCustomizer.tsx";
+import { useTheme } from "./theme.ts";
+import { scrollBehavior, useReduceMotion } from "./motion.ts";
 import { LabelSubmitForm, ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
 import { useSession } from "./session.ts";
 import { Notice, SignInPrompt } from "./ui.tsx";
@@ -147,15 +149,16 @@ const NAV: readonly { id: View; label: string; href: string }[] = [
   { id: "workbench", label: "Workbench", href: "#workbench" },
 ];
 
-/** Original mark: three linked nodes — the queried address and two counterparties. */
+/** The OSSTrace mark (also public/logo.svg), drawn in the text colour. */
 function Wordmark() {
   return (
     <span className="flex items-center gap-2">
-      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" className="shrink-0">
-        <path d="M7.4 10.6 16 6.4M7.4 13.4 16 17.6" stroke="var(--color-signal)" strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
-        <circle cx="5.5" cy="12" r="3" fill="var(--color-signal)" />
-        <circle cx="18" cy="5.5" r="2.2" fill="none" stroke="var(--color-ink-dim)" strokeWidth="1.5" />
-        <circle cx="18" cy="18.5" r="2.2" fill="none" stroke="var(--color-ink-dim)" strokeWidth="1.5" />
+      <svg viewBox="0 0 348.19 401.9" width="20" height="23" aria-hidden="true" className="shrink-0 text-ink">
+        <path
+          fill="currentColor"
+          transform="translate(-89.830428,485.997765) scale(0.1,-0.1)"
+          d="M3065 4851 c-232 -75 -232 -407 -1 -476 239 -72 424 224 253 404 -62 65 -175 98 -252 72z M1829 4616 c-230 -82 -173 -427 70 -426 233 1 308 305 102 412 -59 31 -113 35 -172 14z M3117 4316 c-67 -25 -99 -59 -163 -173 -84 -149 -142 -183 -329 -190 -199 -8 -373 29 -477 102 -104 74 -146 86 -230 61 -114 -33 -183 -142 -182 -286 1 -215 174 -522 279 -496 28 7 107 93 142 155 84 148 146 226 220 275 59 39 217 76 327 76 146 0 204 -36 330 -203 101 -134 142 -142 321 -62 130 59 189 65 246 26 91 -62 104 -158 45 -336 -20 -61 -45 -150 -56 -198 -26 -117 -57 -170 -154 -265 -185 -180 -206 -187 -541 -187 -298 -1 -343 -8 -492 -76 -185 -84 -299 -99 -393 -50 -99 51 -243 156 -343 250 -152 143 -204 167 -357 164 -415 -5 -519 -185 -271 -469 118 -135 161 -210 192 -334 6 -25 14 -175 19 -335 8 -323 15 -359 76 -420 83 -83 314 -67 368 25 14 25 22 71 32 204 21 276 76 406 173 406 69 0 178 -92 212 -179 37 -94 51 -123 94 -196 59 -100 107 -216 164 -400 72 -231 119 -292 260 -336 86 -27 276 -37 351 -19 139 33 165 80 158 288 -9 239 11 319 110 442 83 102 134 220 172 391 34 157 104 275 175 299 47 15 97 -8 198 -92 113 -94 152 -112 242 -106 84 6 157 37 189 81 37 50 34 155 -9 363 -58 279 -52 330 58 486 96 138 129 277 93 389 -34 101 -72 130 -203 154 -287 51 -546 212 -622 385 -136 313 -276 441 -424 386z M3935 4321 c-225 -59 -296 -328 -132 -499 174 -180 497 -43 497 211 0 185 -189 335 -365 288z M1140 3811 c-236 -77 -319 -363 -159 -545 95 -107 257 -142 384 -83 321 150 231 620 -120 633 -44 2 -91 0 -105 -5z M2530 3501 c-49 -16 -126 -60 -167 -96 -116 -100 -156 -313 -86 -456 114 -231 395 -301 600 -148 235 176 200 541 -65 671 -69 34 -220 50 -282 29z"
+        />
       </svg>
       <span className="text-[16px] font-semibold tracking-tight text-ink">OSSTrace</span>
     </span>
@@ -220,7 +223,6 @@ export default function App() {
             </div>
           )}
           <div className={cx("ml-auto flex shrink-0 items-center gap-1", !home && "md:ml-0")}>
-            <ThemeToggle />
             <ThemeCustomizer />
             <AccountPanel />
           </div>
@@ -333,6 +335,15 @@ const HERO_SHARDS = {
   glow: 0.25,
 } satisfies AeroShardsProps;
 
+/** The same field in Nord's Frost blues, for the Nord theme only. Chrome blends each shard 55% toward
+ * white, so these are deeper than the Frost swatches themselves to land on them once shaded. */
+const HERO_SHARDS_NORD = {
+  ...HERO_SHARDS,
+  shardColor: "#2f62a8",
+  accentColor: "#3fa9c4",
+  glow: 0.4,
+} satisfies AeroShardsProps;
+
 /** Fallback where WebGPU isn't available. From reactbits.dev/backgrounds/ferrofluid?preset=peaks&sharpness=4&fluidity=0.85&spikeHeight=0.45, in neutral chrome. */
 const HERO_FLUID = {
   colors: ["#ffffff", "#d4d4d8", "#52525b"],
@@ -350,16 +361,21 @@ const HERO_FLUID = {
 /** Aero Shards needs WebGPU; where it can't start, the WebGL2 ferrofluid takes its place. Only
  * ever used on the home page, which keeps its original dark look regardless of the site's live
  * theme (see HOME_PINNED_STYLE) -- so unlike a CSS-token-driven element, this reads a fixed mode
- * rather than the live theme, since its lighting model runs on the GPU, not through CSS vars. */
+ * rather than the live theme, since its lighting model runs on the GPU, not through CSS vars.
+ * The one thing it DOES read from the live theme is which color variant to show (Nord gets its
+ * own Frost-blue field) -- that's just picking a palette, not un-pinning the page's own darkness. */
 function HeroBackground() {
   const [webgpuFailed, setWebgpuFailed] = useState(false);
   const lightMode = false;
+  const shards = useTheme().preset === "nord" ? HERO_SHARDS_NORD : HERO_SHARDS;
+  // Reduce motion holds the field still (no fly-in either) and stops it reacting to the pointer.
+  const still = useReduceMotion();
   return (
     <Suspense fallback={null}>
       {webgpuFailed ? (
-        <Ferrofluid {...HERO_FLUID} lightMode={lightMode} />
+        <Ferrofluid {...HERO_FLUID} lightMode={lightMode} paused={still} intro={!still} mouseInteraction={!still} />
       ) : (
-        <AeroShards {...HERO_SHARDS} lightMode={lightMode} onError={() => setWebgpuFailed(true)} />
+        <AeroShards {...shards} lightMode={lightMode} paused={still} intro={!still} mouseInteraction={!still} onError={() => setWebgpuFailed(true)} />
       )}
     </Suspense>
   );
@@ -487,7 +503,7 @@ function Home() {
         </div>
         <button
           type="button"
-          onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}
+          onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: scrollBehavior() })}
           className="group absolute inset-x-0 bottom-6 mx-auto flex w-fit flex-col items-center gap-1 text-xs font-medium !text-white/60 transition-colors duration-150 hover:!text-white"
         >
           How it works

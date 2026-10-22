@@ -1,7 +1,7 @@
 import { after, afterEach, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { createElement, useState } from "react";
-import { cleanup, click, consoleErrors, during, getButton, getByLabelText, getSubmitButton, render, text, type, waitFor } from "./harness/render.ts";
+import { cleanup, click, consoleErrors, during, getButton, getByLabelText, getSubmitButton, render, settle, text, type, waitFor } from "./harness/render.ts";
 import { FixedBalanceAdapter, startStack, type Stack } from "./harness/servers.ts";
 
 // The private-label panel against the real @osstrace/private-labels API (owner-only labels,
@@ -72,9 +72,10 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-test("signed out: renders nothing (the sign-in prompt is the caller's job, shared across the whole private-notes area)", async () => {
-  const { container } = await render(createElement(PrivateLabelPanel, { chain: "ethereum", address: ADDRESS }));
-  assert.equal(container.textContent, "");
+test("signed out: no panel (the report shows one combined log-in prompt instead)", async () => {
+  await render(createElement(PrivateLabelPanel, { chain: "ethereum", address: ADDRESS }));
+  for (let i = 0; i < 5; i++) await settle();
+  assert.equal(text().trim(), "", "nothing rendered, not even a hint of a label");
   assert.equal(document.querySelector('section[aria-label="Your private label"]'), null);
   assert.deepEqual(consoleErrors, []);
 });

@@ -19,6 +19,7 @@ import { useToast } from "../kit/Toast.tsx";
 import { CounterpartiesPanel, TransfersPanel } from "../panels/index.ts";
 import { LabelDialog } from "../labels/LabelDialog.tsx";
 import { BalancesTable } from "./BalancesTable.tsx";
+import { scrollBehavior } from "../motion.ts";
 
 export function ExplorePage({ chain: rawChain, addr }: { chain: string; addr: string }) {
   const chain = rawChain as Chain;
@@ -151,7 +152,7 @@ function AddressView({ chain, address }: { chain: Chain; address: string }) {
               // Address rows narrow the transfers block; entity rows have no single address to filter on.
               const key = row && row.kind === "address" ? row.key : undefined;
               setCounterparty(key);
-              if (key) transfersRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+              if (key) transfersRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
             }}
             selectedKey={counterparty ?? null}
           />

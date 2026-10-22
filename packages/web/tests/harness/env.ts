@@ -11,6 +11,11 @@
  *   so a test points the UI at its own real API servers by setting `VITE_EXPLORER_URL` etc.
  *   before importing a component.
  * `fetch` and `WebSocket` stay Node's own: requests from the UI are real HTTP.
+ *
+ * Two browser APIs jsdom doesn't implement are given the answers a real browser can give, so the
+ * page behaves as it would on a machine without them instead of logging "Not implemented":
+ * `window.scrollTo` does nothing (there's no layout to scroll), and `canvas.getContext` returns
+ * `null` (no WebGL), which the home hero already handles by drawing nothing.
  */
 import { registerHooks } from "node:module";
 import { readFileSync } from "node:fs";
@@ -39,6 +44,8 @@ for (const key of Object.getOwnPropertyNames(window)) {
     get: () => (window as unknown as Record<string, unknown>)[key],
   });
 }
+window.scrollTo = () => {};
+window.HTMLCanvasElement.prototype.getContext = (() => null) as typeof window.HTMLCanvasElement.prototype.getContext;
 // Tells React this is a test environment that wraps updates in act().
 target["IS_REACT_ACT_ENVIRONMENT"] = true;
 

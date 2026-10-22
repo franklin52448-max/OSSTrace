@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { cx } from "./prism/components.tsx";
 import { IconArrowRight } from "./prism/icons.tsx";
 import { ChainIcon } from "./ChainSelect.tsx";
+import { scrollBehavior } from "./motion.ts";
 
 const C = {
   ink: "var(--color-ink)",
@@ -23,7 +24,7 @@ const C = {
 
 /** Puts the cursor in the hero search, which sits at the top of the same page. */
 function focusHeroSearch(): void {
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo({ top: 0, behavior: scrollBehavior() });
   document.querySelector<HTMLInputElement>("main input[type=search], section input[type=search]")?.focus({ preventScroll: true });
 }
 

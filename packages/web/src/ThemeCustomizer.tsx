@@ -1,43 +1,32 @@
-// Header theme controls: a one-click dark/light toggle, and the "Customize theme" popover that
-// lets anyone retint every themed surface live (../theme.ts owns the token list and persistence —
-// this file only renders it).
+// Header theme menu: pick one of the presets (Dark, Light, Nord), turn Reduce motion on or off, and
+// optionally retint any themed color live under "Customize colors" (../theme.ts and ../motion.ts
+// own the state and persistence — this file only renders them).
 import { useEffect, useRef, useState } from "react";
 import {
   THEME_CATEGORIES,
   THEME_PRESETS,
   THEME_TOKENS,
   hasOverride,
+  presetValue,
   resetAllOverrides,
   resetToken,
   resolvedValue,
   setPreset,
   setTokenValue,
   useTheme,
-  useThemeMode,
+  type ThemePreset,
   type ThemeToken,
 } from "./theme.ts";
+import { setReduceMotion, useReduceMotion } from "./motion.ts";
 import { Button, cx } from "./prism/components.tsx";
-import { IconArrowBackUp, IconMoon, IconPalette, IconSun, IconX } from "./prism/icons.tsx";
+import { IconArrowBackUp, IconCheck, IconChevronDown, IconPalette } from "./prism/icons.tsx";
 
-/** One click flips between the Dark and Light presets. Per-token tweaks reset on switch — see theme.ts. */
-export function ThemeToggle() {
-  const mode = useThemeMode();
-  return (
-    <Button
-      transparent
-      circle
-      className="small"
-      aria-label={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-      onClick={() => setPreset(mode === "dark" ? "light" : "dark")}
-    >
-      {mode === "dark" ? <IconSun /> : <IconMoon />}
-    </Button>
-  );
-}
+const tokenByKey = (key: string): ThemeToken => THEME_TOKENS.find((t) => t.key === key)!;
 
 export default function ThemeCustomizer() {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
+  const [customizing, setCustomizing] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -60,60 +49,114 @@ export default function ThemeCustomizer() {
 
   return (
     <div ref={rootRef} className="relative">
-      <Button transparent circle className="small" aria-expanded={open} aria-label="Customize theme" onClick={() => setOpen((o) => !o)}>
+      <Button transparent circle className="small" aria-expanded={open} aria-label="Theme" onClick={() => setOpen((o) => !o)}>
         <IconPalette />
       </Button>
       {open && (
         <div
           role="dialog"
-          aria-label="Customize theme"
-          className="card absolute right-0 top-[calc(100%+10px)] z-40 max-h-[calc(100vh-6rem)] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto p-4"
+          aria-label="Theme"
+          className="card absolute right-0 top-[calc(100%+10px)] z-40 max-h-[calc(100vh-6rem)] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto p-2"
         >
-          <div className="flex items-center justify-between gap-2">
-            <div className="section-title">Customize theme</div>
-            <Button transparent circle className="small !text-ink-faint" aria-label="Close" onClick={() => setOpen(false)}>
-              <IconX />
-            </Button>
-          </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="px-2.5 pb-1.5 pt-1 text-xs text-ink-faint">Theme</div>
+          <div role="radiogroup" aria-label="Theme preset" className="space-y-0.5">
             {THEME_PRESETS.map((preset) => (
-              <button
-                key={preset.key}
-                type="button"
-                onClick={() => setPreset(preset.key)}
-                className={cx(
-                  "flex items-center justify-center gap-2 rounded-ctl border px-3 py-2 text-sm font-medium transition-colors",
-                  theme.preset === preset.key ? "border-signal/50 bg-signal/10 text-ink" : "border-line text-ink-dim hover:bg-raised",
-                )}
-              >
-                {preset.mode === "dark" ? <IconMoon className="!h-4 !w-4" /> : <IconSun className="!h-4 !w-4" />}
-                {preset.label}
-              </button>
+              <PresetOption key={preset.key} preset={preset} selected={theme.preset === preset.key} />
             ))}
           </div>
 
-          <p className="mt-2 text-xs leading-relaxed text-ink-faint">
-            Pick a starting point, then fine-tune any color below. Saved on this device only.
-          </p>
-
-          {THEME_CATEGORIES.map((category) => (
-            <div key={category} className="mt-4">
-              <div className="section-title">{category}</div>
-              <div className="mt-2 space-y-1.5">
-                {THEME_TOKENS.filter((t) => t.category === category).map((token) => (
-                  <TokenRow key={token.key} token={token} />
+          <div className="mt-2 border-t border-line pt-2">
+            <ReduceMotionSwitch />
+            <button
+              type="button"
+              aria-expanded={customizing}
+              onClick={() => setCustomizing((c) => !c)}
+              className="flex w-full items-center justify-between rounded-[10px] px-2.5 py-2 text-left text-sm font-medium text-ink-dim transition-colors duration-150 hover:bg-[var(--helium-elevated-10)] hover:text-ink"
+            >
+              Customize colors
+              <IconChevronDown className={cx("!h-4 !w-4 text-ink-faint transition-transform duration-200", customizing && "rotate-180")} />
+            </button>
+            {customizing && (
+              <div className="px-2.5 pb-1.5">
+                <p className="mt-1 text-xs leading-relaxed text-ink-faint">Tweaks sit on top of the theme above and are saved on this device only.</p>
+                {THEME_CATEGORIES.map((category) => (
+                  <div key={category} className="mt-4">
+                    <div className="section-title">{category}</div>
+                    <div className="mt-2 space-y-1.5">
+                      {THEME_TOKENS.filter((t) => t.category === category).map((token) => (
+                        <TokenRow key={token.key} token={token} />
+                      ))}
+                    </div>
+                  </div>
                 ))}
+                <Button className="mt-4 w-full" disabled={!anyOverridden} onClick={() => resetAllOverrides()}>
+                  Reset all to theme defaults
+                </Button>
               </div>
-            </div>
-          ))}
-
-          <Button className="mt-4 w-full" disabled={!anyOverridden} onClick={() => resetAllOverrides()}>
-            Reset all to preset defaults
-          </Button>
+            )}
+          </div>
         </div>
       )}
     </div>
+  );
+}
+
+/** Stops animations and transitions site-wide, the home hero included. */
+function ReduceMotionSwitch() {
+  const reduced = useReduceMotion();
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={reduced}
+      onClick={() => setReduceMotion(!reduced)}
+      className="flex w-full items-center justify-between gap-3 rounded-[10px] px-2.5 py-2 text-left text-sm font-medium text-ink-dim transition-colors duration-150 hover:bg-[var(--helium-elevated-10)] hover:text-ink"
+    >
+      <span>
+        Reduce motion
+        <span className="block text-xs font-normal text-ink-faint">Pauses the home animation and page transitions.</span>
+      </span>
+      <span
+        aria-hidden="true"
+        className={cx(
+          "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200",
+          reduced ? "bg-helium" : "bg-[var(--helium-elevated-15)]",
+        )}
+      >
+        <span className={cx("h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200", reduced ? "translate-x-[18px]" : "translate-x-0.5")} />
+      </span>
+    </button>
+  );
+}
+
+/** A preset row with a small preview of its own surfaces, text and accent. */
+function PresetOption({ preset, selected }: { preset: ThemePreset; selected: boolean }) {
+  const color = (key: string): string => presetValue(preset, tokenByKey(key));
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={() => setPreset(preset.key)}
+      className={cx(
+        "flex w-full items-center gap-3 rounded-[10px] px-2.5 py-2 text-left text-sm font-medium text-ink transition-colors duration-150 hover:bg-[var(--helium-elevated-10)]",
+        selected && "bg-[var(--helium-elevated-7)]",
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className="flex h-7 w-11 shrink-0 items-end gap-1 overflow-hidden rounded-[6px] border p-1"
+        style={{ background: color("ground"), borderColor: color("lineStrong") }}
+      >
+        <span className="h-full flex-1 rounded-[3px]" style={{ background: color("panel"), boxShadow: `inset 0 0 0 1px ${color("line")}` }} />
+        <span className="flex h-full w-2.5 flex-col justify-end gap-0.5">
+          <span className="h-1.5 rounded-full" style={{ background: color("ink") }} />
+          <span className="h-1.5 rounded-full" style={{ background: color("helium") }} />
+        </span>
+      </span>
+      <span className="flex-1">{preset.label}</span>
+      <IconCheck className={cx("!h-4 !w-4 text-ink-dim", !selected && "invisible")} />
+    </button>
   );
 }
 

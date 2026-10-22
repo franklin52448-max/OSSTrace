@@ -53,7 +53,7 @@
   --trace-text-faint: var(--color-ink-faint);
   --trace-accent: var(--color-helium);
   --trace-accent-strong: color-mix(in srgb, var(--color-helium) 85%, white);
-  --trace-accent-ink: #032529;
+  --trace-accent-ink: #ffffff;
   --trace-accent-soft: color-mix(in srgb, var(--color-helium) 12%, transparent);
   --trace-in: var(--color-inbound);
   --trace-in-soft: color-mix(in srgb, var(--color-inbound) 10%, transparent);
@@ -70,10 +70,10 @@
   --trace-node-red: #dc7a70;
   --trace-node-purple: #a993d8;
   --trace-node-gray: #9a9993;
-  --trace-grid-dot: rgba(160, 168, 167, 0.12);
-  --trace-radius-sm: 5px;
+  --trace-grid-dot: color-mix(in srgb, var(--color-ink-dim) 14%, transparent);
+  --trace-radius-sm: 8px;
   --trace-radius: var(--radius-card);
-  --trace-radius-lg: 12px;
+  --trace-radius-lg: 20px;
   --trace-font-sans: var(--font-sans);
   --trace-font-mono: var(--font-mono);
   --trace-topbar-h: 56px;
@@ -81,17 +81,17 @@
   --trace-page-max: 1440px;
   --trace-sidebar-w: 300px;
   --trace-zebra: rgba(255, 255, 255, 0.014);
-  --trace-rail: #0c1b1e;
-  --trace-rail-text: #e4eded;
-  --trace-rail-muted: #8e9d9e;
-  --trace-rail-hover: rgba(228, 237, 237, 0.06);
+  --trace-rail: var(--color-panel);
+  --trace-rail-text: var(--color-ink);
+  --trace-rail-muted: var(--color-ink-dim);
+  --trace-rail-hover: color-mix(in srgb, var(--color-ink) 6%, transparent);
   --trace-rail-active: color-mix(in srgb, var(--color-helium) 13%, transparent);
-  --trace-rail-border: #182a2e;
+  --trace-rail-border: var(--color-line);
   --trace-rail-accent: var(--color-helium);
   --trace-danger-soft-strong: color-mix(in srgb, var(--color-danger) 35%, transparent);
   --trace-shadow-overlay: 0 18px 44px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--trace-border-strong);
-  --trace-scrim: rgba(4, 8, 9, 0.62);
-  --trace-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23a0a8a7' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");
+  --trace-scrim: rgba(0, 0, 0, 0.62);
+  --trace-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23a1a1a8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");
 }
 @media (max-width: 1023px) {
   :root {
@@ -99,10 +99,8 @@
   }
 }
 :root[data-theme="light"] {
-  --trace-accent-ink: #ffffff;
-  --trace-zebra: rgba(18, 23, 24, 0.018);
-  --trace-grid-dot: rgba(18, 23, 24, 0.1);
-  --trace-shadow-overlay: 0 18px 44px rgba(16, 33, 37, 0.16), 0 2px 6px rgba(16, 33, 37, 0.08), 0 0 0 1px var(--trace-border-strong);
-  --trace-scrim: rgba(16, 33, 37, 0.38);
-  --trace-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%234f5859' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");
+  --trace-zebra: rgba(24, 24, 27, 0.018);
+  --trace-shadow-overlay: 0 18px 44px rgba(24, 24, 27, 0.14), 0 2px 6px rgba(24, 24, 27, 0.08), 0 0 0 1px var(--trace-border-strong);
+  --trace-scrim: rgba(24, 24, 27, 0.38);
+  --trace-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%2352525b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");
 }

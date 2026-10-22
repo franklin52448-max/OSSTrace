@@ -40,7 +40,23 @@ export function ChainIcon({ chain, size = 18, className }: { chain: ChainId; siz
   );
 }
 
-export function ChainSelect({ value, onChange, small, className }: { value: ChainId; onChange: (chain: ChainId) => void; small?: boolean; className?: string }) {
+export function ChainSelect({
+  value,
+  onChange,
+  small,
+  fullWidth,
+  label = "Chain",
+  className,
+}: {
+  value: ChainId;
+  onChange: (chain: ChainId) => void;
+  small?: boolean;
+  /** Fill the parent's width (form fields), chevron at the far end. */
+  fullWidth?: boolean;
+  /** What the picker chooses, for assistive tech: "Chain", "To chain", … */
+  label?: string;
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -101,7 +117,7 @@ export function ChainSelect({ value, onChange, small, className }: { value: Chai
       <button
         ref={buttonRef}
         type="button"
-        aria-label={`Chain: ${current.label}`}
+        aria-label={`${label}: ${current.label}`}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
@@ -114,13 +130,14 @@ export function ChainSelect({ value, onChange, small, className }: { value: Chai
         }}
         className={cx(
           "flex items-center gap-2 rounded-ctl bg-[var(--helium-elevated-7)] font-medium text-ink transition-colors duration-200 hover:bg-[var(--helium-elevated-10)]",
-          small ? "h-9 pl-3 pr-2.5 text-sm" : "h-[42px] pl-3.5 pr-3 text-[15px]",
+          // In a form field it matches the `.ctl` inputs beside it (same padding and type size).
+          fullWidth ? "min-h-[41px] w-full py-2.5 pl-3.5 pr-3 text-sm" : small ? "h-9 pl-3 pr-2.5 text-sm" : "h-[42px] pl-3.5 pr-3 text-[15px]",
           open && "bg-[var(--helium-elevated-10)]",
         )}
       >
         <ChainIcon chain={current.value} size={small ? 16 : 18} />
         {current.label}
-        <IconChevronDown className={cx("h-4 w-4 text-ink-faint transition-transform duration-200", open && "rotate-180")} />
+        <IconChevronDown className={cx("h-4 w-4 text-ink-faint transition-transform duration-200", fullWidth && "ml-auto", open && "rotate-180")} />
       </button>
 
       {open && (
@@ -129,7 +146,7 @@ export function ChainSelect({ value, onChange, small, className }: { value: Chai
           id={listId}
           role="listbox"
           tabIndex={-1}
-          aria-label="Chain"
+          aria-label={label}
           aria-activedescendant={`${listId}-${active}`}
           onKeyDown={onListKeyDown}
           className="card absolute left-0 top-[calc(100%+6px)] z-40 min-w-full p-1 outline-none"

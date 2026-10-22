@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * Site-wide theme system: a dark/light toggle plus full per-color customization (the "Customize
- * theme" panel, ThemeCustomizer.tsx).
+ * Site-wide theme system: three presets (Dark, Light, Nord) plus full per-color customization (the
+ * header's Theme menu, ThemeCustomizer.tsx).
  *
  * The whole app is painted from one list of CSS custom properties — THEME_TOKENS. Tailwind's
  * `@theme` block in index.css declares each one's default, and the ported Prism component styles
@@ -35,26 +35,26 @@ export interface ThemeToken {
 
 export const THEME_TOKENS: readonly ThemeToken[] = [
   // Backgrounds
-  { key: "ground", cssVar: "--color-ground", label: "Page background", category: "Backgrounds", defaultDark: "#0e1112", defaultLight: "#edf0ef" },
-  { key: "groundDeep", cssVar: "--color-ground-deep", label: "Graph background", category: "Backgrounds", defaultDark: "#0e1112", defaultLight: "#edf0ef" },
-  { key: "panel", cssVar: "--color-panel", label: "Card background", category: "Backgrounds", defaultDark: "#15191b", defaultLight: "#ffffff" },
-  { key: "raised", cssVar: "--color-raised", label: "Raised surface", category: "Backgrounds", defaultDark: "#1c2124", defaultLight: "#f3f5f4" },
-  { key: "line", cssVar: "--color-line", label: "Border", category: "Backgrounds", defaultDark: "#252b2e", defaultLight: "#dbe0df" },
-  { key: "lineStrong", cssVar: "--color-line-strong", label: "Strong border", category: "Backgrounds", defaultDark: "#353d41", defaultLight: "#bcc4c3" },
+  { key: "ground", cssVar: "--color-ground", label: "Page background", category: "Backgrounds", defaultDark: "#000000", defaultLight: "#f7f7f8" },
+  { key: "groundDeep", cssVar: "--color-ground-deep", label: "Graph background", category: "Backgrounds", defaultDark: "#000000", defaultLight: "#f2f2f4" },
+  { key: "panel", cssVar: "--color-panel", label: "Card background", category: "Backgrounds", defaultDark: "#0a0a0b", defaultLight: "#ffffff" },
+  { key: "raised", cssVar: "--color-raised", label: "Raised surface", category: "Backgrounds", defaultDark: "#131315", defaultLight: "#f1f1f3" },
+  { key: "line", cssVar: "--color-line", label: "Border", category: "Backgrounds", defaultDark: "#1c1c1f", defaultLight: "#e4e4e7" },
+  { key: "lineStrong", cssVar: "--color-line-strong", label: "Strong border", category: "Backgrounds", defaultDark: "#2a2a2e", defaultLight: "#d4d4d8" },
   // Text
-  { key: "ink", cssVar: "--color-ink", label: "Primary text", category: "Text", defaultDark: "#e6e8e6", defaultLight: "#121718" },
-  { key: "inkDim", cssVar: "--color-ink-dim", label: "Secondary text", category: "Text", defaultDark: "#a0a8a7", defaultLight: "#4f5859" },
-  { key: "inkFaint", cssVar: "--color-ink-faint", label: "Faint text", category: "Text", defaultDark: "#7f8988", defaultLight: "#646e6f" },
+  { key: "ink", cssVar: "--color-ink", label: "Primary text", category: "Text", defaultDark: "#ededef", defaultLight: "#18181b" },
+  { key: "inkDim", cssVar: "--color-ink-dim", label: "Secondary text", category: "Text", defaultDark: "#a1a1a8", defaultLight: "#52525b" },
+  { key: "inkFaint", cssVar: "--color-ink-faint", label: "Faint text", category: "Text", defaultDark: "#75757c", defaultLight: "#6b6b74" },
   // Accent
-  { key: "signal", cssVar: "--color-signal", label: "Highlight accent", category: "Accent", defaultDark: "#4fc4cf", defaultLight: "#0b7380" },
-  { key: "helium", cssVar: "--color-helium", label: "Primary action", category: "Accent", defaultDark: "#4fc4cf", defaultLight: "#0b7380" },
+  { key: "signal", cssVar: "--color-signal", label: "Highlight accent", category: "Accent", defaultDark: "#8ea2ff", defaultLight: "#3450d1" },
+  { key: "helium", cssVar: "--color-helium", label: "Primary action", category: "Accent", defaultDark: "#3450d1", defaultLight: "#3450d1" },
   // Status
-  { key: "inbound", cssVar: "--color-inbound", label: "Inbound / success", category: "Status", defaultDark: "#78c793", defaultLight: "#1b7a45" },
-  { key: "outbound", cssVar: "--color-outbound", label: "Outbound", category: "Status", defaultDark: "#e3a35d", defaultLight: "#a3590f" },
-  { key: "warn", cssVar: "--color-warn", label: "Warning", category: "Status", defaultDark: "#dcbf62", defaultLight: "#876a07" },
-  { key: "danger", cssVar: "--color-danger", label: "Danger", category: "Status", defaultDark: "#ef7b6f", defaultLight: "#b8322a" },
-  { key: "info", cssVar: "--color-info", label: "Info", category: "Status", defaultDark: "#4fc4cf", defaultLight: "#0b7380" },
-  { key: "private", cssVar: "--color-private", label: "Private label", category: "Status", defaultDark: "#a993d8", defaultLight: "#6e55b0" },
+  { key: "inbound", cssVar: "--color-inbound", label: "Inbound / success", category: "Status", defaultDark: "#4ad6a0", defaultLight: "#15803d" },
+  { key: "outbound", cssVar: "--color-outbound", label: "Outbound", category: "Status", defaultDark: "#f5a35c", defaultLight: "#c2410c" },
+  { key: "warn", cssVar: "--color-warn", label: "Warning", category: "Status", defaultDark: "#f4c76a", defaultLight: "#a16207" },
+  { key: "danger", cssVar: "--color-danger", label: "Danger", category: "Status", defaultDark: "#f47b7b", defaultLight: "#dc2626" },
+  { key: "info", cssVar: "--color-info", label: "Info", category: "Status", defaultDark: "#7cc4f5", defaultLight: "#0369a1" },
+  { key: "private", cssVar: "--color-private", label: "Private label", category: "Status", defaultDark: "#b7a6f8", defaultLight: "#7c3aed" },
 ];
 
 /** Category display order, derived from THEME_TOKENS itself — add a token in a new category and it shows up with no further wiring. */
@@ -73,6 +73,31 @@ export interface ThemePreset {
 export const THEME_PRESETS: readonly ThemePreset[] = [
   { key: "dark", label: "Dark", mode: "dark" },
   { key: "light", label: "Light", mode: "light" },
+  {
+    // Nord (https://www.nordtheme.com): Polar Night surfaces, Snow Storm text, Frost accents, Aurora states.
+    key: "nord",
+    label: "Nord",
+    mode: "dark",
+    values: {
+      ground: "#2e3440",
+      groundDeep: "#2b303b",
+      panel: "#353c4a",
+      raised: "#3b4252",
+      line: "#434c5e",
+      lineStrong: "#4c566a",
+      ink: "#eceff4",
+      inkDim: "#d8dee9",
+      inkFaint: "#a7b0c0",
+      signal: "#88c0d0",
+      helium: "#5e81ac",
+      inbound: "#a3be8c",
+      outbound: "#d08770",
+      warn: "#ebcb8b",
+      danger: "#bf616a",
+      info: "#81a1c1",
+      private: "#b48ead",
+    },
+  },
 ];
 const DEFAULT_PRESET: ThemePreset = THEME_PRESETS[0]!;
 

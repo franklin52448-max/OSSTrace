@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChainId } from "@osstrace/core";
 import { forceLayout, type Point } from "./layout.ts";
 import { ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
-import { formatTimestamp } from "./timeDisplay.ts";
 import { CopyButton } from "./prism/components.tsx";
+import { ChainSelect } from "./ChainSelect.tsx";
 import { Loading, Notice, PageHeader } from "./ui.tsx";
+import { formatTimestamp } from "./timeDisplay.ts";
 
 const VISUALIZER_URL = import.meta.env["VITE_VISUALIZER_URL"] ?? "http://localhost:5302";
 /** Same `#address/<chain>/<address>` route App.tsx's router reads. */
@@ -137,10 +138,7 @@ export default function GraphView({ initial = null }: { initial?: { chain: Chain
 
       {/* Toolbar: chain / address / transaction-count controls over the graph workspace. */}
       <form onSubmit={handleSubmit} className="card flex flex-col gap-2 p-3 sm:flex-row">
-        <select value={chain} onChange={(e) => setChain(e.target.value as ChainId)} aria-label="Chain" className="ctl shrink-0">
-          <option value="ethereum">Ethereum</option>
-          <option value="solana">Solana</option>
-        </select>
+        <ChainSelect value={chain} onChange={setChain} fullWidth className="shrink-0 sm:w-44" />
         <input
           value={address}
           onChange={(e) => setAddress(e.target.value)}

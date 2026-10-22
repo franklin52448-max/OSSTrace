@@ -1,4 +1,4 @@
-@import "@fontsource-variable/libre-franklin";
+@import "@fontsource-variable/instrument-sans";
 @import "@fontsource-variable/jetbrains-mono";
 @import "tailwindcss";
 @import "./prism/prism.css";
@@ -7,40 +7,41 @@
 @import "./kit/graph.css";
 
 /* ---------------------------------------------------------------------------------------------
-   OSSTrace design system, built on Helium Prism (src/prism) for component structure/behaviour,
-   with a teal-accented slate palette, tighter control radii and Libre Franklin on top. Addresses,
-   hashes and numerals always set in the mono face; lists use tabular figures.
+   OSSTrace design system, built on Helium Prism (src/prism): near-black neutral surfaces, Instrument
+   Sans, pill buttons and soft elevated fills, with a dense intel-dashboard layout on top. The values
+   below are the Dark preset; theme.ts repaints them at runtime for Light, Nord and customizations.
+   Addresses, hashes and numerals always set in the mono face; lists use tabular figures.
    --------------------------------------------------------------------------------------------- */
 
 @theme {
-  --font-sans: "Libre Franklin Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Surfaces: dark slate, neutral panels lifted one and two steps. Teal is kept for accents only. */
-  --color-ground: #0e1112;
-  --color-ground-deep: #0e1112;
-  --color-panel: #15191b;
-  --color-raised: #1c2124;
-  --color-line: #252b2e;
-  --color-line-strong: #353d41;
+  /* Surfaces: true black, neutral panels lifted one and two steps. Blue is kept for accents only. */
+  --color-ground: #000000;
+  --color-ground-deep: #000000;
+  --color-panel: #0a0a0b;
+  --color-raised: #131315;
+  --color-line: #1c1c1f;
+  --color-line-strong: #2a2a2e;
 
-  /* Ink: neutral greys (primary / secondary / tertiary roles). */
-  --color-ink: #e6e8e6;
-  --color-ink-dim: #a0a8a7;
-  --color-ink-faint: #7f8988;
+  /* Ink: neutral greys (Prism's primary / secondary / tertiary roles). */
+  --color-ink: #ededef;
+  --color-ink-dim: #a1a1a8;
+  --color-ink-faint: #75757c;
 
-  /* Accent is a single teal; semantic state colours tuned to sit on slate. */
-  --color-signal: #4fc4cf;
-  --color-helium: #4fc4cf;
-  --color-inbound: #78c793;
-  --color-outbound: #e3a35d;
-  --color-warn: #dcbf62;
-  --color-danger: #ef7b6f;
-  --color-info: #4fc4cf;
-  --color-private: #a993d8;
+  /* Accent is Prism's elevated periwinkle; semantic state colours tuned to sit on black. */
+  --color-signal: #8ea2ff;
+  --color-helium: #3450d1;
+  --color-inbound: #4ad6a0;
+  --color-outbound: #f5a35c;
+  --color-warn: #f4c76a;
+  --color-danger: #f47b7b;
+  --color-info: #7cc4f5;
+  --color-private: #b7a6f8;
 
-  --radius-card: 8px;
-  --radius-ctl: 5px;
+  --radius-card: 16px;
+  --radius-ctl: 12px;
   --radius-chip: 999px;
 
   --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 16px 32px -24px rgb(0 0 0 / 0.7);
@@ -222,6 +223,16 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: 0;
   }
+}
+
+/* "Reduce motion" (motion.ts, from the Theme menu): stop animations and transitions everywhere. */
+:root[data-reduce-motion] *,
+:root[data-reduce-motion] *::before,
+:root[data-reduce-motion] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }
 
 /* Numerals that align in lists (balances, values, counts). */

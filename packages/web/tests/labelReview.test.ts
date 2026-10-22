@@ -2,7 +2,7 @@ import { after, afterEach, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { window } from "./harness/env.ts";
-import { cleanup, click, consoleErrors, during, getButton, getByLabelText, getSubmitButton, render, text, type, waitFor } from "./harness/render.ts";
+import { cleanup, click, consoleErrors, during, getButton, getByLabelText, getSubmitButton, render, settle, text, type, waitFor } from "./harness/render.ts";
 import { FixedBalanceAdapter, startStack, type Stack } from "./harness/servers.ts";
 
 // LabelReview.tsx: the trust-tier badge and byline (pure rendering of a label), and the
@@ -90,10 +90,11 @@ test("ReviewBadge and SubmissionByline: one distinct badge + byline per review t
   assert.deepEqual(consoleErrors, []);
 });
 
-test("LabelSubmitForm signed out: an invitation to log in, no form", async () => {
+test("LabelSubmitForm signed out: renders nothing (the report shows one combined log-in prompt instead)", async () => {
   await render(createElement(LabelReview.LabelSubmitForm, { chain: "ethereum", address: ADDRESS, onSubmitted: () => {} }));
-  await waitFor(() => text().includes("Log in to suggest a label for this address."), "the logged-out prompt");
+  for (let i = 0; i < 5; i++) await settle();
   assert.equal(document.querySelector("form"), null);
+  assert.equal(document.querySelector("button"), null, "not even the button that opens the form");
   assert.deepEqual(consoleErrors, []);
 });
 

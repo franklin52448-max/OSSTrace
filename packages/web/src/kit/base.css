@@ -84,12 +84,12 @@
     font-variant-numeric: tabular-nums;
   }
   .kit-colhead {
-    font-family: var(--trace-font-mono);
+    font-family: var(--trace-font-sans);
     font-size: 11px;
-    font-weight: 500;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: var(--trace-text-muted);
+    letter-spacing: 0.06em;
+    color: var(--trace-text-faint);
   }
 
   /* Panels: every data surface sits in one. No shadow; depth comes from surface tone. */
@@ -107,19 +107,16 @@
     gap: 4px 16px;
     min-height: 40px;
     padding: 0 12px;
-    background: var(--trace-surface-2);
     border-bottom: 1px solid var(--trace-border);
   }
   .kit-panel-title {
-    font-family: var(--trace-font-mono);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-family: var(--trace-font-sans);
+    font-size: 14px;
+    font-weight: 500;
     color: var(--trace-text);
   }
 
-  /* In-panel tabs: mono caps in the panel header strip. */
+  /* In-panel tabs in the panel header strip, set like the site's card headings. */
   .kit-ptab {
     position: relative;
     display: inline-flex;
@@ -127,11 +124,9 @@
     gap: 6px;
     height: 40px;
     padding: 0 12px;
-    font-family: var(--trace-font-mono);
-    font-size: 11px;
+    font-family: var(--trace-font-sans);
+    font-size: 13.5px;
     font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
     color: var(--trace-text-muted);
   }
   .kit-ptab:hover {

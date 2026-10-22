@@ -61,7 +61,7 @@ async function createCase(title: string, description: string): Promise<void> {
 
 async function backToList(): Promise<void> {
   await click(getButton("← All cases"));
-  await waitFor(() => !text().includes("← All cases") && !text().includes("Loading…"), "the case list");
+  await waitFor(() => !text().includes("All cases") && !text().includes("Loading…"), "the case list");
 }
 
 /** The list item for `address` inside the case's Addresses section. */
@@ -90,6 +90,7 @@ async function apiListCases(email: string): Promise<{ id: string; title: string;
 test("logged out, the view asks for a log in and offers no case controls", async () => {
   await render(createElement(CasesView));
   await waitFor(() => text().includes("Log in to open a case"), "the logged-out prompt");
+  assert.ok(getButton("Log in"), "the prompt offers a way to log in");
   assert.ok(!text().includes("New case"));
   assert.deepEqual(consoleErrors, []);
 });

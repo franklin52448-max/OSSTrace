@@ -138,11 +138,8 @@ export function LabelSubmitForm({
     // Only a new share click (or a different address) re-runs this, not every keystroke elsewhere.
   }, [shareRequest, token, chain, address]);
 
-  if (session.status !== "signed-in" || !token) {
-    return session.status === "anonymous" ? (
-      <div className="text-xs text-ink-faint">Log in to suggest a label for this address.</div>
-    ) : null;
-  }
+  // Signed out: the report shows one combined sign-in prompt instead.
+  if (session.status !== "signed-in" || !token) return null;
   function close(): void {
     setOpen(false);
     setSharing(false);

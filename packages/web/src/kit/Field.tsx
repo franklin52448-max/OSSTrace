@@ -2,7 +2,7 @@ import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type Selec
 import { cn } from "./cn.ts";
 
 const control =
-  "kit-fade w-full rounded-sm border border-border bg-surface px-2.5 text-[13px] text-text shadow-[inset_0_1px_0_rgba(0,0,0,0.04)] placeholder:text-faint hover:border-border-strong focus-visible:border-accent focus-visible:outline-offset-0 aria-[invalid=true]:border-danger disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-muted";
+  "kit-fade w-full rounded-[var(--radius-ctl)] border border-transparent bg-[var(--helium-elevated-7)] px-3 text-[13px] text-text placeholder:text-faint hover:bg-[var(--helium-elevated-10)] focus-visible:bg-[var(--helium-elevated-10)] focus-visible:outline-offset-0 aria-[invalid=true]:border-danger disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-muted";
 
 /** Label above, help or error below, wired with aria-describedby. Render-prop gives the control its ids. */
 export function Field({

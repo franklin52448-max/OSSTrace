@@ -59,6 +59,14 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+/** The `<select>` a visible `<label>` names (the form's fields carry visible labels, not aria-labels). */
+function selectLabelled(labelText: string): HTMLSelectElement {
+  for (const label of document.querySelectorAll("label")) {
+    if (text(label).trim().startsWith(labelText) && label.control?.tagName === "SELECT") return label.control as HTMLSelectElement;
+  }
+  throw new Error(`no select labelled "${labelText}"`);
+}
+
 /** The trace result's section whose header is `title`. */
 function section(title: string): HTMLElement | null {
   return [...document.querySelectorAll("section")].find((s) => text(s.querySelector("h2") ?? s).trim() === title) ?? null;
@@ -96,7 +104,7 @@ test("expand a single-chain graph two hops out: every real edge, and what wasn't
 test("with one hop, the same address's neighbours become the frontier", async () => {
   await render(createElement(TracerView));
   await fill(getByLabelText("From"), CENTER);
-  await choose(getByLabelText<HTMLSelectElement>("Hops"), "1");
+  await choose(selectLabelled("Hops"), "1");
   await click(getButton("Expand graph"));
   const graph = await waitFor(() => section("Expanded graph"), "the expanded graph");
   assert.ok(text(graph).includes("1 nodes expanded"));
@@ -109,7 +117,7 @@ test("with one hop, the same address's neighbours become the frontier", async ()
 test("find a single-chain path, hop by hop", async () => {
   await render(createElement(TracerView));
   await fill(getByLabelText("From"), CENTER);
-  await fill(getByLabelText("To ("), ONWARD);
+  await fill(getByLabelText("To (optional)"), ONWARD);
   await click(getButton("Find path"));
   await waitFor(() => text().includes("Path found"), "the path result");
   assert.ok(text().includes("Path found — 2 hops, every edge matches the filters."), text());
@@ -125,7 +133,7 @@ test("find a single-chain path, hop by hop", async () => {
 test("a path that doesn't exist is reported as not found, with how far the search went", async () => {
   await render(createElement(TracerView));
   await fill(getByLabelText("From"), ONWARD);
-  await fill(getByLabelText("To ("), CENTER);
+  await fill(getByLabelText("To (optional)"), CENTER);
   await click(getButton("Find path"));
   await waitFor(() => text().includes("No matching path found"), "the not-found result");
   // ONWARD has no history at all: the search checked it, had nothing to follow, and stopped
@@ -147,8 +155,8 @@ test("the API's own error for a malformed address is shown", async () => {
 test("Follow Wormhole bridges: a real recorded Ethereum → Solana transfer is drawn as a bridge hop", async () => {
   await render(createElement(TracerView));
   await fill(getByLabelText("From"), ETH_NODE);
-  await choose(getByLabelText<HTMLSelectElement>("Hops"), "1");
-  const toggle = getByLabelText<HTMLInputElement>("Follow Wormhole bridges");
+  await choose(selectLabelled("Hops"), "1");
+  const toggle = getByLabelText("Follow Wormhole bridges");
   await click(toggle);
   assert.equal(toggle.checked, true);
   await click(getButton("Expand graph"));

@@ -8,7 +8,7 @@
    --------------------------------------------------------------------------------------------- */
 
 :root {
-  --font: "Libre Franklin Variable", system-ui, Helvetica, Arial, sans-serif;
+  --font: "Instrument Sans Variable", system-ui, Helvetica, Arial, sans-serif;
 
   /* Prism's own variable names, aliased onto OSSTrace's themeable tokens (index.css's `@theme`
      block, driven at runtime by ../theme.ts) so there is exactly one place a theme — built-in or

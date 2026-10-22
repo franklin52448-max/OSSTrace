@@ -81,6 +81,21 @@ test("setPreset('light') repaints every token to its light default", async () =>
   assert.equal(window.document.documentElement.style.colorScheme, "light");
 });
 
+test("setPreset('nord') paints every token from Nord's own values, as a dark-mode theme", async () => {
+  const theme = await freshTheme();
+  theme.setPreset("nord");
+  const nord = theme.THEME_PRESETS.find((p) => p.key === "nord")!;
+  for (const token of theme.THEME_TOKENS) {
+    assert.ok(nord.values?.[token.key], `Nord sets ${token.key} itself rather than borrowing Dark's`);
+    assert.equal(window.document.documentElement.style.getPropertyValue(token.cssVar), nord.values[token.key], token.key);
+  }
+  assert.equal(window.document.documentElement.getAttribute("data-theme"), "dark");
+  assert.deepEqual(JSON.parse(window.localStorage.getItem("osstrace.theme")!), { preset: "nord", overrides: {} });
+  // And a reload brings it back.
+  await freshTheme();
+  assert.equal(window.document.documentElement.style.getPropertyValue("--color-ground"), "#2e3440");
+});
+
 test("setPreset ignores an unknown preset key (no throw, nothing changes)", async () => {
   const theme = await freshTheme();
   const ground = theme.THEME_TOKENS.find((t) => t.key === "ground")!;

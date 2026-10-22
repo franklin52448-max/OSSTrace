@@ -67,6 +67,10 @@ What's covered so far:
 - `tests/accountPanel.test.ts`: the email/password inputs are named by visible `<label>`s in both
   modes. A failed log in or sign up (real API errors) lands in the form's single `role="alert"`
   region, which is mounted before the error appears.
+- `tests/theme.test.ts`: the token/preset/override resolution logic, persistence, and recovery
+  from garbage in `localStorage`. `tests/themeCustomizer.test.ts`: the toggle and the popover
+  (open/close on click, Escape, outside pointerdown; editing and resetting a token; presets;
+  "reset all"; a choice surviving into a freshly rendered pair of controls).
 
 Each test file runs in its own process (`node --test` does that), and the hook only applies there,
 so the harness never affects the Vite dev server or build.
@@ -130,6 +134,21 @@ unknown, the exact raw integer amount is shown and labelled as raw units. A tran
 reports as `status: "failed"` (reverted on-chain) is marked **FAILED · nothing moved**, and its
 amounts are struck through with no +/- sign or direction colour: they're what it attempted, not
 what moved (`src/txDisplay.ts`, covered by `tests/txDisplay.test.ts`).
+
+## Theming
+
+`src/theme.ts` + `src/ThemeCustomizer.tsx` (ADR 0021): a dark/light toggle (sun/moon icon, top
+right) and a full "Customize theme" popover (palette icon next to it) that retints every themed
+surface live — every color in `index.css`'s `@theme` block, which the ported Prism component
+styles in `src/prism/prism.css` now alias into rather than duplicating. Nothing is hardcoded per
+view: `THEME_TOKENS` in `theme.ts` is the one list every themed surface and the customize panel
+both read, grouped into Backgrounds / Text / Accent / Status. Adding a new customizable color, or
+a new built-in preset (beyond the two shipped, `Dark` and `Light`), is one entry in that file —
+see the ADR for exactly what to add where. A visitor's choice (`{ preset, overrides }`) is saved
+to `localStorage` only (`osstrace.theme`), per browser, applied before first paint so there's no
+flash of the wrong theme on return. The home page's WebGPU/WebGL hero background reads the
+resolved mode directly (it's a `<canvas>`, so it can't read a CSS variable) via the same
+`useThemeMode()` hook.
 
 ## Cases
 

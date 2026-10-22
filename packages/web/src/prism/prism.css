@@ -10,25 +10,31 @@
 :root {
   --font: "Instrument Sans Variable", system-ui, Helvetica, Arial, sans-serif;
 
-  --primary: #ededef;
-  --secondary: #a1a1a8;
-  --tertiary: #75757c;
+  /* Prism's own variable names, aliased onto OSSTrace's themeable tokens (index.css's `@theme`
+     block, driven at runtime by ../theme.ts) so there is exactly one place a theme — built-in or
+     a site operator's own — sets color, never two palettes to keep in sync. Only --white and the
+     two derived hover/press shades stay literal/computed here: --white is a fixed on-accent color
+     (never a themed surface), and the hover/press shades are computed from whatever the accent
+     token currently is, so they track it automatically without their own token. */
+  --primary: var(--color-ink);
+  --secondary: var(--color-ink-dim);
+  --tertiary: var(--color-ink-faint);
   --white: #ffffff;
 
-  --helium-blue: #3450d1;
-  --helium-blue-hover: #3a58db;
-  --helium-blue-press: #304bc2;
+  --helium-blue: var(--color-helium);
+  --helium-blue-hover: color-mix(in srgb, var(--helium-blue) 88%, white);
+  --helium-blue-press: color-mix(in srgb, var(--helium-blue) 88%, black);
 
-  --bg-surface: #000000;
+  --bg-surface: var(--color-ground);
   --bg-gradient-start: #0a0a0b;
   --bg-gradient-end: #1c1c1f;
 
   --background: var(--bg-surface);
 
-  --tooltip-bg: #18181b;
+  --tooltip-bg: var(--color-raised);
   --tooltip-shadow: color-mix(in srgb, var(--tooltip-bg) 40%, transparent);
 
-  --helium-elevated: #b4b4bc;
+  --helium-elevated: var(--color-ink);
   --helium-elevated-5: color-mix(in srgb, var(--helium-elevated) 5%, transparent);
   --helium-elevated-7: color-mix(in srgb, var(--helium-elevated) 7%, transparent);
   --helium-elevated-10: color-mix(in srgb, var(--helium-elevated) 10%, transparent);

@@ -25,6 +25,7 @@ function icon(paths: ReactNode) {
   };
 }
 
+export const IconArrowBackUp = icon(<><path d="M9 13l-4 -4l4 -4" /><path d="M5 9h7a4 4 0 1 1 0 8h-1" /></>);
 export const IconArrowDown = icon(<><path d="M12 5l0 14" /><path d="M18 13l-6 6" /><path d="M6 13l6 6" /></>);
 export const IconArrowLeft = icon(<><path d="M5 12l14 0" /><path d="M5 12l6 6" /><path d="M5 12l6 -6" /></>);
 export const IconArrowRight = icon(<><path d="M5 12l14 0" /><path d="M13 18l6 -6" /><path d="M13 6l6 6" /></>);
@@ -55,7 +56,31 @@ export const IconLink = icon(
   </>,
 );
 export const IconLoader = icon(<path d="M12 3a9 9 0 1 0 9 9" />);
+export const IconMoon = icon(
+  <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />,
+);
+export const IconPalette = icon(
+  <>
+    <path d="M12 21a9 9 0 0 1 0 -18c4.97 0 9 3.582 9 8c0 1.06 -.474 2.078 -1.318 2.828c-.844 .75 -1.989 1.172 -3.182 1.172h-2.5a2 2 0 0 0 -1 3.75a1.3 1.3 0 0 1 -1 2.25" />
+    <path d="M8.5 10.5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+    <path d="M12.5 7.5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+    <path d="M16.5 10.5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+  </>,
+);
 export const IconSearch = icon(<><path d="M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></>);
+export const IconSun = icon(
+  <>
+    <path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
+    <path d="M12 3l0 1" />
+    <path d="M12 20l0 1" />
+    <path d="M3 12l1 0" />
+    <path d="M20 12l1 0" />
+    <path d="M5.6 5.6l.7 .7" />
+    <path d="M17.7 17.7l.7 .7" />
+    <path d="M5.6 18.4l.7 -.7" />
+    <path d="M17.7 6.3l.7 -.7" />
+  </>,
+);
 export const IconWorld = icon(
   <>
     <path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" />

@@ -58,6 +58,7 @@ harder for the next contributor to understand, it probably isn't. See
 | More chains (Bitcoin, Tron, etc.) | Not built — see [Adding a chain](packages/chains/README.md) |
 | AI agent for natural-language on-chain questions ("has wallet A sent wallet B more than $100 of USDC in the last 30 days?"), backed by Tracer's real traversal, never a guessed answer | Not built — see "Bounties" below |
 | Bounty board (`GET`/`POST /bounties`, web UI Bounties tab — [ADR 0009](docs/adr/0009-bounty-program-v1-is-tracking-only.md), [`packages/features/bounties`](packages/features/bounties/README.md)): anyone opens a bounty with a spec + their own stated reward, anyone submits a PR against it, a moderator records the winner | **Active** (tracks the workflow only — never holds or moves the reward; see "Bounties" below) |
+| Site theming — dark/light toggle plus a full "Customize theme" panel that retints every surface live, built from one token list a fork can extend ([ADR 0021](docs/adr/0021-site-theming-dark-light-and-per-token-customization.md), [`packages/web`](packages/web/README.md#theming)) | **Active** (per-browser via `localStorage`, no account sync yet) |
 
 **The honest pitch today**: a real, working address-lookup tool across Ethereum and Solana, with a
 small, genuinely-sourced seed labelset, real multi-hop tracing, sanctions-exposure risk scoring,

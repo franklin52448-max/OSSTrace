@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import "./theme.ts"; // applies the saved theme before first paint — must stay the first import (see theme.ts)
 import App from "./App.tsx";
 import "./index.css";
 

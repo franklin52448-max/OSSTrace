@@ -7,6 +7,8 @@ import CasesView from "./CasesView.tsx";
 import PrivateLabelPanel from "./PrivateLabelPanel.tsx";
 import RiskPanel from "./RiskPanel.tsx";
 import AccountPanel from "./AccountPanel.tsx";
+import ThemeCustomizer, { ThemeToggle } from "./ThemeCustomizer.tsx";
+import { useThemeMode } from "./theme.ts";
 import ModerationView from "./ModerationView.tsx";
 import { LabelSubmitForm, ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
 import { isModerator, useSession } from "./session.ts";
@@ -185,7 +187,9 @@ export default function App() {
               <GlobalSearch key={targetKey} initial={route.target} small />
             </div>
           )}
-          <div className={cx("ml-auto shrink-0", !home && "md:ml-0")}>
+          <div className={cx("ml-auto flex shrink-0 items-center gap-1", !home && "md:ml-0")}>
+            <ThemeToggle />
+            <ThemeCustomizer />
             <AccountPanel />
           </div>
         </div>
@@ -289,12 +293,18 @@ const HERO_FLUID = {
   spikeHeight: 0.45,
 } satisfies FerrofluidProps;
 
-/** Aero Shards needs WebGPU; where it can't start, the WebGL2 ferrofluid takes its place. */
+/** Aero Shards needs WebGPU; where it can't start, the WebGL2 ferrofluid takes its place. Both read
+ * the site theme's mode directly (not a CSS var) since their lighting model runs on the GPU. */
 function HeroBackground() {
   const [webgpuFailed, setWebgpuFailed] = useState(false);
+  const lightMode = useThemeMode() === "light";
   return (
     <Suspense fallback={null}>
-      {webgpuFailed ? <Ferrofluid {...HERO_FLUID} /> : <AeroShards {...HERO_SHARDS} onError={() => setWebgpuFailed(true)} />}
+      {webgpuFailed ? (
+        <Ferrofluid {...HERO_FLUID} lightMode={lightMode} />
+      ) : (
+        <AeroShards {...HERO_SHARDS} lightMode={lightMode} onError={() => setWebgpuFailed(true)} />
+      )}
     </Suspense>
   );
 }
@@ -317,10 +327,12 @@ function Home() {
         />
         {/* Fills the screen under the sticky header (103px tall while the nav wraps below lg, 65px above). */}
         <div className="mx-auto flex min-h-[max(560px,calc(100svh-103px))] max-w-3xl flex-col justify-center px-4 py-20 text-center lg:min-h-[max(560px,calc(100svh-65px))]">
-          <Text variant="display" tone="primary" center className="[text-shadow:0_2px_24px_rgb(0_0_0/0.9)] sm:!text-[52px]">
+          {/* The scrim behind this text is a fixed black vignette (for legibility over the shard animation) in both
+              themes, so the text itself stays fixed white rather than following --color-ink into near-black on Light. */}
+          <Text variant="display" tone="primary" center className="!text-white [text-shadow:0_2px_24px_rgb(0_0_0/0.9)] sm:!text-[52px]">
             On-chain intelligence, in the open.
           </Text>
-          <Text tone="secondary" center className="mx-auto mt-4 max-w-xl [text-shadow:0_1px_12px_rgb(0_0_0),0_0_4px_rgb(0_0_0)]">
+          <Text tone="secondary" center className="mx-auto mt-4 max-w-xl !text-white/70 [text-shadow:0_1px_12px_rgb(0_0_0),0_0_4px_rgb(0_0_0)]">
             Look up any Ethereum or Solana address: real balances, recent transactions, and only labels with a cited public
             source.
           </Text>
@@ -331,7 +343,7 @@ function Home() {
         <button
           type="button"
           onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}
-          className="group absolute inset-x-0 bottom-6 mx-auto flex w-fit flex-col items-center gap-1 text-xs font-medium text-ink-faint transition-colors duration-150 hover:text-ink"
+          className="group absolute inset-x-0 bottom-6 mx-auto flex w-fit flex-col items-center gap-1 text-xs font-medium !text-white/60 transition-colors duration-150 hover:!text-white"
         >
           How it works
           <IconChevronDown className="h-5 w-5 motion-safe:animate-bounce" />

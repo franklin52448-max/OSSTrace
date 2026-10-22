@@ -5,22 +5,41 @@ import { window } from "./harness/env.ts";
 import { cleanup, click, consoleErrors, during, getButton, getByLabelText, render, settle, text, type, waitFor } from "./harness/render.ts";
 import { FixedBalanceAdapter, startStack, type HeldRequest, type Stack } from "./harness/servers.ts";
 
-// The Lookup view against the real Explorer, accounts and community-labels APIs, driven through
-// the whole App (routing included: App() keys Lookup by `${chain}:${address}`, so navigating to a
-// different address unmounts the old Lookup instance entirely). The only thing the test controls
-// is when each Explorer response is allowed to leave the server.
+// Lookup is retired from the live route (ExplorePage replaces it at #address/...) but kept, with
+// its own test coverage, since it's the only place sanctions tags, live updates and community
+// label review/moderation still live. This drives it directly (AccountPanel alongside it for the
+// real session-restore signal) rather than through App's hash routing, the same way
+// tracerView.test.ts/graphView.test.ts test their own retired components directly.
 
 const A = "0x41675c099f32341bf84bfc5382af534df5c7461a";
 const B = "0x252a8bd2319d8a555b872990601221b3a2053bce";
 const A_BALANCE = "111.111";
 const B_BALANCE = "222.222";
 let stack: Stack;
-let App: ComponentType;
-let addressHref: (chain: "ethereum", address: string) => string;
+let Lookup: ComponentType<{ chain: "ethereum"; address: string }>;
+let AccountPanel: ComponentType;
 
 /** The next Explorer request for `address`, held at the server until released. */
 const nextRequest = (address: string): Promise<HeldRequest> => during(stack.nextExplorerRequest(`/address/ethereum/${address}`));
 const release = (request: HeldRequest): Promise<void> => during(request.release());
+
+type Target = { chain: "ethereum"; address: string } | null;
+let setHarnessTarget: ((t: Target) => void) | null = null;
+
+/** Mounts AccountPanel (for the session-restore signal) alongside Lookup, remounted under a new
+ *  key whenever the target changes -- exactly what App()'s own hash routing did for Lookup. */
+function Harness({ initial }: { initial: Target }) {
+  const [target, setTarget] = useReactState<Target>(initial);
+  setHarnessTarget = setTarget;
+  return createElement(
+    "div",
+    null,
+    createElement(AccountPanel),
+    target ? createElement(Lookup, { key: `${target.chain}:${target.address}`, chain: target.chain, address: target.address }) : null,
+  );
+}
+// Imported lazily (after jsdom's `window` is installed) just like Lookup/AccountPanel below.
+let useReactState: typeof import("react").useState;
 
 before(async () => {
   stack = await startStack(new FixedBalanceAdapter("ethereum", { [A]: A_BALANCE, [B]: B_BALANCE }));
@@ -29,11 +48,9 @@ before(async () => {
   const signup = await stack.accountService.signup("racer@example.com", "correct horse battery staple");
   assert.ok(signup.ok);
   window.localStorage.setItem("osstrace.session", JSON.stringify(signup.session));
-  // jsdom doesn't implement these: scrollTo (App's own hashchange handler calls it on every
-  // navigation) and canvas's getContext (the home page's WebGPU/WebGL hero, which these tests
-  // never visit — the beforeEach hash below keeps them off it anyway, this is just in case).
-  window.scrollTo = () => {};
-  ({ default: App, addressHref } = await import("../src/App.tsx"));
+  ({ useState: useReactState } = await import("react"));
+  ({ Lookup } = await import("../src/App.tsx"));
+  ({ default: AccountPanel } = await import("../src/AccountPanel.tsx"));
 });
 
 after(async () => {
@@ -42,22 +59,13 @@ after(async () => {
 
 beforeEach(() => {
   consoleErrors.length = 0;
-  // Never the bare home route: its hero background needs WebGPU/WebGL, which jsdom has neither
-  // of, and these tests have nothing to do with the home page anyway.
-  window.location.hash = "#bounties";
 });
 afterEach(cleanup);
 
-/**
- * Navigates exactly the way clicking an address link or submitting GlobalSearch does: a real hash
- * change, which App()'s own `hashchange` listener picks up. This is what remounts Lookup (it's
- * keyed by `${chain}:${address}`) on a *different* address — the mechanism this whole test proves.
- */
+/** Remounts Lookup on a new key, the same way App() did via hash navigation — the mechanism this
+ *  whole test proves still holds. */
 async function navigateTo(address: string): Promise<void> {
-  await act(async () => {
-    window.location.hash = addressHref("ethereum", address);
-    window.dispatchEvent(new window.Event("hashchange"));
-  });
+  await act(async () => setHarnessTarget?.({ chain: "ethereum", address }));
 }
 
 /** Lets anything still in flight land and render, then checks the screen shows B and only B. */
@@ -71,7 +79,7 @@ async function assertShowsOnlyB(): Promise<void> {
 }
 
 async function renderSignedIn() {
-  const view = await render(createElement(App));
+  const view = await render(createElement(Harness, { initial: null }));
   await waitFor(() => text().includes("racer@example.com"), "the stored session to be restored");
   return view;
 }

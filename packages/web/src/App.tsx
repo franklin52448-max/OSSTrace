@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { ChainId } from "@osstrace/core";
 import { AlertsRoute } from "./alerts/index.ts";
+import { ExplorePage } from "./explorer/index.ts";
 import { LabelsRoute } from "./labels/index.ts";
 import { TracerRoute } from "./tracer/index.ts";
 import TracerView from "./TracerView.tsx";
@@ -252,7 +253,7 @@ export default function App() {
           ) : route.view === "pathfind" ? (
             <TracerView key={targetKey} initial={route.target} />
           ) : route.target ? (
-            <Lookup key={`${route.target.chain}:${route.target.address}`} chain={route.target.chain} address={route.target.address} />
+            <ExplorePage key={`${route.target.chain}:${route.target.address}`} chain={route.target.chain} addr={route.target.address} />
           ) : null}
         </main>
       )}
@@ -455,7 +456,10 @@ function Home() {
   );
 }
 
-function Lookup({ chain, address }: { chain: ChainId; address: string }) {
+/** Retired from the live route (ExplorePage replaces it at #address/...), kept for its own test
+ *  coverage: real balance/transaction lookup, live updates, sanctions tags, private labels and
+ *  community label review/moderation -- none of which has an equivalent in ExplorePage yet. */
+export function Lookup({ chain, address }: { chain: ChainId; address: string }) {
   const [state, setState] = useState<LookupState>({ status: "loading" });
   // Two overlapping requests for this same address (the initial load, plus a "quiet" refresh after
   // a label submission) can finish out of order. Only the latest-started one's completion is ever

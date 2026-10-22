@@ -36,7 +36,14 @@ const accounts = buildAccountService();
 const privateLabelService = new PrivateLabelService(accounts, new JsonFilePrivateLabelStore(privateLabelsStorePath()));
 const privateLabels: PrivateLabelLookup = { get: (token, chain, address) => privateLabelService.get(token, chain, address) };
 
-const service = new LabelSubmissionService(new JsonFileSubmissionStore(communityLabelsPath()), accounts, { privateLabels });
+// Named on the first line of every self-attestation statement a wallet is asked to sign (ADR 0019),
+// so it should be the host people actually use the web UI on.
+const attestationDomain = process.env["SELF_ATTESTATION_DOMAIN"] ?? "localhost:5301";
+
+const service = new LabelSubmissionService(new JsonFileSubmissionStore(communityLabelsPath()), accounts, {
+  privateLabels,
+  attestationDomain,
+});
 const handle = createLabelSubmissionsHandler(service, { allowedOrigins });
 
 const server = createServer(async (req, res) => {

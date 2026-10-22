@@ -15,6 +15,8 @@ const STATUS_FOR_ERROR: Record<SubmissionErrorCode, number> = {
   duplicate_submission: 409,
   already_reviewed: 409,
   rate_limited: 429,
+  invalid_attestation: 400,
+  not_confirmable: 409,
 };
 
 export interface LabelSubmissionsHttpOptions {
@@ -67,6 +69,8 @@ function decodeSegment(segment: string): string {
  *   GET  /labels/submissions/mine            (Bearer)                 → 200 { submissions }
  *   GET  /labels/submissions/from-private-label/:chain/:address (Bearer) → 200 { draft }
  *   POST /labels/submissions/from-private-label (Bearer) { chain, address, name?, confidence, source } → 201 { submission }
+ *   POST /labels/submissions/self-attested/challenge (Bearer) { chain, address, name } → 201 { challenge }
+ *   POST /labels/submissions/self-attested   (Bearer) { nonce, signature }     → 201 { submission }
  *   GET  /labels/submissions?status=…        (Bearer, moderator)      → 200 { submissions }
  *   POST /labels/submissions/:id/confirm     (Bearer, moderator)      → 200 { submission }
  *   POST /labels/submissions/:id/reject      (Bearer, moderator) { reason } → 200 { submission }
@@ -135,6 +139,14 @@ export function createLabelSubmissionsHandler(
       }
       if (path === "/labels/submissions/mine" && req.method === "GET") {
         sendResult(req, res, await service.listMine(token));
+        return true;
+      }
+      if (path === "/labels/submissions/self-attested/challenge" && req.method === "POST") {
+        sendResult(req, res, await service.requestSelfAttestation(token, await readJsonBody(req)), 201);
+        return true;
+      }
+      if (path === "/labels/submissions/self-attested" && req.method === "POST") {
+        sendResult(req, res, await service.submitSelfAttestation(token, await readJsonBody(req)), 201);
         return true;
       }
       if (path === "/labels/submissions/from-private-label" && req.method === "POST") {

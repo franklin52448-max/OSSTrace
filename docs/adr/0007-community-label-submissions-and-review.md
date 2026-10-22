@@ -117,7 +117,8 @@ exactly that.
   come only from ingested sources.
 - **Publishing confirmed labels into the open dataset** (`data/labels/`, ADR 0005). It needs a
   contributor licensing decision first.
-- **Self-attested tier 3** — still deferred by ADR 0004.
+- **Self-attested tier 3** — still deferred by ADR 0004. *(Since designed and built server-side:
+  ADR 0019.)*
 
 ## What would change this decision
 

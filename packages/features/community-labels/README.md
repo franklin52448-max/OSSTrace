@@ -9,6 +9,10 @@ design is in [ADR 0007](../../../docs/adr/0007-community-label-submissions-and-r
 - A **moderator** (or admin) reviews it. **Confirm** makes it a Confirmed label
   (`reviewStatus: "confirmed"`, shown with a ✓ CONFIRMED badge). **Reject**, which needs a reason,
   removes it from public view. Moderators can't review their own submissions.
+- Or a user who controls the address **self-attests** it: they sign a server-issued statement with
+  the address's own key, and it's public as a **Self-attested** label
+  (`reviewStatus: "self-attested"`, [ADR 0019](../../../docs/adr/0019-self-attested-labels.md)).
+  That proves control of the address, not that the name is true.
 
 Identity and roles come from [`@osstrace/accounts`](../accounts/README.md) (`authenticate`,
 `requireRole(token, "moderator")`). Nothing here re-implements auth.
@@ -37,11 +41,31 @@ JSON in, JSON out. Authenticated routes take `Authorization: Bearer <token>`. Er
 |---|---|---|---|
 | `POST /labels/submissions` | bearer | `{ chain, address, name, confidence, source: { url, description } }` | `201 { submission }` |
 | `GET /labels/submissions/mine` | bearer | none | `200 { submissions }`, your own, newest first, any status (rejections include `rejectionReason`) |
-| `GET /labels/submissions?status=community\|confirmed\|rejected` | bearer, moderator | none | `200 { submissions }`, oldest first, default `community` (the queue) |
+| `GET /labels/submissions?status=community\|confirmed\|rejected\|self-attested` | bearer, moderator | none | `200 { submissions }`, oldest first, default `community` (the queue) |
 | `POST /labels/submissions/:id/confirm` | bearer, moderator | none | `200 { submission }` |
 | `POST /labels/submissions/:id/reject` | bearer, moderator | `{ reason }` | `200 { submission }` |
 | `GET /labels/submissions/from-private-label/:chain/:address` | bearer | none | `200 { draft }`: your own private label's text as `name`, `confidence` and `source` null |
 | `POST /labels/submissions/from-private-label` | bearer | `{ chain, address, name?, confidence, source }` | `201 { submission }`: shares your private label (its text unless `name` is given), same validation as `POST /labels/submissions` |
+| `POST /labels/submissions/self-attested/challenge` | bearer | `{ chain, address, name }` | `201 { challenge: { nonce, scheme, message, expiresAt } }`: the exact statement to sign |
+| `POST /labels/submissions/self-attested` | bearer | `{ nonce, signature }` | `201 { submission }` with `status: "self-attested"` |
+
+### Self-attesting an address you control
+
+[ADR 0019](../../../docs/adr/0019-self-attested-labels.md) has the full design. Ask for a challenge
+for your address and label, sign `challenge.message` with that address's key, then send back the
+nonce and signature:
+
+- **Ethereum**: EIP-191 `personal_sign` (what MetaMask etc. produce). 65-byte `0x…` r‖s‖v hex.
+  EOAs only, no EIP-1271 contract wallets yet.
+- **Solana**: wallet `signMessage` (Ed25519 over the UTF-8 message). 64-byte signature, base58.
+
+The server verifies the signature against its own copy of the message (`verifySelfAttestation`,
+exported). Challenges are single-use, expire after 10 minutes and belong to the account that asked
+for them. The label carries `attestation: { scheme, message, signature }` so anyone can re-check
+it. Lookups rank it after confirmed and community labels: it proves who's speaking, not that the
+name is true. Moderators can reject one but not confirm it (`not_confirmable`). There's no
+wallet-connect UI yet, so today you sign with your own wallet or tooling. `SELF_ATTESTATION_DOMAIN`
+(default `localhost:5301`) is the site name on the first line of the statement.
 
 ### Sharing a private label
 
@@ -87,11 +111,11 @@ Error codes:
 
 | Status | Codes |
 |---|---|
-| 400 | `invalid_submission` (any field rule above, or a missing rejection reason), `bad_request` (malformed JSON) |
+| 400 | `invalid_submission` (any field rule above, or a missing rejection reason), `invalid_attestation` (unknown, expired or used challenge, or a signature that doesn't verify), `bad_request` (malformed JSON) |
 | 401 | `unauthenticated` |
 | 403 | `forbidden` (not a moderator), `own_submission` |
 | 404 | `not_found` (also: no private label of yours to share for that address) |
-| 409 | `duplicate_submission` (you already have one pending for this address), `already_reviewed` |
+| 409 | `duplicate_submission` (you already have one pending for this address), `already_reviewed`, `not_confirmable` (confirming a self-attested label) |
 | 413 | `bad_request` (body over 16 KiB) |
 | 429 | `rate_limited`: more than 10 submissions from your account in the last hour. The body has `retryAfterSeconds` and there's a `Retry-After` header |
 
@@ -108,9 +132,10 @@ survives a restart and parallel requests can't race past it.
 - **Lookups.** The Explorer's `buildLabelStore()` (which the Visualizer reuses) adds
   `CommunityLabelReader` as a read-only lower-priority reader of `CompositeLabelStore`. An ingested
   official label always wins for the same address. Otherwise a lookup shows the newest confirmed
-  submission, then the newest unreviewed one. Rejected submissions never appear. Labels are re-read
-  on every lookup, so a decision shows up immediately even when the chain data comes from cache.
-- **The label shape** is `CommunityLabel` / `ConfirmedLabel` in `@osstrace/core`. Ingested labels
+  submission, then the newest unreviewed one, then the newest self-attested one. Rejected
+  submissions never appear. Labels are re-read on every lookup, so a decision shows up immediately
+  even when the chain data comes from cache.
+- **The label shape** is `CommunityLabel` / `ConfirmedLabel` / `SelfAttestedLabel` in `@osstrace/core`. Ingested labels
   (`IngestedLabel`) have no `reviewStatus` at all. ADR 0007 explains why.
 - **Mounting elsewhere.** `createLabelSubmissionsHandler(service)` returns `false` for other paths,
   so it can share a server with `createAccountsHandler`.
@@ -128,10 +153,11 @@ Import from `@osstrace/community-labels` only.
   contributor licensing decision first.
 - Only one process should write the submissions file. Running several instances needs a
   database-backed `SubmissionStore`.
+- No wallet-connect UI for self-attestation, and no EIP-1271 (contract wallet) support. See ADR 0019.
 
 ## Testing
 
-`npm test` runs 20 tests against real things:
+`npm test` runs 53 tests against real things:
 
 - real argon2 accounts in a real temp-file `JsonFileAccountStore`
 - a real temp-file `JsonFileSubmissionStore`
@@ -151,3 +177,13 @@ The tests cover:
 - two concurrent reviews of one submission give exactly one decision
 - ingested labels outrank community ones
 - a second reader process sees new submissions immediately
+- sharing a private label needs a real source, creates an independent submission, and never
+  changes the private label file (checked byte for byte), using the real private-labels service
+- the 11th submission in an hour is a 429, the window rolls and resets, it survives a restart, and
+  15 parallel submissions land exactly 10
+- `verifySelfAttestation` accepts real signatures from freshly generated in-memory secp256k1 and
+  Ed25519 keypairs, and rejects a wrong key, a wrong address, a tampered message, a high-s twin and
+  malformed input. It's also pinned to published vectors (RFC 8032 test 1, EIP-191
+  `hashMessage("hello world")`, the address of secp256k1 key 1)
+- self-attestation challenges are single-use, expire, are account-bound, and can't have lines
+  injected through the label name

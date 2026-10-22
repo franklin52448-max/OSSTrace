@@ -45,11 +45,15 @@ export type Confidence = "verified" | "predicted";
  * Moderation state of a label a *person* submitted (ADR 0004 tiers 1–2, ADR 0007):
  * - `community` — submitted by a logged-in user with a cited source, shown as-is, not yet reviewed.
  * - `confirmed` — a moderator reviewed the submission and its source and confirmed it.
+ * - `self-attested` — the submitter proved, with a signature from the address's own key, that they
+ *   control the address (ADR 0004 tier 3, ADR 0019). That proves *who is speaking*, not that the
+ *   name is true, and no moderator has reviewed it.
  *
  * Deliberately separate from `confidence`, which says how strongly the *source* supports the claim
- * (stated outright vs inferred). `reviewStatus` says whether a human moderator has checked it.
+ * (stated outright vs inferred). `reviewStatus` says whether a human moderator has checked it, or
+ * (for `self-attested`) that the server checked a signature instead.
  */
-export type ReviewStatus = "community" | "confirmed";
+export type ReviewStatus = "community" | "confirmed" | "self-attested";
 
 /** A user account id (`UserId` in `@osstrace/accounts`): an opaque UUID, never an email. */
 export type AccountId = string;
@@ -95,8 +99,40 @@ export interface ConfirmedLabel extends LabelFields {
   confirmedAt: string;
 }
 
+/**
+ * How a self-attestation was signed. Each names one standard wallet message-signing scheme, so
+ * anyone can re-verify `attestation.signature` over `attestation.message` without trusting us:
+ * - `eip191-personal-sign` — Ethereum `personal_sign` (EIP-191, version byte 0x45): secp256k1 over
+ *   keccak256("\x19Ethereum Signed Message:\n" + byte length + message). 65-byte r‖s‖v, 0x-hex.
+ * - `solana-ed25519` — Ed25519 over the message's raw UTF-8 bytes, which is what Solana wallets'
+ *   `signMessage` produces. 64-byte signature, base58.
+ */
+export type AttestationScheme = "eip191-personal-sign" | "solana-ed25519";
+
+/** The signed statement behind a self-attested label. It travels with the label so anyone can re-check it. */
+export interface SelfAttestation {
+  scheme: AttestationScheme;
+  /** The exact text that was signed. It names the address, the label, the account and a one-time nonce. */
+  message: string;
+  signature: string;
+}
+
+/**
+ * A label whose submitter proved control of the address with a signature from its own key
+ * (ADR 0019). That's a stronger signal about *who is making the claim* than a third party's word,
+ * and no signal at all that the name is true: anyone can self-attest any name for a wallet they
+ * own. Its `source` describes the attestation, and `attestation` is the checkable evidence (ADR 0002).
+ */
+export interface SelfAttestedLabel extends LabelFields {
+  reviewStatus: "self-attested";
+  submissionId: string;
+  submittedBy: AccountId;
+  submittedAt: string;
+  attestation: SelfAttestation;
+}
+
 /** Any label that came from a person rather than an ingestion script. */
-export type SubmittedLabel = CommunityLabel | ConfirmedLabel;
+export type SubmittedLabel = CommunityLabel | ConfirmedLabel | SelfAttestedLabel;
 
 /**
  * At most one Label per Address (mirrors the model confirmed from Arkham's public API docs).
@@ -106,7 +142,7 @@ export type Label = IngestedLabel | SubmittedLabel;
 
 /** True for labels a person submitted (they carry `reviewStatus`); false for ingested ones. */
 export function isSubmittedLabel(label: Label): label is SubmittedLabel {
-  return label.reviewStatus === "community" || label.reviewStatus === "confirmed";
+  return label.reviewStatus === "community" || label.reviewStatus === "confirmed" || label.reviewStatus === "self-attested";
 }
 
 /** Independent of labeling — an address can be tagged without being labeled. */

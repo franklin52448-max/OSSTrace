@@ -4,7 +4,7 @@ Status: Decided 2026-10-22 (implemented in `packages/features/community-labels/`
 
 Two community-label decisions made together, because both change the one path that creates a
 submission. Part A is the share flow. Part B is the per-account rate limit ADR 0007 deferred.
-Self-attested labels (ADR 0004's tier 3) got their own ADR, 0018, since that one is mostly a
+Self-attested labels (ADR 0004's tier 3) got their own ADR, 0019, since that one is mostly a
 security design.
 
 # Part A — Sharing a private label
@@ -117,7 +117,7 @@ What counts: every submission the account **created** in the window, whatever it
 including ones later rejected. A rejection doesn't give the slot back, because the moderator's
 time was spent either way. Attempts refused before anything is stored (invalid, duplicate,
 unauthenticated, already rate-limited) don't count. A share (Part A) is a submission and counts
-the same. Self-attested submissions (ADR 0018) count too.
+the same. Self-attested submissions (ADR 0019) count too.
 
 The window is rolling, not a fixed clock hour, so there's no burst of 20 across an hour boundary.
 A submission made exactly one window ago has just aged out.

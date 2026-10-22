@@ -10,11 +10,13 @@ export interface LabelView {
   name: string;
   confidence: "verified" | "predicted";
   source: { description: string; url: string; addedAt: string };
-  reviewStatus?: "community" | "confirmed";
+  reviewStatus?: "community" | "confirmed" | "self-attested";
   submittedBy?: string;
   submittedAt?: string;
   confirmedBy?: string;
   confirmedAt?: string;
+  /** Self-attested labels only (ADR 0019): the signed statement, re-checkable by anyone. */
+  attestation?: { scheme: string; message: string; signature: string };
 }
 
 const day = (iso: string): string => iso.slice(0, 10);
@@ -44,12 +46,38 @@ export function ReviewBadge({ label }: { label: LabelView }) {
       </span>
     );
   }
+  if (label.reviewStatus === "self-attested") {
+    return (
+      <span
+        className="chip border-warn/35 bg-warn/10 text-warn"
+        title="The address's own key signed this label, so whoever submitted it controls the address. That proves who is speaking, not that the label is true, and no moderator has reviewed it."
+      >
+        SELF-ATTESTED · SIGNED BY OWNER
+      </span>
+    );
+  }
   return null;
 }
 
 /** "Community submission, 2026-10-21 · confirmed 2026-10-22" — nothing for ingested labels. */
 export function SubmissionByline({ label }: { label: LabelView }) {
   if (!label.reviewStatus || !label.submittedAt) return null;
+  if (label.reviewStatus === "self-attested") {
+    return (
+      <div className="mt-1 text-xs text-ink-faint">
+        Self-attested by whoever controls this address, {day(label.submittedAt)} · signature verified, not reviewed
+        {label.attestation && (
+          <details className="mt-1">
+            <summary className="cursor-pointer">Signed statement</summary>
+            <pre className="hash mt-1 whitespace-pre-wrap break-all text-[11px]">{label.attestation.message}</pre>
+            <div className="hash mt-1 break-all text-[11px]">
+              {label.attestation.scheme} signature: {label.attestation.signature}
+            </div>
+          </details>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="mt-1 text-xs text-ink-faint">
       Community submission, {day(label.submittedAt)}

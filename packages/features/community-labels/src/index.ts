@@ -12,5 +12,15 @@ export * from "./reader.ts";
 export * from "./service.ts";
 export * from "./validate.ts";
 export * from "./share.ts";
+export {
+  verifySelfAttestation,
+  buildAttestationMessage,
+  eip191Hash,
+  ethereumAddressOf,
+  schemeFor,
+  CHALLENGE_TTL_MS,
+  CHALLENGES_PER_ACCOUNT,
+  type AttestationStatement,
+} from "./selfAttestation.ts";
 export { communityLabelsPath } from "./paths.ts";
 export { createLabelSubmissionsHandler, type LabelSubmissionsHttpOptions } from "./http.ts";

@@ -7,6 +7,8 @@ import { createLabelSubmissionsHandler } from "../src/http.ts";
 import { CommunityLabelReader } from "../src/reader.ts";
 import { JsonFileSubmissionStore } from "../src/store.ts";
 import { readFile } from "node:fs/promises";
+import { ed25519 } from "@noble/curves/ed25519";
+import bs58 from "bs58";
 import { ETH_ADDRESS, GOOD_PASSWORD, SOL_ADDRESS, validBody, withEnv, type Env } from "./helpers.ts";
 
 const WEB_ORIGIN = "http://localhost:5301";
@@ -190,6 +192,41 @@ test("over the submission rate limit is a real 429 with Retry-After, readable fr
     assert.equal(limited.body.retryAfterSeconds, 3600);
     assert.equal(limited.headers.get("retry-after"), "3600");
     assert.match(limited.headers.get("access-control-expose-headers") ?? "", /retry-after/);
+  });
+});
+
+test("self-attestation over real HTTP: challenge 201 → bad signature 400 → valid signature 201, confirm 409", async () => {
+  await withServer(async (base, env) => {
+    const alice = await signup(base, "alice@example.com");
+    // A fresh, in-memory Solana keypair for this test only.
+    const secretKey = ed25519.utils.randomPrivateKey();
+    const address = bs58.encode(ed25519.getPublicKey(secretKey));
+    const sign = (message: string) => bs58.encode(ed25519.sign(new TextEncoder().encode(message), secretKey));
+
+    const ask = () => call(base, "POST", "/labels/submissions/self-attested/challenge", { token: alice.token, body: { chain: "solana", address, name: "my wallet" } });
+    const first = await ask();
+    assert.equal(first.status, 201);
+    const bad = await call(base, "POST", "/labels/submissions/self-attested", {
+      token: alice.token,
+      body: { nonce: first.body.challenge.nonce, signature: sign("some other message") },
+    });
+    assert.equal(bad.status, 400);
+    assert.equal(bad.body.error, "invalid_attestation");
+
+    const second = await ask();
+    const good = await call(base, "POST", "/labels/submissions/self-attested", {
+      token: alice.token,
+      body: { nonce: second.body.challenge.nonce, signature: sign(second.body.challenge.message) },
+    });
+    assert.equal(good.status, 201);
+    assert.equal(good.body.submission.status, "self-attested");
+
+    const mod = await signup(base, "mod@example.com");
+    assert.ok((await env.accounts.setRoleAsOperator("mod@example.com", "moderator")).ok);
+    const confirm = await call(base, "POST", `/labels/submissions/${good.body.submission.id}/confirm`, { token: mod.token });
+    assert.equal(confirm.status, 409);
+    assert.equal(confirm.body.error, "not_confirmable");
+    assert.equal((await call(base, "POST", "/labels/submissions/self-attested/challenge", { body: {} })).status, 401);
   });
 });
 

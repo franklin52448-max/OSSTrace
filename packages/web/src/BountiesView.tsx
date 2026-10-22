@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiCall, isModerator, useSession } from "./session.ts";
 import { EmptyState, Loading, Notice, PageHeader, SignInPrompt } from "./ui.tsx";
+import DepositPanel from "./DepositPanel.tsx";
 
 const BOUNTIES_URL = import.meta.env["VITE_BOUNTIES_URL"] ?? "http://localhost:5313";
 
@@ -276,6 +277,8 @@ function BountyDetail({ bounty, onBack, onChanged }: { bounty: Bounty; onBack: (
 
       {notice && <Notice>{notice}</Notice>}
       {error && <Notice tone="danger">{error}</Notice>}
+
+      <DepositPanel bountyId={bounty.id} token={token} />
 
       {bounty.status === "open" && token && <SubmitPrForm bountyId={bounty.id} token={token} onSubmitted={() => void loadSubmissions()} />}
 

@@ -2,6 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { withEnv, validBountyBody, validSubmissionBody } from "./helpers.ts";
 
+const REAL_SIG = "bqTH7u2PJ33gDQwZMy9BXVxABRpgUbY8xSuK6y9PpKYxucFKhiJyiD7JTrH1zxFvMEJGz4847tvotMoP1Ekavaa";
+const REAL_HASH = "0x88e2744cdf18d3118f9a8fe4169bd586785e1e48897cf4d7960a9ec47d8111dc";
+
 test("open -> list -> get: a real bounty is created, public to read with no login", async () =>
   withEnv(async ({ service, account }) => {
     const { token } = await account("poster@example.com");
@@ -183,4 +186,120 @@ test("list(status) filters correctly, and an invalid status is refused rather th
 
     const bad = await service.list("not-a-real-status");
     assert.equal(bad.ok, false);
+  }));
+
+test("recordDeposit: a verified deposit is recorded, visible on the bounty's public deposit list, and funding doesn't need login to view or change the bounty's status", async () =>
+  withEnv(async ({ service, account, deposits }) => {
+    const { token: opener } = await account("opener@example.com");
+    const opened = await service.open(opener, validBountyBody());
+    if (!opened.ok) throw new Error("setup failed");
+    const { user: funderUser, token: funder } = await account("funder@example.com"); // not the opener -- anyone may back a bounty
+
+    deposits.set("solana", REAL_SIG, {
+      ok: true,
+      deposit: { asset: "native", amount: "0.0001", fromAddress: "E16prLnWTwfLUYgXRTELYgw4u8QUnN9CAcHceLrDTjN1", toWallet: "ourwallet" },
+    });
+    const result = await service.recordDeposit(funder, opened.bounty.id, { chain: "solana", txRef: REAL_SIG });
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.deposit.amount, "0.0001");
+      assert.equal(result.deposit.asset, "native");
+      assert.equal(result.deposit.fromAddress, "E16prLnWTwfLUYgXRTELYgw4u8QUnN9CAcHceLrDTjN1");
+      assert.equal(result.deposit.recordedBy, funderUser.id);
+    }
+
+    const listed = await service.listDeposits(opened.bounty.id);
+    assert.equal(listed.ok, true);
+    if (listed.ok) {
+      assert.equal(listed.deposits.length, 1);
+      assert.equal(listed.deposits[0]?.txRef, REAL_SIG);
+    }
+
+    // Funding never changes the bounty's own status.
+    const still = await service.get(opened.bounty.id);
+    assert.equal(still.ok, true);
+    if (still.ok) assert.equal(still.bounty.status, "open");
+  }));
+
+test("recordDeposit: signed out is refused before any verification is attempted", async () =>
+  withEnv(async ({ service, account, deposits }) => {
+    const { token } = await account("opener@example.com");
+    const opened = await service.open(token, validBountyBody());
+    if (!opened.ok) throw new Error("setup failed");
+    const result = await service.recordDeposit(null, opened.bounty.id, { chain: "solana", txRef: REAL_SIG });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error, "unauthenticated");
+    assert.deepEqual(deposits.calls, [], "never reaches the verifier for a signed-out caller");
+  }));
+
+test("recordDeposit: input errors (after auth) -- unknown bounty, bad chain, missing txRef", async () =>
+  withEnv(async ({ service, account }) => {
+    const { token } = await account("opener@example.com");
+    const opened = await service.open(token, validBountyBody());
+    if (!opened.ok) throw new Error("setup failed");
+
+    const noBounty = await service.recordDeposit(token, "no-such-bounty", { chain: "solana", txRef: REAL_SIG });
+    assert.equal(!noBounty.ok && noBounty.error, "not_found");
+
+    const badChain = await service.recordDeposit(token, opened.bounty.id, { chain: "bitcoin", txRef: REAL_SIG });
+    assert.equal(!badChain.ok && badChain.error, "invalid_deposit");
+
+    const noRef = await service.recordDeposit(token, opened.bounty.id, { chain: "solana" });
+    assert.equal(!noRef.ok && noRef.error, "invalid_deposit");
+  }));
+
+test("recordDeposit: a chain with no verifier configured for it is refused as chain_not_configured, not a crash", async () =>
+  withEnv(async ({ service, account }) => {
+    const { token } = await account("opener@example.com");
+    const opened = await service.open(token, validBountyBody());
+    if (!opened.ok) throw new Error("setup failed");
+    // FixedDepositVerifier answers "not_found" for anything not explicitly `set` -- real
+    // not_configured behaviour is covered against the real verifier in deposits.test.ts; here the
+    // service must still map whatever "not ok" reason it gets to a real BountyErrorCode, never throw.
+    const result = await service.recordDeposit(token, opened.bounty.id, { chain: "ethereum", txRef: REAL_HASH });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error, "deposit_not_verified");
+  }));
+
+test("recordDeposit: the same real transaction can't fund two bounties, or the same bounty twice", async () =>
+  withEnv(async ({ service, account, deposits }) => {
+    const { token } = await account("opener@example.com");
+    const a = await service.open(token, validBountyBody({ title: "A" }));
+    const b = await service.open(token, validBountyBody({ title: "B" }));
+    if (!a.ok || !b.ok) throw new Error("setup failed");
+    deposits.set("solana", REAL_SIG, { ok: true, deposit: { asset: "native", amount: "1", fromAddress: "someone", toWallet: "ourwallet" } });
+
+    const first = await service.recordDeposit(token, a.bounty.id, { chain: "solana", txRef: REAL_SIG });
+    assert.equal(first.ok, true);
+
+    const sameBounty = await service.recordDeposit(token, a.bounty.id, { chain: "solana", txRef: REAL_SIG });
+    assert.equal(sameBounty.ok, false);
+    if (!sameBounty.ok) assert.equal(sameBounty.error, "already_recorded");
+
+    const otherBounty = await service.recordDeposit(token, b.bounty.id, { chain: "solana", txRef: REAL_SIG });
+    assert.equal(otherBounty.ok, false);
+    if (!otherBounty.ok) {
+      assert.equal(otherBounty.error, "already_recorded");
+      assert.match(otherBounty.message, /different bounty/);
+    }
+
+    const onlyOne = await service.listDeposits(a.bounty.id);
+    assert.equal(onlyOne.ok && onlyOne.deposits.length, 1);
+  }));
+
+test("recordDeposit: a real verification failure (wrong wallet, not confirmed, etc.) is refused as deposit_not_verified, with the real reason in the message", async () =>
+  withEnv(async ({ service, account, deposits }) => {
+    const { token } = await account("opener@example.com");
+    const opened = await service.open(token, validBountyBody());
+    if (!opened.ok) throw new Error("setup failed");
+    deposits.set("solana", REAL_SIG, { ok: false, reason: "wrong_wallet" });
+
+    const result = await service.recordDeposit(token, opened.bounty.id, { chain: "solana", txRef: REAL_SIG });
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.error, "deposit_not_verified");
+      assert.match(result.message, /didn't pay/);
+    }
+    const listed = await service.listDeposits(opened.bounty.id);
+    assert.equal(listed.ok && listed.deposits.length, 0, "a failed verification is never recorded");
   }));

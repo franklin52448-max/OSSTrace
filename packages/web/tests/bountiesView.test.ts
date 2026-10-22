@@ -1,6 +1,6 @@
 import { after, afterEach, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
-import { createElement, type ComponentType } from "react";
+import { act, createElement, type ComponentType } from "react";
 import { window } from "./harness/env.ts";
 import { fill, getByPlaceholder } from "./harness/forms.ts";
 import { logInAs as realLogIn } from "./harness/login.ts";
@@ -16,6 +16,7 @@ const OPENER = "opener@example.com";
 const SOLVER = "solver@example.com";
 const RUNNER_UP = "runner-up@example.com";
 const MODERATOR = "moderator@example.com";
+const DEPOSITOR = "depositor@example.com";
 
 const ALPHA = {
   title: "Natural-language Tracer agent",
@@ -36,7 +37,7 @@ let BountiesView: ComponentType;
 
 before(async () => {
   stack = await startStack(new FixedBalanceAdapter("ethereum", {}));
-  for (const email of [OPENER, SOLVER, RUNNER_UP, MODERATOR]) {
+  for (const email of [OPENER, SOLVER, RUNNER_UP, MODERATOR, DEPOSITOR]) {
     assert.ok((await stack.accountService.signup(email, PASSWORD)).ok);
   }
   // The operator's real promotion path (the accounts CLI), as in production.
@@ -180,4 +181,87 @@ test("open two bounties, submit PRs, a moderator claims one, the opener cancels 
   );
   assert.equal(bounties[0]?.cancellationReason, CANCEL_REASON);
   assert.deepEqual(consoleErrors, []);
+});
+
+// --- Funding / deposits (ADR 0020) --------------------------------------------------------------
+// The "connect a wallet and send" half of DepositPanel isn't exercised here -- jsdom has no real
+// wallet extension to connect to, and `src/wallets.ts` has its own real tests (against real
+// recorded mainnet data and a hand-written stand-in provider) in `tests/wallets.test.ts`. This
+// covers everything the board itself controls: display, the "paste a reference" fallback, and how
+// the real bounties API's responses (via the stand-in `DepositVerifier`) show up in the UI.
+
+const REAL_SIG = "bqTH7u2PJ33gDQwZMy9BXVxABRpgUbY8xSuK6y9PpKYxucFKhiJyiD7JTrH1zxFvMEJGz4847tvotMoP1Ekavaa";
+
+test("Funding: shows the configured receiving wallets to everyone, with no deposits yet, no login needed", async () => {
+  await render(createElement(BountiesView));
+  await logInAs(OPENER);
+  await openBounty({ title: "Funding display check", description: ALPHA.description, reward: "whatever backers send" });
+  await openRow("Funding display check");
+  await waitFor(() => text().includes(stack.bountyWallets.solana), "the configured Solana wallet");
+  assert.ok(text().includes(stack.bountyWallets.ethereum), "the configured Ethereum wallet is shown too");
+  assert.ok(text().includes("No deposits recorded yet"));
+  await backToBoard();
+});
+
+test("Funding: signed out, the panel explains how to back it but shows no form", async () => {
+  await render(createElement(BountiesView));
+  await logInAs(OPENER);
+  await openBounty({ title: "Funding signed-out check", description: ALPHA.description, reward: "whatever" });
+
+  const session = await import("../src/session.ts");
+  await act(async () => session.signOut());
+  await waitFor(() => text().includes("Log in to open a bounty"), "the signed-out board");
+
+  await openRow("Funding signed-out check");
+  await waitFor(() => text().includes("Funding"), "the Funding section");
+  assert.ok(text().includes("Log in to back this bounty"));
+  assert.equal(row("Back this bounty"), null);
+});
+
+test("Funding: pasting an already-verified real tx reference records it, sums per asset, and refuses a second submission of the same one", async () => {
+  await render(createElement(BountiesView));
+  await logInAs(OPENER);
+  await openBounty({ title: "Funding paste-flow check", description: ALPHA.description, reward: "backer-funded" });
+  const bountyId = (await (await fetch(`${stack.bounties.url}/bounties`)).json() as { bounties: { id: string; title: string }[] }).bounties.find(
+    (b) => b.title === "Funding paste-flow check",
+  )!.id;
+
+  stack.bountyDeposits.set("solana", REAL_SIG, {
+    ok: true,
+    deposit: { asset: "native", amount: "2.5", fromAddress: "SomeRealFunderAddress111111111111111111111", toWallet: stack.bountyWallets.solana },
+  });
+
+  await logInAs(DEPOSITOR);
+  await openRow("Funding paste-flow check");
+  await click(await waitFor(() => (text().includes("Back this bounty") ? getButton("Back this bounty") : null), "the Back this bounty button"));
+  await fill(getByPlaceholder("Transaction signature"), REAL_SIG);
+  await click(getButton("Verify & record"));
+  await waitFor(() => text().includes("2.5 SOL"), "the recorded deposit's summed total");
+  assert.ok(text().includes("SomeRealFunderAddress111111111111111111111".slice(0, 6)), "the real sender address is shown");
+
+  // A successful submission closes the form -- reopen it to try the same reference again.
+  // The real backend's idempotency rule (ADR 0020 §4): the same reference can't be recorded twice.
+  await click(await waitFor(() => (text().includes("Back this bounty") ? getButton("Back this bounty") : null), "the Back this bounty button, reopened"));
+  await fill(getByPlaceholder("Transaction signature"), REAL_SIG);
+  await click(getButton("Verify & record"));
+  await waitFor(() => text().includes("already recorded"), "the already_recorded error");
+
+  const deposits = (await (await fetch(`${stack.bounties.url}/bounties/${bountyId}/deposits`)).json()) as { deposits: unknown[] };
+  assert.equal(deposits.deposits.length, 1, "still only one deposit despite the repeated submission");
+});
+
+test("Funding: a reference the verifier rejects shows the real server message and is never recorded", async () => {
+  await render(createElement(BountiesView));
+  await logInAs(OPENER);
+  await openBounty({ title: "Funding rejection check", description: ALPHA.description, reward: "backer-funded" });
+  const unverifiedSig = "5".repeat(88);
+  stack.bountyDeposits.set("solana", unverifiedSig, { ok: false, reason: "wrong_wallet" });
+
+  await logInAs(DEPOSITOR);
+  await openRow("Funding rejection check");
+  await click(await waitFor(() => (text().includes("Back this bounty") ? getButton("Back this bounty") : null), "the Back this bounty button"));
+  await fill(getByPlaceholder("Transaction signature"), unverifiedSig);
+  await click(getButton("Verify & record"));
+  await waitFor(() => text().includes("didn't pay"), "the real deposit_not_verified message");
+  assert.ok(text().includes("No deposits recorded yet"), "nothing was recorded");
 });

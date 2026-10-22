@@ -2,10 +2,33 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AccountService, JsonFileAccountStore, type PublicUser, type Role } from "@osstrace/accounts";
+import type { DepositVerification, DepositVerifier } from "../src/deposits.ts";
 import { BountyService } from "../src/service.ts";
 import { JsonFileBountyStore } from "../src/store.ts";
 
 export const GOOD_PASSWORD = "correct horse battery staple";
+
+/**
+ * A real, concrete `DepositVerifier` a test fully controls — not a mocking framework. Each test
+ * decides in advance exactly what `verify()` should answer for a given `(chain, txRef)`, the same
+ * way `FixedBalanceAdapter` elsewhere in this repo stands in for a real chain adapter. The real
+ * on-chain checking logic itself (`verifySolanaDeposit`/`verifyEthereumDeposit`) has its own real
+ * tests, against real recorded mainnet data, in `deposits.test.ts` -- this stand-in is only for
+ * testing `recordDeposit`'s own auth/validation/idempotency logic in isolation from the network.
+ */
+export class FixedDepositVerifier implements DepositVerifier {
+  readonly #answers = new Map<string, DepositVerification>();
+  readonly calls: { chain: "ethereum" | "solana"; txRef: string }[] = [];
+
+  set(chain: "ethereum" | "solana", txRef: string, result: DepositVerification): void {
+    this.#answers.set(`${chain}:${txRef}`, result);
+  }
+
+  async verify(chain: "ethereum" | "solana", txRef: string): Promise<DepositVerification> {
+    this.calls.push({ chain, txRef });
+    return this.#answers.get(`${chain}:${txRef}`) ?? { ok: false, reason: "not_found" };
+  }
+}
 
 /** A clock tests can move forward, passed into the real service via its `now` option. */
 export class TestClock {
@@ -25,6 +48,7 @@ export interface Env {
   store: JsonFileBountyStore;
   service: BountyService;
   clock: TestClock;
+  deposits: FixedDepositVerifier;
   /** Real signup (real argon2), optionally promoted by the operator path -- exactly as in production. */
   account(email: string, role?: Role): Promise<{ user: PublicUser; token: string }>;
 }
@@ -36,13 +60,15 @@ export async function withEnv(run: (env: Env) => Promise<void>): Promise<void> {
     const clock = new TestClock();
     const accounts = new AccountService(new JsonFileAccountStore(join(dir, "accounts.json")));
     const store = new JsonFileBountyStore(join(dir, "bounties.json"));
-    const service = new BountyService(store, accounts, { now: clock.now });
+    const deposits = new FixedDepositVerifier();
+    const service = new BountyService(store, accounts, { now: clock.now, deposits });
     await run({
       dir,
       accounts,
       store,
       service,
       clock,
+      deposits,
       async account(email, role) {
         const signup = await accounts.signup(email, GOOD_PASSWORD);
         if (!signup.ok) throw new Error(`signup failed: ${signup.message}`);

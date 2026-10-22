@@ -69,3 +69,20 @@ export function parseSubmissionInput(body: Record<string, unknown>): Parsed<Subm
 export function parseCancellationReason(value: unknown): Parsed<string> {
   return text(value, "reason", CANCELLATION_REASON_MAX_LENGTH);
 }
+
+export interface DepositInput {
+  chain: "ethereum" | "solana";
+  /** A real signature (Solana) or transaction hash (Ethereum) — shape-checked only here; the real check is the chain itself (ADR 0020). */
+  txRef: string;
+}
+
+/** Max real-world length of either: a base58 Solana signature is at most 88 chars; an Ethereum tx hash is always exactly 66 ("0x" + 64 hex). */
+export const TX_REF_MAX_LENGTH = 128;
+
+export function parseDepositInput(body: Record<string, unknown>): Parsed<DepositInput> {
+  const chain = body["chain"];
+  if (chain !== "ethereum" && chain !== "solana") return { ok: false, message: 'chain must be "ethereum" or "solana"' };
+  const txRef = text(body["txRef"], "txRef", TX_REF_MAX_LENGTH);
+  if (!txRef.ok) return txRef;
+  return { ok: true, value: { chain, txRef: txRef.value } };
+}

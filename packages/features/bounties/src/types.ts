@@ -62,6 +62,35 @@ export interface BountySubmission {
   outcome: BountySubmissionOutcome;
 }
 
+/** `"native"` = the chain's own currency (SOL, ETH); otherwise the token's real mint/contract address. */
+export type DepositAsset = "native" | { contract: string };
+
+/**
+ * A real, independently-checked on-chain deposit toward a bounty's reward (ADR 0020). This
+ * project never holds the key behind `toWallet` — it's public config, and this record is only
+ * ever evidence that a specific, real transaction paid it, not a balance this project owns.
+ */
+export interface Deposit {
+  /** Random UUID. */
+  id: string;
+  bountyId: string;
+  chain: "ethereum" | "solana";
+  asset: DepositAsset;
+  /** Decimal string, at the asset's real on-chain decimals — never a guessed or rounded value. */
+  amount: string;
+  /** The real signature (Solana) or transaction hash (Ethereum) — independently re-checkable by anyone. */
+  txRef: string;
+  /** The address the chain itself reports as having sent the funds. */
+  fromAddress: string;
+  /** The account that submitted this deposit for verification — not necessarily `fromAddress`'s owner. */
+  recordedBy: AccountId;
+  /** When this project verified it, not when the transaction itself landed on-chain. */
+  recordedAt: string;
+  toWallet: string;
+  /** A real Memo program instruction's own text, when present (Solana only — ADR 0020 §2) — a visible cross-check, never load-bearing. */
+  memo?: string;
+}
+
 export type BountyErrorCode =
   | "unauthenticated"
   | "forbidden"
@@ -69,7 +98,11 @@ export type BountyErrorCode =
   | "invalid_submission"
   | "not_found"
   | "not_open"
-  | "already_resolved";
+  | "already_resolved"
+  | "invalid_deposit"
+  | "chain_not_configured"
+  | "deposit_not_verified"
+  | "already_recorded";
 
 /** Same convention as `@osstrace/accounts` and `@osstrace/community-labels`: expected failures are values, never thrown. */
 export type BountyResult<T> = ({ ok: true } & T) | { ok: false; error: BountyErrorCode; message: string };

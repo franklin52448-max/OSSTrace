@@ -3,13 +3,19 @@ import { randomUUID } from "node:crypto";
 // load the accounts runtime just by importing us.
 import type { AccountService, AuthResult, PublicUser } from "@osstrace/accounts";
 import { roleAtLeast } from "@osstrace/accounts";
+import type { DepositVerifier } from "./deposits.ts";
 import type { BountyStore } from "./store.ts";
-import type { Bounty, BountyResult, BountyStatus, BountySubmission, OpenBounty } from "./types.ts";
-import { parseBountyInput, parseCancellationReason, parseSubmissionInput } from "./validate.ts";
+import type { Bounty, BountyResult, BountyStatus, BountySubmission, Deposit, OpenBounty } from "./types.ts";
+import { parseBountyInput, parseCancellationReason, parseDepositInput, parseSubmissionInput } from "./validate.ts";
+
+/** Never configured, so a service built without a real verifier just can't take deposits — no silent "always succeeds" default. */
+const NO_VERIFIER: DepositVerifier = { async verify() { return { ok: false, reason: "not_configured" }; } };
 
 export interface BountyServiceOptions {
   /** Injectable clock, so tests can pin timestamps through the real code path. */
   now?: () => Date;
+  /** ADR 0020. Omit it (or leave a chain unconfigured within it) and deposits on that chain are refused, not silently accepted. */
+  deposits?: DepositVerifier;
 }
 
 type Actor = BountyResult<{ user: PublicUser }>;
@@ -29,11 +35,13 @@ export class BountyService {
   readonly #store: BountyStore;
   readonly #accounts: AccountService;
   readonly #now: () => Date;
+  readonly #deposits: DepositVerifier;
 
   constructor(store: BountyStore, accounts: AccountService, options: BountyServiceOptions = {}) {
     this.#store = store;
     this.#accounts = accounts;
     this.#now = options.now ?? (() => new Date());
+    this.#deposits = options.deposits ?? NO_VERIFIER;
   }
 
   async open(token: string | null | undefined, body: Record<string, unknown>): Promise<BountyResult<{ bounty: Bounty }>> {
@@ -135,5 +143,66 @@ export class BountyService {
     const outcome = await this.#store.cancel(bountyId, { cancelledBy: actor.user.id, cancelledAt: this.#now().toISOString(), cancellationReason: parsed.value });
     if (outcome.ok) return { ok: true, bounty: outcome.bounty };
     return outcome.reason === "not_found" ? { ok: false, error: "not_found", message: "no such bounty" } : { ok: false, error: "not_open", message: "this bounty is no longer open" };
+  }
+
+  /** Public, same reasoning as `listSubmissions` — a verified on-chain deposit is its own real, re-checkable evidence, not private. */
+  async listDeposits(bountyId: string): Promise<BountyResult<{ deposits: Deposit[] }>> {
+    const bounty = await this.#store.getBounty(bountyId);
+    if (!bounty) return { ok: false, error: "not_found", message: "no such bounty" };
+    const deposits = await this.#store.listDeposits(bountyId);
+    return { ok: true, deposits: deposits.slice().reverse() };
+  }
+
+  /**
+   * Records a real, independently-verified on-chain deposit toward a bounty's reward (ADR 0020).
+   * Not restricted to the bounty's own opener, or to an `open` bounty — anyone logged in may back
+   * a bounty, at any point in its life; funding never changes its status.
+   */
+  async recordDeposit(token: string | null | undefined, bountyId: string, body: Record<string, unknown>): Promise<BountyResult<{ deposit: Deposit }>> {
+    const actor = fromAuth(await this.#accounts.authenticate(token));
+    if (!actor.ok) return actor;
+    const bounty = await this.#store.getBounty(bountyId);
+    if (!bounty) return { ok: false, error: "not_found", message: "no such bounty" };
+    const input = parseDepositInput(body);
+    if (!input.ok) return { ok: false, error: "invalid_deposit", message: input.message };
+
+    const existing = await this.#store.findDepositByTxRef(input.value.chain, input.value.txRef);
+    if (existing) {
+      return {
+        ok: false,
+        error: "already_recorded",
+        message: existing.bountyId === bountyId ? "this transaction is already recorded on this bounty" : "this transaction is already recorded on a different bounty",
+      };
+    }
+
+    const verified = await this.#deposits.verify(input.value.chain, input.value.txRef);
+    if (!verified.ok) {
+      if (verified.reason === "not_configured") {
+        return { ok: false, error: "chain_not_configured", message: `deposits aren't configured for ${input.value.chain} yet` };
+      }
+      const messages: Record<Exclude<typeof verified.reason, "not_configured">, string> = {
+        not_found: "no confirmed transaction was found for that reference",
+        not_confirmed: "that transaction did not succeed on-chain",
+        wrong_wallet: "that transaction didn't pay this project's configured wallet",
+        malformed_reference: `that doesn't look like a real ${input.value.chain === "solana" ? "signature" : "transaction hash"}`,
+      };
+      return { ok: false, error: "deposit_not_verified", message: messages[verified.reason] };
+    }
+
+    const deposit: Deposit = {
+      id: randomUUID(),
+      bountyId,
+      chain: input.value.chain,
+      asset: verified.deposit.asset,
+      amount: verified.deposit.amount,
+      txRef: input.value.txRef,
+      fromAddress: verified.deposit.fromAddress,
+      recordedBy: actor.user.id,
+      recordedAt: this.#now().toISOString(),
+      toWallet: verified.deposit.toWallet,
+      ...(verified.deposit.memo ? { memo: verified.deposit.memo } : {}),
+    };
+    await this.#store.createDeposit(deposit);
+    return { ok: true, deposit };
   }
 }

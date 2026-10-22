@@ -6,7 +6,9 @@
   },
   "references": [
     { "path": "../../core" },
-    { "path": "../accounts" }
+    { "path": "../accounts" },
+    { "path": "../../chains/solana" },
+    { "path": "../../chains/ethereum" }
   ],
   "include": ["src"]
 }

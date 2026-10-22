@@ -7,12 +7,16 @@ import { createBountiesHandler } from "../src/http.ts";
 import { GOOD_PASSWORD, validBountyBody, validSubmissionBody, withEnv, type Env } from "./helpers.ts";
 
 const WEB_ORIGIN = "http://localhost:5301";
+const REAL_SIG = "bqTH7u2PJ33gDQwZMy9BXVxABRpgUbY8xSuK6y9PpKYxucFKhiJyiD7JTrH1zxFvMEJGz4847tvotMoP1Ekavaa";
 
 /** A real HTTP server on an ephemeral port with both the accounts routes and the bounty routes mounted. */
-async function withServer(run: (base: string, env: Env) => Promise<void>): Promise<void> {
+async function withServer(
+  run: (base: string, env: Env) => Promise<void>,
+  httpOptions: { wallets?: { ethereum?: string; solana?: string } } = {},
+): Promise<void> {
   await withEnv(async (env) => {
     const accountsHandler = createAccountsHandler(env.accounts, { allowedOrigins: [WEB_ORIGIN] });
-    const bountiesHandler = createBountiesHandler(env.service, { allowedOrigins: [WEB_ORIGIN] });
+    const bountiesHandler = createBountiesHandler(env.service, { allowedOrigins: [WEB_ORIGIN], ...httpOptions });
     const server: Server = createServer(async (req, res) => {
       if (await accountsHandler(req, res)) return;
       if (await bountiesHandler(req, res)) return;
@@ -129,5 +133,85 @@ test("a malformed %-escape in a bounty id gets a clean 400, not a generic 500, a
 
     const stillUp = await call(base, "GET", "/bounties");
     assert.equal(stillUp.status, 200, "the server must still be up after every malformed id");
+  });
+});
+
+test("GET /bounties/wallets: returns exactly the configured public addresses, never a key, and is public", async () => {
+  await withServer(
+    async (base) => {
+      const res = await call(base, "GET", "/bounties/wallets");
+      assert.equal(res.status, 200);
+      assert.deepEqual(res.body.wallets, { solana: "ourSolanaWallet111" });
+    },
+    { wallets: { solana: "ourSolanaWallet111" } },
+  );
+});
+
+test("GET /bounties/wallets: an unconfigured chain is simply absent, not null or an error", async () => {
+  await withServer(async (base) => {
+    const res = await call(base, "GET", "/bounties/wallets");
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body.wallets, {});
+  });
+});
+
+test("deposits over real HTTP: recording one needs login, is idempotent per real tx reference, and shows up on the public per-bounty list", async () => {
+  await withServer(
+    async (base, env) => {
+      const poster = await signup(base, "poster3@example.com");
+      const opened = await call(base, "POST", "/bounties", { token: poster.token, body: validBountyBody() });
+      assert.equal(opened.status, 201);
+      const bountyId = opened.body.bounty.id as string;
+
+      const emptyList = await call(base, "GET", `/bounties/${bountyId}/deposits`);
+      assert.equal(emptyList.status, 200);
+      assert.deepEqual(emptyList.body.deposits, []);
+
+      const noAuth = await call(base, "POST", `/bounties/${bountyId}/deposits`, { body: { chain: "solana", txRef: REAL_SIG } });
+      assert.equal(noAuth.status, 401);
+
+      const funder = await signup(base, "funder3@example.com");
+      env.deposits.set("solana", REAL_SIG, {
+        ok: true,
+        deposit: { asset: "native", amount: "2.5", fromAddress: "somefunder", toWallet: "ourSolanaWallet111" },
+      });
+      const recorded = await call(base, "POST", `/bounties/${bountyId}/deposits`, { token: funder.token, body: { chain: "solana", txRef: REAL_SIG } });
+      assert.equal(recorded.status, 201);
+      assert.equal(recorded.body.deposit.amount, "2.5");
+
+      const again = await call(base, "POST", `/bounties/${bountyId}/deposits`, { token: funder.token, body: { chain: "solana", txRef: REAL_SIG } });
+      assert.equal(again.status, 409);
+      assert.equal(again.body.error, "already_recorded");
+
+      const list = await call(base, "GET", `/bounties/${bountyId}/deposits`);
+      assert.equal(list.status, 200);
+      assert.equal(list.body.deposits.length, 1);
+      assert.equal(list.body.deposits[0].txRef, REAL_SIG);
+    },
+    { wallets: { solana: "ourSolanaWallet111" } },
+  );
+});
+
+test("deposits over real HTTP: invalid body is 400, unverified is 422, an unconfigured chain is 503 -- never a 500", async () => {
+  await withServer(async (base, env) => {
+    const poster = await signup(base, "poster4@example.com");
+    const opened = await call(base, "POST", "/bounties", { token: poster.token, body: validBountyBody() });
+    const bountyId = opened.body.bounty.id as string;
+
+    const badBody = await call(base, "POST", `/bounties/${bountyId}/deposits`, { token: poster.token, body: { chain: "dogecoin", txRef: REAL_SIG } });
+    assert.equal(badBody.status, 400);
+    assert.equal(badBody.body.error, "invalid_deposit");
+
+    // The verifier itself (not the HTTP `wallets` display option) decides chain_not_configured --
+    // it's what the real createDepositVerifier answers when server.ts has no wallet env var set.
+    env.deposits.set("ethereum", REAL_SIG, { ok: false, reason: "not_configured" });
+    const unconfigured = await call(base, "POST", `/bounties/${bountyId}/deposits`, { token: poster.token, body: { chain: "ethereum", txRef: REAL_SIG } });
+    assert.equal(unconfigured.status, 503);
+    assert.equal(unconfigured.body.error, "chain_not_configured");
+
+    env.deposits.set("solana", REAL_SIG, { ok: false, reason: "wrong_wallet" });
+    const unverified = await call(base, "POST", `/bounties/${bountyId}/deposits`, { token: poster.token, body: { chain: "solana", txRef: REAL_SIG } });
+    assert.equal(unverified.status, 422);
+    assert.equal(unverified.body.error, "deposit_not_verified");
   });
 });

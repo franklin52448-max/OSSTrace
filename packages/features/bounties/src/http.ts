@@ -14,11 +14,17 @@ const STATUS_FOR_ERROR: Record<BountyErrorCode, number> = {
   not_found: 404,
   not_open: 409,
   already_resolved: 409,
+  invalid_deposit: 400,
+  chain_not_configured: 503,
+  deposit_not_verified: 422,
+  already_recorded: 409,
 };
 
 export interface BountiesHttpOptions {
   /** Exact browser origins allowed (CORS). Never `*`: requests carry session tokens. */
   allowedOrigins?: readonly string[];
+  /** Public addresses only (ADR 0020) — shown so a funder knows where to send a deposit, same ones `recordDeposit` verifies against. */
+  wallets?: { ethereum?: string; solana?: string };
 }
 
 class BodyError extends Error {
@@ -55,11 +61,14 @@ async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknow
  *
  *   POST /bounties                          (Bearer)             body → 201 { bounty }
  *   GET  /bounties?status=…                 (public)                  → 200 { bounties }
+ *   GET  /bounties/wallets                  (public)                  → 200 { wallets }
  *   GET  /bounties/:id                      (public)                  → 200 { bounty }
  *   GET  /bounties/:id/submissions          (public)                  → 200 { submissions }
  *   POST /bounties/:id/submissions          (Bearer)             body → 201 { submission }
  *   POST /bounties/:id/claim                (Bearer, moderator)  { submissionId } → 200 { bounty }
  *   POST /bounties/:id/cancel               (Bearer, opener|moderator) { reason } → 200 { bounty }
+ *   GET  /bounties/:id/deposits             (public)                  → 200 { deposits }
+ *   POST /bounties/:id/deposits             (Bearer)             body → 201 { deposit }
  *
  * Errors are `{ "error": <BountyErrorCode or "bad_request">, "message": "..." }`.
  */
@@ -68,6 +77,7 @@ export function createBountiesHandler(
   options: BountiesHttpOptions = {},
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   const allowedOrigins = new Set(options.allowedOrigins ?? ["http://localhost:5301"]);
+  const wallets = options.wallets ?? {};
 
   function send(req: IncomingMessage, res: ServerResponse, status: number, body?: unknown): void {
     const headers: Record<string, string> = { "cache-control": "no-store", vary: "Origin" };
@@ -132,6 +142,11 @@ export function createBountiesHandler(
         sendResult(req, res, await service.list(url.searchParams.get("status") ?? undefined));
         return true;
       }
+      // Ahead of the generic /bounties/:id below — "wallets" would otherwise be read as a bounty id.
+      if (path === "/bounties/wallets" && req.method === "GET") {
+        send(req, res, 200, { wallets });
+        return true;
+      }
 
       const submissionsList = path.match(/^\/bounties\/([^/]+)\/submissions$/);
       if (submissionsList?.[1] && req.method === "GET") {
@@ -157,6 +172,20 @@ export function createBountiesHandler(
         } else {
           sendResult(req, res, await service.cancel(token, id, body["reason"]));
         }
+        return true;
+      }
+
+      const depositsList = path.match(/^\/bounties\/([^/]+)\/deposits$/);
+      if (depositsList?.[1] && req.method === "GET") {
+        const id = decodeBountyId(req, res, depositsList[1]);
+        if (id === null) return true;
+        sendResult(req, res, await service.listDeposits(id));
+        return true;
+      }
+      if (depositsList?.[1] && req.method === "POST") {
+        const id = decodeBountyId(req, res, depositsList[1]);
+        if (id === null) return true;
+        sendResult(req, res, await service.recordDeposit(token, id, await readJsonBody(req)), 201);
         return true;
       }
 

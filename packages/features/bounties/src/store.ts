@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { AccountId } from "@osstrace/core";
-import type { Bounty, BountyStatus, BountySubmission, ClaimedBounty, OpenBounty } from "./types.ts";
+import type { Bounty, BountyStatus, BountySubmission, ClaimedBounty, Deposit, OpenBounty } from "./types.ts";
 
 export interface BountyFilter {
   status?: BountyStatus;
@@ -34,16 +34,22 @@ export interface BountyStore {
   claim(bountyId: string, submissionId: string, decision: ClaimDecision): Promise<ClaimOutcome>;
   /** Atomically: the bounty must exist and be `open`. On success it becomes `cancelled`. */
   cancel(bountyId: string, decision: CancelDecision): Promise<CancelOutcome>;
+  /** The real transaction reference (Solana signature / Ethereum tx hash) already recorded as a deposit, on any bounty — or `null`. */
+  findDepositByTxRef(chain: Deposit["chain"], txRef: string): Promise<Deposit | null>;
+  /** A bounty's verified deposits, oldest first. */
+  listDeposits(bountyId: string): Promise<Deposit[]>;
+  createDeposit(deposit: Deposit): Promise<void>;
 }
 
 interface BountiesFile {
   version: 1;
   bounties: Bounty[];
   submissions: BountySubmission[];
+  deposits: Deposit[];
 }
 
 function emptyFile(): BountiesFile {
-  return { version: 1, bounties: [], submissions: [] };
+  return { version: 1, bounties: [], submissions: [], deposits: [] };
 }
 
 /**
@@ -75,6 +81,9 @@ export class JsonFileBountyStore implements BountyStore {
     if (parsed.version !== 1 || !Array.isArray(parsed.bounties) || !Array.isArray(parsed.submissions)) {
       throw new Error(`${this.#path} is not a version-1 bounties file`);
     }
+    // `deposits` is new (ADR 0020); a file written before it exists just hasn't got any yet,
+    // not a different/invalid version — never reject a real, already-live file over an addition.
+    if (!Array.isArray(parsed.deposits)) parsed.deposits = [];
     return parsed;
   }
 
@@ -163,6 +172,22 @@ export class JsonFileBountyStore implements BountyStore {
       const cancelled = { ...bounty, status: "cancelled" as const, ...decision };
       data.bounties[index] = cancelled;
       return { result: { ok: true, bounty: cancelled }, changed: true };
+    });
+  }
+
+  async findDepositByTxRef(chain: Deposit["chain"], txRef: string): Promise<Deposit | null> {
+    const { deposits } = await this.#read();
+    return deposits.find((d) => d.chain === chain && d.txRef === txRef) ?? null;
+  }
+
+  async listDeposits(bountyId: string): Promise<Deposit[]> {
+    return (await this.#read()).deposits.filter((d) => d.bountyId === bountyId);
+  }
+
+  createDeposit(deposit: Deposit): Promise<void> {
+    return this.#mutate((data) => {
+      data.deposits.push(deposit);
+      return { result: undefined, changed: true };
     });
   }
 }

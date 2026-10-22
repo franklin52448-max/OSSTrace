@@ -11,7 +11,10 @@
   },
   "dependencies": {
     "@osstrace/core": "*",
-    "@osstrace/accounts": "*"
+    "@osstrace/accounts": "*",
+    "@osstrace/chain-solana": "*",
+    "@osstrace/chain-ethereum": "*",
+    "@solana/web3.js": "^1.99.0"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

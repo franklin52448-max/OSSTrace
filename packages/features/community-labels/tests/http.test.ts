@@ -173,6 +173,26 @@ test("share as Community label over real HTTP: draft â†’ 400 without a source â†
   });
 });
 
+test("over the submission rate limit is a real 429 with Retry-After, readable from the web origin", async () => {
+  await withServer(async (base) => {
+    const alice = await signup(base, "alice@example.com");
+    for (let i = 0; i < 10; i++) {
+      const address = `0x${(i + 1).toString(16).padStart(40, "0")}`;
+      assert.equal((await call(base, "POST", "/labels/submissions", { token: alice.token, body: validBody({ address }) })).status, 201);
+    }
+    const limited = await call(base, "POST", "/labels/submissions", {
+      token: alice.token,
+      origin: WEB_ORIGIN,
+      body: validBody({ address: `0x${"f".repeat(40)}` }),
+    });
+    assert.equal(limited.status, 429);
+    assert.equal(limited.body.error, "rate_limited");
+    assert.equal(limited.body.retryAfterSeconds, 3600);
+    assert.equal(limited.headers.get("retry-after"), "3600");
+    assert.match(limited.headers.get("access-control-expose-headers") ?? "", /retry-after/);
+  });
+});
+
 test("malformed and oversized bodies are 400/413, never a crash", async () => {
   await withServer(async (base) => {
     const alice = await signup(base, "alice@example.com");

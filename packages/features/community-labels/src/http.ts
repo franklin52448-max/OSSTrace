@@ -14,6 +14,7 @@ const STATUS_FOR_ERROR: Record<SubmissionErrorCode, number> = {
   not_found: 404,
   duplicate_submission: 409,
   already_reviewed: 409,
+  rate_limited: 429,
 };
 
 export interface LabelSubmissionsHttpOptions {
@@ -78,13 +79,14 @@ export function createLabelSubmissionsHandler(
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   const allowedOrigins = new Set(options.allowedOrigins ?? ["http://localhost:5301"]);
 
-  function send(req: IncomingMessage, res: ServerResponse, status: number, body?: unknown): void {
-    const headers: Record<string, string> = { "cache-control": "no-store", vary: "Origin" };
+  function send(req: IncomingMessage, res: ServerResponse, status: number, body?: unknown, extra: Record<string, string> = {}): void {
+    const headers: Record<string, string> = { "cache-control": "no-store", vary: "Origin", ...extra };
     const origin = req.headers["origin"];
     if (typeof origin === "string" && allowedOrigins.has(origin)) {
       headers["access-control-allow-origin"] = origin;
       headers["access-control-allow-headers"] = "authorization, content-type";
       headers["access-control-allow-methods"] = "GET, POST, OPTIONS";
+      headers["access-control-expose-headers"] = "retry-after";
     }
     if (body === undefined) {
       res.writeHead(status, headers);
@@ -97,7 +99,13 @@ export function createLabelSubmissionsHandler(
 
   function sendResult<T extends object>(req: IncomingMessage, res: ServerResponse, result: SubmissionResult<T>, okStatus = 200): void {
     if (!result.ok) {
-      send(req, res, STATUS_FOR_ERROR[result.error], { error: result.error, message: result.message });
+      const body: Record<string, unknown> = { error: result.error, message: result.message };
+      const extra: Record<string, string> = {};
+      if (result.retryAfterSeconds !== undefined) {
+        body["retryAfterSeconds"] = result.retryAfterSeconds;
+        extra["retry-after"] = String(result.retryAfterSeconds);
+      }
+      send(req, res, STATUS_FOR_ERROR[result.error], body, extra);
       return;
     }
     const { ok: _ok, ...body } = result;

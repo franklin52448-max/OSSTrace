@@ -93,6 +93,15 @@ Error codes:
 | 404 | `not_found` (also: no private label of yours to share for that address) |
 | 409 | `duplicate_submission` (you already have one pending for this address), `already_reviewed` |
 | 413 | `bad_request` (body over 16 KiB) |
+| 429 | `rate_limited`: more than 10 submissions from your account in the last hour. The body has `retryAfterSeconds` and there's a `Retry-After` header |
+
+### Rate limit
+
+Each account can create at most **10 submissions in any rolling hour** (`SUBMISSION_RATE_LIMIT`,
+[ADR 0017](../../../docs/adr/0017-share-private-labels-and-submission-rate-limit.md)). Every
+created submission counts, including shares and ones later rejected. Refused attempts (invalid,
+duplicate) don't. It's counted from the submissions file inside the store's write lock, so it
+survives a restart and parallel requests can't race past it.
 
 ## How it plugs in
 
@@ -110,7 +119,6 @@ Import from `@osstrace/community-labels` only.
 
 ## What's not built yet
 
-- No rate limiting on submissions. It's needed before a public deployment, same as login.
 - Pending submissions can't be edited or withdrawn, and a confirmed label can't be un-confirmed. A
   newer confirmed submission for the same address does supersede it.
 - A lookup shows one label per address. Other pending submissions for that address are only visible

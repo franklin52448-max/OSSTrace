@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 // a reader of community labels (the Explorer) doesn't load the accounts runtime just by importing us.
 import type { AccountService, AuthResult, PublicUser } from "@osstrace/accounts";
 import { draftFromPrivateLabel, type PrivateLabelLookup, type PrivateLabelSnapshot, type ShareDraft } from "./share.ts";
-import type { SubmissionStore } from "./store.ts";
+import type { CreateRateLimit, SubmissionStore } from "./store.ts";
 import type { PendingSubmission, Submission, SubmissionResult } from "./types.ts";
 import { parseRejectionReason, parseSubmissionInput } from "./validate.ts";
 
@@ -15,7 +15,24 @@ export interface LabelSubmissionServiceOptions {
    * Without it the two share methods answer `not_found`; everything else works the same.
    */
   privateLabels?: PrivateLabelLookup;
+  /** Overrides `SUBMISSION_RATE_LIMIT` (e.g. a deployment that wants it stricter). */
+  rateLimit?: SubmissionRateLimit;
 }
+
+export interface SubmissionRateLimit {
+  /** Submissions one account may create per window. */
+  max: number;
+  /** Rolling window length, in milliseconds. */
+  windowMs: number;
+}
+
+/**
+ * At most 10 submissions per account in any rolling hour (ADR 0017). Each real submission needs a
+ * public source found and described, so a careful contributor rarely gets near one every six
+ * minutes; a script spamming the moderation queue hits it at once. Counted from the submissions
+ * store itself (every status, including later-rejected ones), so it survives a restart.
+ */
+export const SUBMISSION_RATE_LIMIT: SubmissionRateLimit = { max: 10, windowMs: 60 * 60 * 1000 };
 
 type Actor = SubmissionResult<{ user: PublicUser }>;
 
@@ -44,12 +61,32 @@ export class LabelSubmissionService {
   readonly #accounts: AccountService;
   readonly #now: () => Date;
   readonly #privateLabels: PrivateLabelLookup | null;
+  readonly #rateLimit: SubmissionRateLimit;
 
   constructor(store: SubmissionStore, accounts: AccountService, options: LabelSubmissionServiceOptions = {}) {
     this.#store = store;
     this.#accounts = accounts;
     this.#now = options.now ?? (() => new Date());
     this.#privateLabels = options.privateLabels ?? null;
+    this.#rateLimit = options.rateLimit ?? SUBMISSION_RATE_LIMIT;
+  }
+
+  /** The store-level limit for a create happening at `now`: `max` since `now - windowMs`. */
+  #limitAt(now: Date): CreateRateLimit {
+    return { max: this.#rateLimit.max, since: new Date(now.getTime() - this.#rateLimit.windowMs).toISOString() };
+  }
+
+  /** The 429-equivalent: when the next slot frees up, in whole seconds (at least 1). */
+  #rateLimited(now: Date, oldestInWindow: string): { ok: false; error: "rate_limited"; message: string; retryAfterSeconds: number } {
+    const freesAtMs = Date.parse(oldestInWindow) + this.#rateLimit.windowMs;
+    const retryAfterSeconds = Math.max(1, Math.ceil((freesAtMs - now.getTime()) / 1000));
+    const minutes = Math.ceil(retryAfterSeconds / 60);
+    return {
+      ok: false,
+      error: "rate_limited",
+      message: `you've made ${this.#rateLimit.max} submissions in the last ${Math.round(this.#rateLimit.windowMs / 60_000)} minutes, the most allowed — try again in ${minutes} minute${minutes === 1 ? "" : "s"}`,
+      retryAfterSeconds,
+    };
   }
 
   async submit(token: string | null | undefined, body: Record<string, unknown>): Promise<SubmissionResult<{ submission: Submission }>> {
@@ -133,8 +170,10 @@ export class LabelSubmissionService {
       submittedBy: user.id,
       submittedAt: now.toISOString(),
     };
-    const created = await this.#store.create(submission);
+    // The rate limit is checked inside the store's write lock, against what's actually stored.
+    const created = await this.#store.create(submission, this.#limitAt(now));
     if (!created.ok) {
+      if (created.reason === "rate_limited") return this.#rateLimited(now, created.oldestInWindow);
       return {
         ok: false,
         error: "duplicate_submission",

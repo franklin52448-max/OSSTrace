@@ -72,7 +72,14 @@ export type SubmissionErrorCode =
   | "duplicate_submission"
   | "not_found"
   | "already_reviewed"
-  | "own_submission";
+  | "own_submission"
+  /** Too many submissions from this account in the rate-limit window (ADR 0017). HTTP 429. */
+  | "rate_limited";
 
-/** Same convention as `@osstrace/accounts`: expected failures are values, never thrown. */
-export type SubmissionResult<T> = ({ ok: true } & T) | { ok: false; error: SubmissionErrorCode; message: string };
+/**
+ * Same convention as `@osstrace/accounts`: expected failures are values, never thrown.
+ * `retryAfterSeconds` is set only on `rate_limited`: how long until the account can submit again.
+ */
+export type SubmissionResult<T> =
+  | ({ ok: true } & T)
+  | { ok: false; error: SubmissionErrorCode; message: string; retryAfterSeconds?: number };

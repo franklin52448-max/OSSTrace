@@ -9,7 +9,21 @@ export interface SubmissionFilter {
   address?: Address;
 }
 
-export type CreateOutcome = { ok: true } | { ok: false; reason: "duplicate" };
+/**
+ * A per-account cap on how many submissions may be *created* after `since` (ISO 8601, exclusive:
+ * a submission made exactly one window ago has just aged out).
+ * Every status counts — a submission that was later rejected still took a moderator's time.
+ */
+export interface CreateRateLimit {
+  max: number;
+  since: string;
+}
+
+export type CreateOutcome =
+  | { ok: true }
+  | { ok: false; reason: "duplicate" }
+  /** `oldestInWindow`: submittedAt of the counted submission whose ageing out frees the next slot, so the caller can say when. */
+  | { ok: false; reason: "rate_limited"; oldestInWindow: string };
 
 /** A review decision, applied only if the submission is still pending. */
 export type ReviewDecision =
@@ -26,9 +40,11 @@ export interface SubmissionStore {
   list(filter?: SubmissionFilter): Promise<Submission[]>;
   /**
    * Adds a pending submission. Refuses (`"duplicate"`) if the same account already has a
-   * *pending* submission for the same address — checked inside the write lock.
+   * *pending* submission for the same address, and (`"rate_limited"`) if `limit` is given and the
+   * account already created `limit.max` submissions since `limit.since`. Both are checked inside
+   * the write lock, so concurrent requests can't each squeeze past the limit.
    */
-  create(submission: PendingSubmission): Promise<CreateOutcome>;
+  create(submission: PendingSubmission, limit?: CreateRateLimit): Promise<CreateOutcome>;
   /**
    * Applies a review decision atomically: refuses if the submission doesn't exist, was already
    * reviewed (so two moderators can't both decide it), or was submitted by the reviewer.
@@ -118,13 +134,25 @@ export class JsonFileSubmissionStore implements SubmissionStore {
     return (await this.#read()).submissions.filter((s) => matches(s, filter));
   }
 
-  create(submission: PendingSubmission): Promise<CreateOutcome> {
+  create(submission: PendingSubmission, limit?: CreateRateLimit): Promise<CreateOutcome> {
     return this.#mutate((data): { result: CreateOutcome; changed: boolean } => {
       const key = addressKey(submission.address);
       const duplicate = data.submissions.some(
         (s) => s.status === "community" && s.submittedBy === submission.submittedBy && addressKey(s.address) === key,
       );
       if (duplicate) return { result: { ok: false, reason: "duplicate" }, changed: false };
+      if (limit) {
+        const sinceMs = Date.parse(limit.since);
+        const recent = data.submissions
+          .filter((s) => s.submittedBy === submission.submittedBy && Date.parse(s.submittedAt) > sinceMs)
+          .map((s) => s.submittedAt)
+          .sort();
+        if (recent.length >= limit.max) {
+          // A slot frees up when enough of them age out that fewer than `max` remain.
+          const freesAt = recent[recent.length - limit.max] ?? limit.since;
+          return { result: { ok: false, reason: "rate_limited", oldestInWindow: freesAt }, changed: false };
+        }
+      }
       data.submissions.push(submission);
       return { result: { ok: true }, changed: true };
     });

@@ -35,7 +35,7 @@ export interface Running {
   close(): Promise<void>;
 }
 
-async function listen(handler: Handler): Promise<Running> {
+export async function listen(handler: Handler): Promise<Running> {
   const server: Server = createServer((req, res) => void handler(req, res));
   // No websocket endpoint here (e.g. the Explorer's /stream): refuse the upgrade outright, so the
   // UI sees a closed socket the same way it would against an API without one.

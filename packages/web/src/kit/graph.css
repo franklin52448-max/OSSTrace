@@ -1,6 +1,7 @@
 /* Graph-surface styling (tracer, visualizer, data panels). Only --trace-* tokens are read;
    --traceg-* are local derived values with token fallbacks. Renamed from the design's own
-   --lk-*/--lkg-* prefixes -- see tokens.css's own note. */
+   prefixes (the old prefix text itself isn't repeated here: it contains a star-slash that
+   would close this very comment early) -- see tokens.css's own note. */
 :root {
   --traceg-card: var(--trace-surface);
   --traceg-card-rule: var(--trace-border-strong);

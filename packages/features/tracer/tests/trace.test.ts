@@ -214,10 +214,42 @@ test("tracePath: a real matching path exists past the depth cap -> not found, bu
   assert.equal(result.budgetExhausted, true);
 });
 
+test("tracePath: a fetched edge that reaches the target counts even when the target isn't among the breadth most-recent neighbors", async () => {
+  const adapter = new MapChainAdapter(
+    "ethereum",
+    new Map([
+      [
+        CENTER,
+        {
+          available: true,
+          transactions: [
+            ethTx("h-a", CENTER, A, "1", "out", "2026-01-05T00:00:00Z"),
+            ethTx("h-b", CENTER, B, "1", "out", "2026-01-04T00:00:00Z"),
+            ethTx("h-target", CENTER, TARGET, "1", "out", "2026-01-01T00:00:00Z"), // oldest -> outside breadth 1
+          ],
+        },
+      ],
+    ]),
+  );
+  const result = await tracePath({ chain: "ethereum", value: CENTER }, { chain: "ethereum", value: TARGET }, adapter, {}, { ...DEFAULT_OPTS, breadth: 1 });
+  assert.equal(result.found, true);
+  assert.deepEqual(result.path.map((e) => e.id), ["h-target"]);
+  assert.equal(result.adapterCallsUsed, 1);
+});
+
 test("tracePath: the same address for from and to is an immediate, zero-call non-match", async () => {
   const adapter = new MapChainAdapter("ethereum", new Map());
   const result = await tracePath({ chain: "ethereum", value: CENTER }, { chain: "ethereum", value: CENTER }, adapter, {}, DEFAULT_OPTS);
-  assert.deepEqual(result, { found: false, path: [], hopsSearched: 0, nodesExplored: 0, adapterCallsUsed: 0, budgetExhausted: false });
+  assert.deepEqual(result, {
+    found: false,
+    path: [],
+    nodeChains: { [CENTER]: "ethereum" },
+    hopsSearched: 0,
+    nodesExplored: 0,
+    adapterCallsUsed: 0,
+    budgetExhausted: false,
+    bridges: { enabled: false, protocol: null, lookupsUsed: 0, lookupFailures: [], deadEnds: [], malformedOperations: 0 },
+  });
   assert.deepEqual(adapter.calls, []);
 });
 

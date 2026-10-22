@@ -101,9 +101,20 @@ folders, separate agents, same plugin architecture that made this possible in th
       filters" query (`tracePath`), both built directly on Visualizer's one-hop edge resolution.
       Up to 3 hops, breadth/call-budget capped, honest about depth-cap vs breadth-cap vs
       budget-exhausted vs unavailable.
-  - [ ] **Bridges / cross-chain tracing — not built.** Both entry points take one chain and never
-        cross it; this was the part of the PRD's "most complex remaining feature" framing that's
-        still genuinely unsolved, not a cut corner hidden here.
+  - [x] **Bridges / cross-chain tracing, via Wormhole** (`?bridges=wormhole`,
+        [ADR 0012](docs/adr/0012-tracer-cross-chain-bridge-hops-via-wormhole.md)). When a traced
+        node sent or received a real Wormhole transfer between Ethereum and Solana, the transfer
+        becomes a `kind: "bridge"` edge with both legs' real tx hashes, and the trace continues
+        on the other chain with that chain's adapter. The source-tx → destination-tx link comes
+        from Wormhole's public Wormholescan API (no key). Transfers to unsupported chains, or with
+        no indexed destination tx, are reported as `bridges.deadEnds` and never followed.
+    - [ ] Check each bridge hop independently on-chain: fetch the destination tx from the
+          destination chain and cross-check the guardian-signed VAA. This needs a `getTransaction`
+          capability on `ChainAdapter`, which is a core interface change and needs its own ADR.
+    - [ ] Resolve a Solana Portal recipient token account to its owning wallet (the owner at
+          redeem time is in the redeem tx's `postTokenBalances`).
+    - [ ] Any second bridge protocol. Each needs its own cited contracts and its own real way
+          to link the two legs.
 
 ## Wave 5 — breadth
 

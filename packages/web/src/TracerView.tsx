@@ -26,7 +26,7 @@ interface TracedNode {
   label: Label | null;
   tags: Tag[];
 }
-interface GraphEdge {
+interface ChainEdge {
   id: string;
   hash: string;
   source: string;
@@ -37,29 +37,78 @@ interface GraphEdge {
   token?: { address: string | null; symbol: string | null; amount: string | null; rawAmount: string };
   timestamp: string;
 }
+/** A cross-chain hop (ADR 0012): two real transactions, one per chain. */
+interface BridgeEdge {
+  id: string;
+  hash: string;
+  source: string;
+  target: string;
+  sourceChain: ChainId;
+  targetChain: ChainId;
+  direction: "in" | "out";
+  kind: "bridge";
+  valueNative: "0";
+  token: { address: string | null; symbol: string | null; amount: string | null };
+  timestamp: string;
+  bridge: {
+    protocol: "wormhole";
+    operationId: string;
+    appIds: string[];
+    sourceTxHash: string;
+    targetTxHash: string;
+    targetTimestamp: string | null;
+    evidence: "wormholescan";
+    evidenceUrl: string;
+  };
+}
+type TraceEdge = ChainEdge | BridgeEdge;
 interface FrontierNode {
   id: string;
   reason: "depth-cap" | "breadth-cap" | "budget-exhausted" | "unavailable";
 }
+interface BridgeDeadEnd {
+  operationId: string;
+  nodeId: string;
+  nodeChain: ChainId;
+  direction: "in" | "out";
+  reason: "no-destination-tx" | "counterparty-chain-unsupported" | "counterparty-address-unresolved";
+  sourceTxHash: string;
+  sourceWormholeChainId: number;
+  targetWormholeChainId: number;
+  counterparty: string | null;
+  evidenceUrl: string;
+}
+interface BridgeReport {
+  enabled: boolean;
+  protocol: "wormhole" | null;
+  lookupsUsed: number;
+  lookupFailures: { id: string; chain: ChainId; reason: string }[];
+  deadEnds: BridgeDeadEnd[];
+  malformedOperations: number;
+}
 interface TraceGraphReport {
   center: { chain: ChainId; value: string };
   nodes: TracedNode[];
-  edges: GraphEdge[];
+  edges: TraceEdge[];
   expandedIds: string[];
   frontier: FrontierNode[];
+  nodeChains: Record<string, ChainId>;
   adapterCallsUsed: number;
   budgetExhausted: boolean;
+  bridges: BridgeReport;
 }
 interface TracePathReport {
   from: { chain: ChainId; value: string };
   to: { chain: ChainId; value: string };
   found: boolean;
-  path: GraphEdge[];
+  path: TraceEdge[];
   nodes: TracedNode[];
+  nodeChains: Record<string, ChainId>;
   hopsSearched: number;
   nodesExplored: number;
   adapterCallsUsed: number;
   budgetExhausted: boolean;
+  bridges: BridgeReport;
 }
 
 type TraceState =
@@ -80,9 +129,20 @@ function short(address: string): string {
   return address.length > 14 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address;
 }
 
-function edgeAmountText(edge: GraphEdge): string {
+const DEAD_END_TEXT: Record<BridgeDeadEnd["reason"], string> = {
+  "no-destination-tx": "Wormholescan has no destination-chain transaction for it (not yet redeemed, or not indexed — can't tell which)",
+  "counterparty-chain-unsupported": "the other side is on a chain OSSTrace doesn't support",
+  "counterparty-address-unresolved": "the other side's address couldn't be resolved",
+};
+
+function txUrl(chain: ChainId, hash: string): string {
+  return chain === "ethereum" ? `https://etherscan.io/tx/${hash}` : `https://solscan.io/tx/${hash}`;
+}
+
+function edgeAmountText(edge: TraceEdge): string {
   if (edge.kind === "native") return `${edge.valueNative} native`;
   const unit = edge.token?.symbol ?? (edge.token?.address ? short(edge.token.address) : "unknown token");
+  if (edge.kind === "bridge") return edge.token.amount !== null ? `${edge.token.amount} ${unit}` : `amount not reported (${unit})`;
   return edge.token?.amount !== null && edge.token?.amount !== undefined ? `${edge.token.amount} ${unit}` : `${edge.token?.rawAmount ?? "?"} raw units of ${unit}`;
 }
 
@@ -95,7 +155,10 @@ export default function TracerView() {
   const [token, setToken] = useState("");
   const [minAmount, setMinAmount] = useState("");
   const [since, setSince] = useState("");
+  const [toChain, setToChain] = useState<ChainId>("ethereum");
+  const [followBridges, setFollowBridges] = useState(false);
   const [state, setState] = useState<TraceState>({ status: "idle" });
+  const effectiveToChain = followBridges ? toChain : chain;
 
   async function handleSubmit(event: React.FormEvent): Promise<void> {
     event.preventDefault();
@@ -109,6 +172,8 @@ export default function TracerView() {
         if (token.trim()) params.set("token", token.trim());
         if (minAmount.trim()) params.set("minAmount", minAmount.trim());
         if (since.trim()) params.set("since", new Date(since).toISOString());
+        params.set("toChain", effectiveToChain);
+        if (followBridges) params.set("bridges", "wormhole");
         const res = await fetch(`${TRACER_URL}/trace/path/${chain}?${params}`);
         const body = (await res.json()) as TracePathReport | { error: string };
         if (!res.ok || "error" in body) {
@@ -118,6 +183,7 @@ export default function TracerView() {
         setState({ status: "path", report: body });
       } else {
         const params = new URLSearchParams({ maxHops: String(maxHops), breadth: String(breadth) });
+        if (followBridges) params.set("bridges", "wormhole");
         const res = await fetch(`${TRACER_URL}/trace/graph/${chain}/${encodeURIComponent(fromTrimmed)}?${params}`);
         const body = (await res.json()) as TraceGraphReport | { error: string };
         if (!res.ok || "error" in body) {
@@ -179,6 +245,19 @@ export default function TracerView() {
             <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Token (e.g. USDC, or native)" aria-label="Token filter" className="ctl w-40 py-1" />
             <input value={minAmount} onChange={(e) => setMinAmount(e.target.value)} placeholder="Min amount" aria-label="Minimum amount filter" className="ctl num w-28 py-1" />
             <input type="datetime-local" value={since} onChange={(e) => setSince(e.target.value)} aria-label="Only edges at or after this time" className="ctl py-1" />
+            <label className="flex items-center gap-1.5 text-xs text-ink-faint">
+              <input type="checkbox" checked={followBridges} onChange={(e) => setFollowBridges(e.target.checked)} aria-label="Follow Wormhole bridge hops across chains" />
+              Follow Wormhole bridges
+            </label>
+            {followBridges && to.trim() && (
+              <label className="flex items-center gap-1.5 text-xs text-ink-faint">
+                To chain
+                <select value={toChain} onChange={(e) => setToChain(e.target.value as ChainId)} aria-label="Chain of the To address" className="ctl py-1">
+                  <option value="ethereum">Ethereum</option>
+                  <option value="solana">Solana</option>
+                </select>
+              </label>
+            )}
             <button type="submit" disabled={state.status === "loading"} className="btn-accent ml-auto shrink-0">
               {state.status === "loading" ? "Tracing…" : to.trim() ? "Find path" : "Expand graph"}
             </button>
@@ -189,6 +268,11 @@ export default function TracerView() {
           qualifying flow, never an unrelated matching edge found a few hops off the real path. See{" "}
           <a href="https://github.com/OpenTraceIntelligence/OSSTrace/blob/main/docs/adr/0008-tracer-multi-hop-search-design.md" target="_blank" rel="noreferrer" className="underline hover:text-ink">
             ADR 0008
+          </a>
+          . With bridges on, a Wormhole transfer between Ethereum and Solana is followed onto the other chain, linked by
+          Wormholescan's index (not re-checked on either chain) — see{" "}
+          <a href="https://github.com/OpenTraceIntelligence/OSSTrace/blob/main/docs/adr/0012-tracer-cross-chain-bridge-hops-via-wormhole.md" target="_blank" rel="noreferrer" className="underline hover:text-ink">
+            ADR 0012
           </a>
           .
         </p>
@@ -215,8 +299,9 @@ function BudgetNote({ budgetExhausted }: { budgetExhausted: boolean }) {
   );
 }
 
-function EdgeRow({ edge, chain }: { edge: GraphEdge; chain: ChainId }) {
-  const url = chain === "ethereum" ? `https://etherscan.io/tx/${edge.hash}` : `https://solscan.io/tx/${edge.hash}`;
+function EdgeRow({ edge, chain }: { edge: TraceEdge; chain: ChainId }) {
+  if (edge.kind === "bridge") return <BridgeEdgeRow edge={edge} />;
+  const url = txUrl(chain, edge.hash);
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 py-2">
       <div className="min-w-0">
@@ -229,6 +314,64 @@ function EdgeRow({ edge, chain }: { edge: GraphEdge; chain: ChainId }) {
       </div>
       <div className={`num shrink-0 text-right text-sm ${edge.direction === "in" ? "text-inbound" : "text-outbound"}`}>{edgeAmountText(edge)}</div>
     </li>
+  );
+}
+
+function BridgeEdgeRow({ edge }: { edge: BridgeEdge }) {
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 py-2">
+      <div className="min-w-0">
+        <div className="text-xs text-ink">
+          <span className="chip border-line-strong text-ink-dim">bridge · {edge.bridge.protocol}</span>{" "}
+          {edge.sourceChain} → {edge.targetChain}
+          {edge.bridge.appIds.length > 0 && <span className="ml-2 text-ink-faint">{edge.bridge.appIds.join(", ")}</span>}
+        </div>
+        <a href={txUrl(edge.sourceChain, edge.bridge.sourceTxHash)} target="_blank" rel="noreferrer" className="hash block truncate text-xs text-ink-faint hover:text-ink">
+          {edge.sourceChain}: {edge.bridge.sourceTxHash}
+        </a>
+        <a href={txUrl(edge.targetChain, edge.bridge.targetTxHash)} target="_blank" rel="noreferrer" className="hash block truncate text-xs text-ink-faint hover:text-ink">
+          {edge.targetChain}: {edge.bridge.targetTxHash}
+        </a>
+        <div className="hash text-xs text-ink-faint">
+          {short(edge.source)} → {short(edge.target)} · {new Date(edge.timestamp).toLocaleString()} ·{" "}
+          <a href={edge.bridge.evidenceUrl} target="_blank" rel="noreferrer" className="underline hover:text-ink">
+            Wormholescan record
+          </a>
+        </div>
+      </div>
+      <div className={`num shrink-0 text-right text-sm ${edge.direction === "in" ? "text-inbound" : "text-outbound"}`}>{edgeAmountText(edge)}</div>
+    </li>
+  );
+}
+
+function BridgeNotes({ bridges }: { bridges: BridgeReport }) {
+  if (!bridges.enabled) return null;
+  if (bridges.deadEnds.length === 0 && bridges.lookupFailures.length === 0) return null;
+  return (
+    <section className="card overflow-hidden">
+      <div className="card-header">
+        <h2 className="section-title">Bridge activity not followed</h2>
+        <span className="text-xs text-ink-faint">
+          <span className="num font-medium text-ink">{bridges.lookupsUsed}</span> Wormholescan lookups
+        </span>
+      </div>
+      <ul className="divide-y divide-line px-4 text-sm">
+        {bridges.lookupFailures.map((f) => (
+          <li key={`fail-${f.id}`} className="flex items-center justify-between gap-2 py-2">
+            <span className="hash min-w-0 truncate text-ink-dim">{short(f.id)}</span>
+            <span className="shrink-0 text-xs text-warn">couldn't check for bridge activity: {f.reason}</span>
+          </li>
+        ))}
+        {bridges.deadEnds.map((d) => (
+          <li key={`${d.operationId}-${d.nodeId}`} className="flex flex-wrap items-center justify-between gap-2 py-2">
+            <a href={d.evidenceUrl} target="_blank" rel="noreferrer" className="hash min-w-0 truncate text-xs text-ink-dim hover:text-ink">
+              {short(d.nodeId)} {d.direction === "out" ? "sent" : "received"} · Wormhole chain {d.sourceWormholeChainId} → {d.targetWormholeChainId}
+            </a>
+            <span className="shrink-0 text-xs text-ink-faint">{DEAD_END_TEXT[d.reason]}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -257,11 +400,12 @@ function PathResult({ report }: { report: TracePathReport }) {
           </div>
           <ol className="divide-y divide-line px-4">
             {report.path.map((edge) => (
-              <EdgeRow key={edge.id} edge={edge} chain={report.from.chain} />
+              <EdgeRow key={edge.id} edge={edge} chain={report.nodeChains[edge.source] ?? report.from.chain} />
             ))}
           </ol>
         </section>
       )}
+      <BridgeNotes bridges={report.bridges} />
     </div>
   );
 }
@@ -291,7 +435,7 @@ function GraphExpansionResult({ report }: { report: TraceGraphReport }) {
         </div>
         <ol className="divide-y divide-line px-4">
           {report.edges.map((edge) => (
-            <EdgeRow key={edge.id} edge={edge} chain={report.center.chain} />
+            <EdgeRow key={edge.id} edge={edge} chain={report.nodeChains[edge.source] ?? report.center.chain} />
           ))}
         </ol>
       </section>
@@ -321,6 +465,7 @@ function GraphExpansionResult({ report }: { report: TraceGraphReport }) {
           </ul>
         </section>
       )}
+      <BridgeNotes bridges={report.bridges} />
     </div>
   );
 }

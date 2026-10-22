@@ -1,5 +1,5 @@
-import type { GraphEdge } from "@osstrace/visualizer/src/graph.ts";
 import { compareDecimal } from "@osstrace/visualizer/src/decimal.ts";
+import type { TraceEdge } from "./edges.ts";
 
 /**
  * What a traced path is required to carry at *every* hop, not just somewhere in it — tracing
@@ -21,14 +21,16 @@ export interface TraceFilters {
  * The edge's own amount in its own unit — `valueNative` for a native edge, `token.amount` for a
  * token edge. `null` when the token's decimals were never resolved (core's `TokenTransfer.amount`
  * contract): never guessed, so a `minAmount` filter can never silently count an unknown amount as
- * satisfying it.
+ * satisfying it. A bridge edge's amount is Wormholescan's reported token amount, or `null` when it
+ * didn't report one (ADR 0012).
  */
-function edgeAmount(edge: GraphEdge): string | null {
+function edgeAmount(edge: TraceEdge): string | null {
   return edge.kind === "native" ? edge.valueNative : edge.token?.amount ?? null;
 }
 
-function edgeTokenSymbol(edge: GraphEdge): string | null {
-  return edge.kind === "token" ? edge.token?.symbol ?? null : null;
+/** A bridge hop is a token movement (`valueNative` is always "0"), so it is matched on its token symbol. */
+function edgeTokenSymbol(edge: TraceEdge): string | null {
+  return edge.kind === "native" ? null : edge.token?.symbol ?? null;
 }
 
 /**
@@ -37,7 +39,7 @@ function edgeTokenSymbol(edge: GraphEdge): string | null {
  * `minAmount` filter on `"USDC"` works directly because USDC is itself ~$1; a `minAmount` filter
  * meant as "$100 of ETH" does not exist here and isn't claimed to.
  */
-export function edgeMatchesFilters(edge: GraphEdge, filters: TraceFilters): boolean {
+export function edgeMatchesFilters(edge: TraceEdge, filters: TraceFilters): boolean {
   if (filters.sinceTimestamp !== undefined && Date.parse(edge.timestamp) < Date.parse(filters.sinceTimestamp)) return false;
   if (filters.untilTimestamp !== undefined && Date.parse(edge.timestamp) > Date.parse(filters.untilTimestamp)) return false;
 

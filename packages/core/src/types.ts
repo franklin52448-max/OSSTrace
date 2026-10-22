@@ -11,7 +11,13 @@ export type ChainId = "ethereum" | "solana";
 
 export interface Address {
   chain: ChainId;
-  /** Chain-native format (checksummed hex for Ethereum, base58 for Solana) — never normalized. */
+  /**
+   * Canonical form, as produced by `canonicalAddress` (addressFormat.ts): **lowercase** hex for
+   * Ethereum (the EIP-55 checksum case is dropped), exact case-sensitive base58 for Solana.
+   * Every label dataset, the community/private label stores and the APIs use this form, and
+   * `addressKey` compares exactly — so an Ethereum address stored in checksummed case would never
+   * match a lookup.
+   */
   value: string;
 }
 

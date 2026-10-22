@@ -40,7 +40,9 @@ export class EthereumAdapter implements ChainAdapter {
       }),
     });
     if (!response.ok) {
-      throw new Error(`eth_getBalance HTTP ${response.status} from ${this.#rpcUrl}`);
+      // Never put the RPC URL in the message: hosted RPC providers embed the API key in it
+      // (`.../v2/<key>`, `?api-key=<key>`), and the Explorer returns this message to the client.
+      throw new Error(`eth_getBalance HTTP ${response.status} from the configured Ethereum RPC`);
     }
     const body = (await response.json()) as { result?: string; error?: { message: string } };
     if (body.error) {

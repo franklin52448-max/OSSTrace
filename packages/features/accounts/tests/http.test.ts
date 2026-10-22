@@ -124,6 +124,17 @@ test("role endpoints over HTTP: user gets 403, admin can list users and grant mo
   });
 });
 
+test("a malformed %-escape in a user id is a 400 bad request, not a 500 internal error", async () => {
+  await withServer(async (base, service) => {
+    const admin = await call(base, "POST", "/accounts/signup", { body: { email: "admin@example.com", password: GOOD_PASSWORD } });
+    assert.ok((await service.setRoleAsOperator("admin@example.com", "admin")).ok);
+    // Before: decodeURIComponent's URIError fell through to the catch-all → 500 "internal error".
+    const res = await call(base, "PUT", "/accounts/users/%E0%A4%A/role", { token: admin.body.session.token, body: { role: "moderator" } });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error, "bad_request");
+  });
+});
+
 test("CORS: only the configured origin is allowed, never '*'", async () => {
   await withServer(async (base) => {
     const allowed = await call(base, "OPTIONS", "/accounts/login", { origin: WEB_ORIGIN });

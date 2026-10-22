@@ -10,6 +10,7 @@ import AccountPanel from "./AccountPanel.tsx";
 import ModerationView from "./ModerationView.tsx";
 import { LabelSubmitForm, ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
 import { isModerator, useSession } from "./session.ts";
+import { amountDisplay, type AmountDisplay, type Direction, type TxStatus } from "./txDisplay.ts";
 
 const EXPLORER_URL = import.meta.env["VITE_EXPLORER_URL"] ?? "http://localhost:5300";
 
@@ -17,7 +18,6 @@ interface Balance {
   native: { symbol: string; amount: string; decimals: number };
   asOf: string;
 }
-type Direction = "in" | "out" | "self";
 interface TokenTransfer {
   token: string | null;
   symbol: string | null;
@@ -34,10 +34,17 @@ interface TransactionSummary {
   valueNative: string;
   direction: Direction;
   tokenTransfers?: TokenTransfer[];
+  /** `"failed"` = reverted on-chain: the amounts are what it attempted, nothing moved. */
+  status?: TxStatus;
 }
 
-const directionClass = (d: Direction): string => (d === "in" ? "text-inbound" : d === "out" ? "text-outbound" : "text-ink-faint");
-const directionSign = (d: Direction): string => (d === "in" ? "+" : d === "out" ? "-" : "");
+const TONE_CLASS: Record<AmountDisplay["tone"], string> = {
+  inbound: "text-inbound",
+  outbound: "text-outbound",
+  neutral: "text-ink-faint",
+};
+/** A reverted transaction's amounts are struck through: shown for reference, never as moved. */
+const amountClass = (d: AmountDisplay): string => `${TONE_CLASS[d.tone]}${d.failed ? " line-through" : ""}`;
 const shortId = (id: string): string => (id.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id);
 
 /** Symbol when the data source gave one, else the token's own address/mint, shortened — never a guessed name. */
@@ -373,29 +380,45 @@ function Report({
           <div className="px-4 py-3 text-sm text-ink-dim">No recent transactions found.</div>
         ) : (
           <ul className="divide-y divide-line">
-            {report.transactions.transactions.map((tx) => (
-              <li
-                key={tx.hash}
-                className="flex items-center justify-between gap-4 px-4 py-3 transition-colors duration-150 hover:bg-raised/60"
-              >
-                <div className="min-w-0">
-                  <div className="hash truncate text-xs text-ink-dim">{tx.hash}</div>
-                  <div className="mt-0.5 text-xs text-ink-faint">{new Date(tx.timestamp).toLocaleString()}</div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className={`num font-mono text-sm font-medium ${directionClass(tx.direction)}`}>
-                    {directionSign(tx.direction)}
-                    {tx.valueNative} <span className="text-xs font-normal text-ink-faint">{report.balance.native.symbol}</span>
-                  </div>
-                  {tx.tokenTransfers?.map((t, i) => (
-                    <div key={i} className={`num mt-0.5 font-mono text-xs ${directionClass(t.direction)}`}>
-                      {directionSign(t.direction)}
-                      {tokenLabel(t)}
+            {report.transactions.transactions.map((tx) => {
+              const native = amountDisplay(tx.direction, tx.status);
+              return (
+                <li
+                  key={tx.hash}
+                  className="flex items-center justify-between gap-4 px-4 py-3 transition-colors duration-150 hover:bg-raised/60"
+                >
+                  <div className="min-w-0">
+                    <div className="hash truncate text-xs text-ink-dim">{tx.hash}</div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-faint">
+                      {new Date(tx.timestamp).toLocaleString()}
+                      {native.failed && (
+                        <span
+                          className="chip border-danger/40 bg-danger/10 text-danger"
+                          title="This transaction reverted on-chain: the amounts shown are what it attempted — nothing actually moved"
+                        >
+                          FAILED · nothing moved
+                        </span>
+                      )}
                     </div>
-                  ))}
-                </div>
-              </li>
-            ))}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className={`num font-mono text-sm font-medium ${amountClass(native)}`}>
+                      {native.sign}
+                      {tx.valueNative} <span className="text-xs font-normal text-ink-faint">{report.balance.native.symbol}</span>
+                    </div>
+                    {tx.tokenTransfers?.map((t, i) => {
+                      const token = amountDisplay(t.direction, tx.status);
+                      return (
+                        <div key={i} className={`num mt-0.5 font-mono text-xs ${amountClass(token)}`}>
+                          {token.sign}
+                          {tokenLabel(t)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

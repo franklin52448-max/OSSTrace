@@ -135,6 +135,23 @@ test("summarizeTransaction reports status from tx.meta.err: null is success, any
   assert.equal(failed.tokenTransfers?.length, 2); // still decoded — status is what tells callers it didn't happen
 });
 
+test("a transaction whose details didn't come back still reports the failure getSignaturesForAddress gave", () => {
+  // getParsedTransactions can return null for a signature (pruned history, a dropped batch item).
+  // Before, the summary then carried no status at all, even when the signature list had already
+  // said the transaction reverted — so a failed tx looked merely unchecked.
+  const signature = "5".repeat(88);
+  const failed = summarizeTransaction({ signature, blockTime: 1_760_000_000, err: { InstructionError: [0, { Custom: 7 }] } }, null, RAYDIUM_SWAPPER);
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.from, "unknown", "still no invented counterparty");
+  assert.equal(failed.valueNative, "0");
+
+  const ok = summarizeTransaction({ signature, blockTime: 1_760_000_000, err: null }, null, RAYDIUM_SWAPPER);
+  assert.equal(ok.status, "success");
+
+  const unchecked = summarizeTransaction({ signature, blockTime: 1_760_000_000 }, null, RAYDIUM_SWAPPER);
+  assert.equal("status" in unchecked, false, "no err given → no claim either way");
+});
+
 // --- live: the same transactions, fetched from the real chain right now ---
 
 for (const name of [RAYDIUM_SWAP, JUPITER_ROUTE]) {

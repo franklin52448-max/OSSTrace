@@ -38,6 +38,10 @@ before:
 never mix: top-level `valueNative` is always SOL, token amounts only ever appear in
 `tokenTransfers`.
 
+`status` is `"failed"` when the transaction reverted (`meta.err` non-null), else `"success"`. If
+the RPC returned no details for a signature, the entry says `from: "unknown"`, `valueNative: "0"`
+and still carries the `status` from `getSignaturesForAddress`'s own `err` field.
+
 ## How SPL token transfers are decoded
 
 `src/splToken.ts` (pure, no RPC calls of its own) reads the RPC's own `jsonParsed` decoding of

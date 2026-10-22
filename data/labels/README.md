@@ -14,6 +14,9 @@ code path that writes a `Label` or `Tag` without one.
   - Every entry: `confidence: "verified"` (OFAC's own published, human-curated list — not a
     probabilistic guess), `source.url` pointing at OFAC's sanctions search tool, `source.addedAt`
     set to the date the script last ran.
+  - Only well-formed addresses are taken (0x + 40 hex for Ethereum, 32–44 base58 characters for
+    Solana); a malformed token in OFAC's free-text Remarks is dropped, never ingested. One label per
+    address: if two SDN entries list the same address, their names are joined (`A / B`).
   - Every sanctioned address also gets a `"sanctioned"` `Tag`, independent of its `Label`.
   - Re-run `npm run ingest:ofac` any time to refresh against the live list — OFAC updates it
     continuously, so a long-stale copy of this file will miss recent designations or (less

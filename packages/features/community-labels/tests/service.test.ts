@@ -50,6 +50,23 @@ test("every submission needs a real cited source — missing, blank or non-http 
       ["ftp url", validBody({ source: { url: "ftp://example.org/x", description: "a writeup" } })],
       ["hostless url", validBody({ source: { url: "https://intranet/report", description: "a writeup" } })],
       ["credentials in url", validBody({ source: { url: "https://u:p@example.org/x", description: "a writeup" } })],
+      // Hosts only the submitter can open — uncheckable by any moderator or reader (ADR 0002).
+      // localhost used to be explicitly allowed, and private IPv4 passed the "has a dot" check.
+      ["localhost url", validBody({ source: { url: "http://localhost:8080/report", description: "a writeup" } })],
+      ["*.localhost url", validBody({ source: { url: "http://evidence.localhost/report", description: "a writeup" } })],
+      ["loopback ip", validBody({ source: { url: "http://127.0.0.1/report", description: "a writeup" } })],
+      ["loopback ip, short form", validBody({ source: { url: "http://127.1/report", description: "a writeup" } })],
+      ["loopback ip, integer form", validBody({ source: { url: "http://2130706433/report", description: "a writeup" } })],
+      ["private ip 10/8", validBody({ source: { url: "http://10.1.2.3/report", description: "a writeup" } })],
+      ["private ip 192.168/16", validBody({ source: { url: "https://192.168.0.10/report", description: "a writeup" } })],
+      ["private ip 172.16/12", validBody({ source: { url: "https://172.20.0.1/report", description: "a writeup" } })],
+      ["link-local ip", validBody({ source: { url: "http://169.254.169.254/latest", description: "a writeup" } })],
+      ["ipv6 loopback", validBody({ source: { url: "http://[::1]/report", description: "a writeup" } })],
+      [".internal host", validBody({ source: { url: "https://wiki.corp.internal/report", description: "a writeup" } })],
+      // An unreviewed label is public immediately; a bidi override makes it display as other text.
+      ["bidi override in name", validBody({ name: "Binance ‮etoh‬" })],
+      ["control char in name", validBody({ name: "Exchange\u0000 hot wallet" })],
+      ["bidi isolate in description", validBody({ source: { url: "https://example.org/report", description: "says ⁧so⁩" } })],
       ["bad chain", validBody({ chain: "bitcoin" })],
       ["bad eth address", validBody({ address: "0x1234" })],
       ["not a solana address", validBody({ chain: "solana", address: "0OIl" + "1".repeat(40) })],

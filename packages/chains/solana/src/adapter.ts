@@ -31,13 +31,27 @@ function isSystemTransfer(
  * attached separately as `tokenTransfers` — absent when there are none.
  */
 export function summarizeTransaction(
-  sigInfo: Pick<ConfirmedSignatureInfo, "signature" | "blockTime">,
+  sigInfo: Pick<ConfirmedSignatureInfo, "signature" | "blockTime"> & Partial<Pick<ConfirmedSignatureInfo, "err">>,
   tx: ParsedTransactionWithMeta | null,
   address: string,
 ): TransactionSummary {
   const timestamp = sigInfo.blockTime ? new Date(sigInfo.blockTime * 1000).toISOString() : new Date(0).toISOString();
   if (!tx || !tx.meta) {
-    return { chain: "solana", hash: sigInfo.signature, timestamp, from: "unknown", to: null, valueNative: "0", direction: "self" };
+    // The details didn't come back, so nothing about what moved is known. But
+    // getSignaturesForAddress already said whether the transaction failed (`err`), and dropping
+    // that would let a reverted transaction look merely unchecked.
+    const status: TransactionSummary["status"] | undefined =
+      sigInfo.err === undefined ? undefined : sigInfo.err === null ? "success" : "failed";
+    return {
+      chain: "solana",
+      hash: sigInfo.signature,
+      timestamp,
+      from: "unknown",
+      to: null,
+      valueNative: "0",
+      direction: "self",
+      ...(status ? { status } : {}),
+    };
   }
   const summary = summarizeNative(sigInfo.signature, timestamp, tx, address);
   const tokenTransfers = decodeSplTransfers(tx, address);

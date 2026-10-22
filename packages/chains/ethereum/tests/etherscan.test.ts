@@ -49,6 +49,27 @@ test("a token whose decimals Etherscan doesn't report gets amount: null, never a
   assert.equal(transfer.rawAmount, "5901522149285533025181");
 });
 
+test("a token reporting decimals beyond ERC-20's uint8 gets amount: null instead of freezing the process", async () => {
+  // `decimals()` is uint8 in the ERC-20 standard, but tokenDecimal is whatever the contract
+  // returned, and anyone can deploy a spam token and airdrop it to a popular address. Scaling by
+  // 10^10,000,000 used to block the event loop for minutes (measured: decimals=100,000 already
+  // took ~2.8s; 10,000,000 didn't finish within 2.5 minutes), freezing every request to the
+  // Explorer for any address that ever received such a token.
+  const fx = await loadFixture("mkr-redeem-0xe8c2.json");
+  const started = Date.now();
+  for (const tokenDecimal of ["256", "100000", "10000000", "99999999999999999999"]) {
+    const transfer = decodeTokenTransfer({ ...fx.tokentx[0]!, tokenDecimal }, fx.address);
+    assert.equal(transfer.decimals, null, tokenDecimal);
+    assert.equal(transfer.amount, null, tokenDecimal);
+    assert.equal(transfer.rawAmount, "5901522149285533025181");
+  }
+  assert.ok(Date.now() - started < 1000, "out-of-range decimals must be rejected, not computed");
+  // The top of the real range still decodes exactly.
+  const max = decodeTokenTransfer({ ...fx.tokentx[0]!, tokenDecimal: "255" }, fx.address);
+  assert.equal(max.decimals, 255);
+  assert.equal(max.amount, `0.${"5901522149285533025181".padStart(255, "0")}`);
+});
+
 test("summarizeNativeTx reports status from Etherscan's isError: \"1\" is failed, anything else is success", async () => {
   const fx = await loadFixture("mkr-redeem-0xe8c2.json");
   const row = fx.txlist[0]!;

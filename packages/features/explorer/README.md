@@ -66,7 +66,13 @@ exact same popularity ranking from Redis and refreshed both addresses on its own
 
 ## API
 
-`GET /address/:chain/:address` — `chain` is `ethereum` or `solana`.
+`GET /address/:chain/:address` — `chain` is `ethereum` or `solana`. An Ethereum address is
+lowercased (hex case is only a checksum); a Solana address is used exactly as given. Bad input is a
+`400` before anything reaches a chain adapter or the popularity ranking: an unsupported chain, an
+address that isn't well-formed for its chain, or a malformed `%`-escape in the path. `?limit=`
+(transactions to fetch) is a whole number from 1 to 100; a missing, zero, negative or non-numeric
+value means the default (25), and anything above 100 is capped at 100. The request handler lives
+in `src/http.ts` (`createExplorerHandler`); `src/server.ts` only wires it up and listens.
 
 ```
 curl http://localhost:5300/address/ethereum/0x252a8bd2319d8a555b872990601221b3a2053bce
@@ -100,6 +106,9 @@ underlying chain adapter couldn't fetch history (e.g. no `ETHERSCAN_API_KEY`) �
   today it's just a script you run in a terminal.
 
 ## Testing
+
+`tests/http.test.ts` runs the real request handler behind a real HTTP server: input validation,
+`?limit=` clamping, and that a malformed request can't take the server down.
 
 `npm test` runs `lookup.test.ts` and `cachedLookup.test.ts` against a real temp-file-backed
 `JsonFileLabelStore`, `InMemoryCache`, and a small concrete `ChainAdapter` stand-in with a call

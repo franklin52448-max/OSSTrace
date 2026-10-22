@@ -53,6 +53,15 @@ async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknow
   return parsed as Record<string, unknown>;
 }
 
+/** A malformed `%`-escape is the client's mistake: a 400, not a 500 from the catch-all. */
+function decodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    throw new BodyError(400, "malformed URL encoding in path");
+  }
+}
+
 /** `Authorization: Bearer <token>` → token, or null. */
 export function bearerToken(req: IncomingMessage): string | null {
   const header = req.headers["authorization"];
@@ -166,7 +175,7 @@ export function createAccountsHandler(
       const roleMatch = path.match(/^\/accounts\/users\/([^/]+)\/role$/);
       if (req.method === "PUT" && roleMatch?.[1]) {
         const body = await readJsonBody(req);
-        sendResult(req, res, await service.setRole(bearerToken(req), decodeURIComponent(roleMatch[1]), body["role"]));
+        sendResult(req, res, await service.setRole(bearerToken(req), decodeSegment(roleMatch[1]), body["role"]));
         return true;
       }
 

@@ -153,6 +153,18 @@ test("malformed and oversized bodies are 400/413, never a crash", async () => {
   });
 });
 
+test("a malformed %-escape in a submission id is a 400 bad request, not a 500 internal error", async () => {
+  await withServer(async (base, env) => {
+    const mod = await signup(base, "mod@example.com");
+    assert.ok((await env.accounts.setRoleAsOperator("mod@example.com", "moderator")).ok);
+    // Before: decodeURIComponent's URIError fell through to the catch-all and came back as
+    // 500 "internal error", the client's mistake reported as a server fault.
+    const res = await call(base, "POST", "/labels/submissions/%E0%A4%A/confirm", { token: mod.token });
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error, "bad_request");
+  });
+});
+
 test("CORS: only allowlisted origins get CORS headers; preflight works for them", async () => {
   await withServer(async (base) => {
     const preflight = await call(base, "OPTIONS", "/labels/submissions", { origin: WEB_ORIGIN });

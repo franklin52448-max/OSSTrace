@@ -13,6 +13,7 @@
 import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import type { ChainId, Label, Tag } from "../packages/core/src/types.ts";
+import { canonicalAddress, isRealAddress } from "../packages/core/src/addressFormat.ts";
 
 const SDN_CSV_URL = "https://www.treasury.gov/ofac/downloads/sdn.csv";
 const SOURCE_URL = "https://sanctionssearch.ofac.treas.gov/";
@@ -78,6 +79,11 @@ const DIGITAL_CURRENCY_RE = /Digital Currency Address - ([A-Z]+)\s+([A-Za-z0-9]+
  * Pure: given one already-split SDN CSV row, returns every digital-currency address it names
  * for a supported chain, as [chain, address] pairs (address case-normalized for Ethereum).
  * Separated out from `main` so it's unit-testable without a network call.
+ *
+ * An address is only taken if it has the real shape of an address on its chain (0x + 40 hex for
+ * Ethereum, 32–44 base58 characters for Solana). The UK list's free text has been seen gluing a
+ * word onto an address (`...Bc181Byex`) and running two together; OFAC's Remarks is free text too.
+ * A malformed token is dropped, never ingested as a "sanctioned address" nobody can look up.
  */
 export function extractAddressesFromRow(fields: string[]): Array<{ chain: ChainId; address: string }> {
   const remarks = fields[fields.length - 1] ?? "";
@@ -87,10 +93,44 @@ export function extractAddressesFromRow(fields: string[]): Array<{ chain: ChainI
     const address = match[2];
     if (!code || !address) continue;
     const chain = SUPPORTED_CURRENCY_CODES[code];
-    if (!chain) continue;
-    results.push({ chain, address: chain === "ethereum" ? address.toLowerCase() : address });
+    if (!chain || !isRealAddress(chain, address)) continue;
+    results.push({ chain, address: canonicalAddress(chain, address) });
   }
   return results;
+}
+
+/**
+ * Pure: turns the split SDN rows into the label dataset. **One Label per address** — the label
+ * store holds at most one, and returns the first match — so when OFAC lists the same address under
+ * more than one SDN entry, their names are joined rather than one silently shadowing the other.
+ * One `sanctioned` tag per address.
+ */
+export function buildOfacLabelSet(rows: readonly string[], addedAt: string): { labels: Label[]; tags: Tag[]; entities: [] } {
+  const source = {
+    description: "U.S. Treasury OFAC Specially Designated Nationals (SDN) List — sanctioned digital currency address",
+    url: SOURCE_URL,
+    addedAt,
+  };
+  const byAddress = new Map<string, { chain: ChainId; address: string; names: string[] }>();
+  for (const row of rows) {
+    const fields = parseCsvLine(row);
+    const entName = fields[1]?.trim();
+    if (!entName || entName === "-0-") continue;
+    for (const { chain, address } of extractAddressesFromRow(fields)) {
+      const key = `${chain}:${address}`;
+      const entry = byAddress.get(key) ?? { chain, address, names: [] };
+      if (!entry.names.includes(entName)) entry.names.push(entName);
+      byAddress.set(key, entry);
+    }
+  }
+
+  const labels: Label[] = [];
+  const tags: Tag[] = [];
+  for (const { chain, address, names } of byAddress.values()) {
+    labels.push({ address: { chain, value: address }, name: names.join(" / "), confidence: "verified", source });
+    tags.push({ address: { chain, value: address }, tag: "sanctioned", source });
+  }
+  return { labels, tags, entities: [] };
 }
 
 async function main(): Promise<void> {
@@ -103,39 +143,8 @@ async function main(): Promise<void> {
   const rows = splitCsvRows(csvText);
   console.log(`Downloaded ${rows.length} SDN rows.`);
 
-  const addedAt = new Date().toISOString().slice(0, 10);
-  const labels: Label[] = [];
-  const seenTags = new Set<string>();
-  const tags: Tag[] = [];
-
-  for (const row of rows) {
-    const fields = parseCsvLine(row);
-    const entName = fields[1]?.trim();
-    if (!entName || entName === "-0-") continue;
-
-    for (const { chain, address: normalizedAddress } of extractAddressesFromRow(fields)) {
-      const source = {
-        description: "U.S. Treasury OFAC Specially Designated Nationals (SDN) List — sanctioned digital currency address",
-        url: SOURCE_URL,
-        addedAt,
-      };
-
-      labels.push({
-        address: { chain, value: normalizedAddress },
-        name: entName,
-        confidence: "verified",
-        source,
-      });
-
-      const tagKey = `${chain}:${normalizedAddress}:sanctioned`;
-      if (!seenTags.has(tagKey)) {
-        seenTags.add(tagKey);
-        tags.push({ address: { chain, value: normalizedAddress }, tag: "sanctioned", source });
-      }
-    }
-  }
-
-  const output = { labels, tags, entities: [] };
+  const output = buildOfacLabelSet(rows, new Date().toISOString().slice(0, 10));
+  const { labels, tags } = output;
   await writeFile(OUTPUT_PATH, JSON.stringify(output, null, 2) + "\n", "utf8");
   console.log(`Wrote ${labels.length} labels (${tags.length} unique sanctioned addresses) to ${OUTPUT_PATH}`);
   const byChain = labels.reduce<Record<string, number>>((acc, l) => {

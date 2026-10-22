@@ -42,6 +42,8 @@ export interface EtherscanTokenTx {
 }
 
 const UNSIGNED_INTEGER = /^\d+$/;
+/** ERC-20's `decimals()` returns a uint8. */
+const MAX_ERC20_DECIMALS = 255;
 
 function directionFor(from: string, to: string | null, address: string): TransferDirection {
   const fromSelf = from.toLowerCase() === address;
@@ -73,12 +75,18 @@ export function summarizeNativeTx(tx: EtherscanTx, address: string): Transaction
 
 /**
  * A `tokentx` row as a TokenTransfer. Decimals come from the row's own `tokenDecimal` (Etherscan
- * reads it from the token contract); if that's missing or not an integer, `decimals`/`amount` are
- * `null` and only the exact `rawAmount` is reported — never a guessed 18.
+ * reads it from the token contract); if that's missing, not an integer, or outside ERC-20's uint8
+ * range, `decimals`/`amount` are `null` and only the exact `rawAmount` is reported — never a
+ * guessed 18.
+ *
+ * The uint8 bound isn't pedantry: tokenDecimal is whatever the contract returned, anyone can
+ * deploy a token and airdrop it to any address, and scaling by 10^(huge) blocks the event loop for
+ * minutes. A value no standard token can have is "unknown", not something to compute with.
  */
 export function decodeTokenTransfer(row: EtherscanTokenTx, address: string): TokenTransfer {
   const lower = address.toLowerCase();
-  const decimals = UNSIGNED_INTEGER.test(row.tokenDecimal) ? Number(row.tokenDecimal) : null;
+  const decimals =
+    UNSIGNED_INTEGER.test(row.tokenDecimal) && Number(row.tokenDecimal) <= MAX_ERC20_DECIMALS ? Number(row.tokenDecimal) : null;
   const rawValid = UNSIGNED_INTEGER.test(row.value);
   const to = row.to || null;
   return {

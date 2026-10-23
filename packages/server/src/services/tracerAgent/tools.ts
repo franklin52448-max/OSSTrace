@@ -318,6 +318,7 @@ const findConnections = defineTool({
     const connections: { a: string; b: string; transfers: number; usd: number | null; unpricedTransfers?: number }[] = [];
     let failedPairs = 0;
     let skippedForTime = 0;
+    let partialPairs = 0;
     for (const [a, b] of pairs) {
       if (Date.now() > env.deadline - 4000) {
         skippedForTime++;
@@ -334,6 +335,7 @@ const findConnections = defineTool({
           limit: 200,
         });
         perPair.push(res.transfers);
+        if (res.sync.state !== "ready") partialPairs++;
         if (res.transfers.length) {
           // A transfer with no USD price (not priced yet, or no price exists) is unknown, not $0:
           // summing it as 0 had the model report "the total USD value transferred is 0" for a pair
@@ -401,6 +403,7 @@ const findConnections = defineTool({
       pairsCompared: pairs.length - skippedForTime,
       ...(failedPairs ? { pairsFailed: failedPairs } : {}),
       ...(skippedForTime ? { pairsSkippedForTime: skippedForTime } : {}),
+      ...(partialPairs ? { pairsWithPartialHistory: partialPairs } : {}),
       connections,
       edgesAdded,
       ...(notDrawnTraceFull ? { transfersNotDrawnTraceFull: notDrawnTraceFull } : {}),
@@ -410,7 +413,9 @@ const findConnections = defineTool({
         : connections.length === 0
           ? failedPairs || skippedForTime
             ? "No direct transfers found among the pairs that could be checked -- some pairs could not be checked, so this is not a proven negative."
-            : "No direct transfers between any of these pairs in the history loaded so far."
+            : partialPairs
+              ? `No direct transfers in the history loaded so far, but that history is incomplete for ${partialPairs} of ${pairs.length} pair${pairs.length === 1 ? "" : "s"} -- older transfers aren't loaded yet, so this is NOT proof they never transacted. Tell the user that.`
+              : "No direct transfers between any of these pairs (their transfer history is fully loaded)."
           : "Each connection is a real transfer found on-chain and drawn as an edge.",
     };
   },

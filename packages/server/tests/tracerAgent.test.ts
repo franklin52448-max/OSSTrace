@@ -190,6 +190,18 @@ describe("tracer agent", () => {
     expect(tr.edges).toHaveLength(0); // ...but no edge was invented between them
   });
 
+  it("find_connections: no transfers found in an incompletely loaded history is reported as not proof", async () => {
+    await setup([{ tools: [{ name: "find_connections", args: { addresses: [`ethereum:${ETH_A}`, `ethereum:${ETH_B}`] } }] }, { content: "ok" }]);
+    // A paid B once, long before 12 newer transfers to C: only the newest page is loaded for this query.
+    t.eth.add([ethTransfer(ETH_A, ETH_B, base + 1), ...Array.from({ length: 12 }, (_, i) => ethTransfer(ETH_A, ETH_C, base + 100 + i))]);
+    const anon = new Browser(t.app);
+    const res = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "did A ever pay B?", doc: emptyScratch() })).json() as TracerAgentChatResponse;
+    const r = res.toolCalls[0]!.result as { connections: unknown[]; note: string; pairsWithPartialHistory?: number };
+    expect(r.connections).toEqual([]);
+    expect(r.pairsWithPartialHistory).toBe(1);
+    expect(r.note).toMatch(/NOT proof they never transacted/);
+  });
+
   it("indirect mode reports shared counterparties without drawing them, and is refused for anon", async () => {
     await setup([
       { tools: [{ name: "find_connections", args: { addresses: [`ethereum:${ETH_A}`, `ethereum:${ETH_C}`], mode: "indirect" } }] },

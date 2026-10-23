@@ -279,7 +279,7 @@ describe("BNB as a first-class chain through the API", () => {
     expect(t.eth.calls).toBe(0);
     expect((await t.app.inject(`/api/address/bnb/9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM`)).statusCode).toBe(400);
     const health = (await t.app.inject("/api/health")).json();
-    expect(health.chains.map((c: { id: string; name: string }) => `${c.id}:${c.name}`)).toEqual(["solana:Solana", "ethereum:Ethereum", "bnb:BNB Chain"]);
+    expect(health.chains.map((c: { id: string; name: string }) => `${c.id}:${c.name}`)).toEqual(["solana:Solana", "ethereum:Ethereum", "bnb:BNB Chain", "robinhood:Robinhood Chain"]);
   });
 
   it("labels and traces accept bnb addresses, kept separate from the same address on ethereum", async () => {

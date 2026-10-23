@@ -36,6 +36,14 @@ export type Config = {
    *  verification. Unlike Ethereum, BNB Chain runs a free public RPC reliable enough to default to,
    *  so this has the same zero-config-with-override shape as solanaRpcUrl. */
   bnbRpcUrl: string;
+  /** Robinhood Chain's own official Blockscout instance (robinhoodchain.blockscout.com) -- the same
+   *  zero-key `/api/v2` shape as ethBlockscoutUrl, one instance per chain. Deliberately the per-chain
+   *  instance, not Blockscout's keyed multichain aggregator (api.blockscout.com). */
+  robinhoodBlockscoutUrl: string;
+  /** Never logged. Robinhood Chain JSON-RPC, used for bounty-deposit verification. The chain runs its
+   *  own public RPC (rate-limited, no key), so this has the same zero-config-with-override shape as
+   *  bnbRpcUrl rather than ethRpcUrl's null default. */
+  robinhoodRpcUrl: string;
   /** Bitcoin bounty-deposit verification source (an Esplora-API block explorer, no key needed) --
    *  Blockstream.info by default; mempool.space speaks the same API and can be swapped in via
    *  ESPLORA_URL. Bitcoin is deposit-only here: nothing else in this server reads Bitcoin. */
@@ -61,6 +69,9 @@ export type Config = {
 export const DEFAULT_SOLANA_RPC = "https://api.mainnet-beta.solana.com";
 /** BNB Chain's own public dataseed endpoint (no key). */
 export const DEFAULT_BNB_RPC = "https://bsc-dataseed.bnbchain.org";
+/** Robinhood Chain's own public mainnet RPC (chain id 4663, no key, rate-limited). */
+export const DEFAULT_ROBINHOOD_RPC = "https://rpc.mainnet.chain.robinhood.com";
+export const DEFAULT_ROBINHOOD_BLOCKSCOUT = "https://robinhoodchain.blockscout.com";
 
 const bool = (v: string | undefined, dflt: boolean) => {
   if (v === undefined || v === "") return dflt;
@@ -105,6 +116,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     bnbRpcUrl = env.BNB_RPC_URL.trim();
   }
 
+  let robinhoodRpcUrl = DEFAULT_ROBINHOOD_RPC;
+  if (env.ROBINHOOD_RPC_URL_FILE) {
+    const raw = readFileSync(expandHome(env.ROBINHOOD_RPC_URL_FILE), "utf8").trim();
+    if (!/^https?:\/\//.test(raw)) throw new Error("ROBINHOOD_RPC_URL_FILE does not contain an http(s) URL");
+    robinhoodRpcUrl = raw;
+  } else if (env.ROBINHOOD_RPC_URL) {
+    robinhoodRpcUrl = env.ROBINHOOD_RPC_URL.trim();
+  }
+
   const solscanApiKey = env.SOLSCAN_API_KEY?.trim() || null;
   const etherscanApiKey = env.ETHERSCAN_API_KEY?.trim() || null;
 
@@ -133,6 +153,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     etherscanApiKey,
     etherscanUrl: env.ETHERSCAN_API_URL?.trim() || "https://api.etherscan.io/v2/api",
     bnbRpcUrl,
+    robinhoodBlockscoutUrl: (env.ROBINHOOD_BLOCKSCOUT_URL ?? DEFAULT_ROBINHOOD_BLOCKSCOUT).replace(/\/$/, ""),
+    robinhoodRpcUrl,
     esploraUrl: (env.ESPLORA_URL ?? "https://blockstream.info").replace(/\/$/, ""),
     defillamaUrl: (env.DEFILLAMA_URL ?? "https://coins.llama.fi").replace(/\/$/, ""),
     jupiterTokensUrl: (env.JUPITER_TOKENS_URL ?? "https://lite-api.jup.ag/tokens/v2").replace(/\/$/, ""),

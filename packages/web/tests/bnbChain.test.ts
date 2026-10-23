@@ -7,19 +7,20 @@ import { createElement, useState } from "react";
 import { act } from "react";
 import "./harness/env.ts";
 import { cleanup, render } from "./harness/render.ts";
+import type { Chain } from "@osstrace/contract";
 
 const ADDR = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
 
 afterEach(cleanup);
 
-async function openPicker(chains?: readonly ("ethereum" | "solana" | "bnb")[]) {
+async function openPicker(chains?: readonly Chain[]) {
   const { ChainSelect } = await import("../src/ChainSelect.tsx");
   const picked: string[] = [];
   function Harness() {
-    const [value, setValue] = useState<"ethereum" | "solana" | "bnb">("ethereum");
+    const [value, setValue] = useState<Chain>("ethereum");
     return createElement(ChainSelect, {
       value,
-      onChange: (c: "ethereum" | "solana" | "bnb") => {
+      onChange: (c: Chain) => {
         picked.push(c);
         setValue(c);
       },
@@ -70,7 +71,7 @@ test("labels import: a bnb row is accepted, kept apart from the same address on 
   assert.equal(rows[0]!.errors.length, 0);
   assert.equal(rows[0]!.chain, "bnb");
   assert.equal(rows[1]!.errors.length, 0, "same address on another chain is not a duplicate");
-  assert.match(rows[2]!.errors[0]!, /Unknown chain "bitcoin" \(use solana, ethereum, bnb\)/);
+  assert.match(rows[2]!.errors[0]!, /Unknown chain "bitcoin" \(use solana, ethereum, bnb, robinhood\)/);
 });
 
 test("ChainBadge names BNB Chain, short and long", async () => {

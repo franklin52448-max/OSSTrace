@@ -34,7 +34,13 @@ afterEach(async () => {
 });
 
 test("explorers.ts: only the chains this project actually has data for", () => {
-  assert.deepEqual(Object.keys(explorers.EXPLORERS).sort(), ["bnb", "ethereum", "solana"]);
+  assert.deepEqual(Object.keys(explorers.EXPLORERS).sort(), ["bnb", "ethereum", "robinhood", "solana"]);
+});
+
+test("explorers.ts: Robinhood Chain links go to its own Blockscout instance, never Etherscan", () => {
+  assert.equal(explorers.explorerName("robinhood"), "Blockscout");
+  assert.equal(explorers.explorerAddressUrl("robinhood", "0xabc"), "https://robinhoodchain.blockscout.com/address/0xabc");
+  assert.equal(explorers.explorerTxUrl("robinhood", "0xdef"), "https://robinhoodchain.blockscout.com/tx/0xdef");
 });
 
 test("explorers.ts: builds the real Etherscan/Solscan address and tx URLs", () => {

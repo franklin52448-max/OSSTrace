@@ -27,6 +27,17 @@ multichain V2 API (`ETHERSCAN_API_KEY`, `chainid=56`, `src/chain/bnb.ts`); nativ
 not supported for this chain"), so with a free key BNB lookups report exactly that, as a provider
 error -- never as an empty wallet. A plan that covers BNB makes them work with no code change.
 
+**Robinhood Chain** (EVM chain id 4663) needs no key: it's read through the same Blockscout provider
+as Ethereum, pointed at the chain's own official instance (`ROBINHOOD_BLOCKSCOUT_URL`, default
+`https://robinhoodchain.blockscout.com`), and its deposits are checked over its own public RPC
+(`ROBINHOOD_RPC_URL`, default `https://rpc.mainnet.chain.robinhood.com`). Its gas token is ETH, so
+its rows are stored under chain `robinhood` and its tokens priced under DefiLlama's `robinhood:`
+key -- never as Ethereum mainnet's. Caveat, checked 2026-10-23: that instance's `/api/v2` answered
+every scripted (non-browser) request with a Cloudflare challenge (HTTP 403, `cf-mitigated:
+challenge`), while eth.blockscout.com didn't. Lookups then report "blockscout-robinhood returned HTTP
+403" as the provider error -- never an empty wallet -- until it lifts or the URL points elsewhere.
+Deposit checks don't depend on it (they use the RPC).
+
 **`DEV_SKIP_AUTH=1`**: local dev only, treats every request as signed in as a fixed fake user
 (no wallet, no cookie needed) so every feature can be driven without going through the real
 Phantom/MetaMask flow. Refused outright when `NODE_ENV=production`, so it can never activate on a

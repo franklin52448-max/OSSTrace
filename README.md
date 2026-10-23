@@ -45,6 +45,7 @@ harder for the next contributor to understand, it probably isn't. See
 | Solana chain adapter (balance + tx history via public RPC, no key needed) | **Active** |
 | Solana SPL token transfer decoding (`transfer`/`transferChecked`, incl. Token-2022) | **Active** |
 | BNB Smart Chain (chain id 56) in the unified server: address lookup, balances, transfer history, Tracer/Visualizer (`packages/server/src/chain/bnb.ts`). Same 0x addresses as Ethereum; Ethereum wallets sign in as usual | **Active**, but history/token balances need an `ETHERSCAN_API_KEY` on a plan that covers BNB — Etherscan's free tier refuses chain 56, and that refusal is shown as the error |
+| Robinhood Chain (chain id 4663) in the unified server: address lookup, balances, transfer history, Tracer/Visualizer, via its own official Blockscout instance (`packages/server/src/chain/ethereum.ts`, `robinhood` chain). Gas token is ETH, kept apart from Ethereum's; Ethereum wallets sign in as usual | **Built**, but its Blockscout API served scripted requests a Cloudflare challenge (HTTP 403) when checked on 2026-10-23 — shown as the provider error until that lifts |
 | Explorer API (`GET /address/:chain/:address` — balance, recent txs, label, tags; cached per address + `?limit=`) | **Active** |
 | Caching + a background indexer (real Redis-backed, keeps popular addresses instant) | **Active** |
 | Minimal web UI (paste an address, see what we know) | **Active** |

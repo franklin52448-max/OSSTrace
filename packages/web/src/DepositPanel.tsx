@@ -34,9 +34,11 @@ const CHAIN_NAME: Record<DepositChain, string> = { ...CHAIN_NAMES, bitcoin: "Bit
 const TX_REF_PLACEHOLDER: Record<DepositChain, string> = { solana: "Transaction signature", ethereum: "Transaction hash (0x…)", bnb: "Transaction hash (0x…)", bitcoin: "Transaction ID (txid)" };
 /** Display/selection order everywhere in this panel. */
 const DEPOSIT_CHAINS: readonly DepositChain[] = ["solana", "ethereum", "bnb", "bitcoin"];
-/** The chains a connected browser wallet can send on (Bitcoin is paste-only). */
-const SEND_CHAINS: readonly Chain[] = ["solana", "ethereum", "bnb"];
-const TOKEN_STANDARD: Record<Chain, string> = { solana: "SPL token", ethereum: "ERC-20 token", bnb: "BEP-20 token" };
+/** The chains a connected browser wallet can send on: every deposit chain but Bitcoin (paste-only).
+ *  Derived from DepositChain, so a chain that gains deposits must also say how it's sent here. */
+type SendChain = Exclude<DepositChain, "bitcoin">;
+const SEND_CHAINS: readonly SendChain[] = ["solana", "ethereum", "bnb"];
+const TOKEN_STANDARD: Record<SendChain, string> = { solana: "SPL token", ethereum: "ERC-20 token", bnb: "BEP-20 token" };
 
 /** The shared icon for the two app-wide chains; a plain orange "₿" disc for Bitcoin -- an honest
  *  generic mark, not an attempt at the exact brand artwork. */
@@ -165,7 +167,7 @@ function FundForm({ bountyId, wallets, onRecorded }: { bountyId: string; wallets
   // the same injected Ethereum wallet, moved onto BNB Smart Chain first (switchEvmNetwork).
   const configured = SEND_CHAINS.filter((c) => wallets[c]);
   const pasteConfigured = DEPOSIT_CHAINS.filter((c) => wallets[c]);
-  const [chain, setChain] = useState<Chain>(configured[0] ?? "solana");
+  const [chain, setChain] = useState<SendChain>(configured[0] ?? "solana");
   const [assetMode, setAssetMode] = useState<AssetMode>("native");
   const [contract, setContract] = useState("");
   const [amount, setAmount] = useState("");
@@ -178,7 +180,7 @@ function FundForm({ bountyId, wallets, onRecorded }: { bountyId: string; wallets
   const [pasteBusy, setPasteBusy] = useState(false);
   const [pasteError, setPasteError] = useState<string | null>(null);
 
-  async function record(forChain: Chain, txRef: string): Promise<boolean> {
+  async function record(forChain: SendChain, txRef: string): Promise<boolean> {
     setBusy("recording");
     const res = await serverApiCall(`/api/bounties/${bountyId}/deposits`, { method: "POST", body: { chain: forChain, txRef } });
     setBusy("idle");

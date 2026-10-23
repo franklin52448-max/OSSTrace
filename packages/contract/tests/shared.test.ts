@@ -60,6 +60,16 @@ describe("chain detection", () => {
     expect(chainForAddress("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", "solana")).toBe("ethereum");
     expect(chainForAddress("So11111111111111111111111111111111111111112", "bnb")).toBe("solana");
   });
+  it("treats robinhood as EVM too, and keeps its rows apart from Ethereum's for the same address", () => {
+    const a = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+    expect(normalizeAddress("robinhood", a.toLowerCase())).toBe(a);
+    expect(isAddressOnChain("robinhood", a) && !isAddressOnChain("robinhood", "So11111111111111111111111111111111111111112")).toBe(true);
+    expect(isEvmChain("robinhood")).toBe(true);
+    expect(detectChain(a)).toBe("ethereum"); // only ever chosen explicitly
+    expect(chainForAddress(a, "robinhood")).toBe("robinhood");
+    const t = "11111111-1111-4111-8111-111111111111";
+    expect(addressNodeId(t, "robinhood", a)).not.toBe(addressNodeId(t, "ethereum", a));
+  });
 });
 
 describe("deterministic ids", () => {

@@ -1,8 +1,9 @@
-import { toChecksumAddress } from "@osstrace/contract";
+import { toChecksumAddress, type Chain } from "@osstrace/contract";
 import { ProviderError } from "../lib/errors.ts";
 import { HttpClient, type Budget } from "../lib/http.ts";
 import { isPositiveIntString } from "./amount.ts";
 import { combinedFetch, type ChainProvider, type RawBalance, type RawTransfer, type StreamPage } from "./types.ts";
+import { NATIVE_COIN, tokenCoin } from "./prices.ts";
 import { httpsUrl } from "./tokenLogos.ts";
 
 // Blockscout v2 response shapes (only the fields the server reads). Recorded samples: tests/fixtures/blockscout/.
@@ -45,16 +46,22 @@ type BsPage<T> = { items: T[]; next_page_params: Record<string, string | number 
 type BsTokenBalance = { token: BsToken; token_id: string | null; value: string };
 type BsAddress = { hash: string; coin_balance: string | null; is_contract?: boolean };
 
-const ETH_COIN = "coingecko:ethereum";
+/**
+ * Blockscout runs one instance per chain, every one speaking the same `/api/v2` shape, so nothing in
+ * the parsing below differs between them -- what differs is what the parsed rows *mean*: the
+ * `chain` they're stored under (an ETH transfer on Robinhood Chain is not one on Ethereum mainnet,
+ * even though both say "ETH") and the DefiLlama key they're priced under (see prices.ts). Every
+ * normalizer takes the instance's chain for that reason, defaulting to Ethereum.
+ */
 const cs = (h: string | undefined | null) => (h ? toChecksumAddress(h) : null);
 const sec = (iso: string | null) => (iso ? Math.floor(Date.parse(iso) / 1000) : null);
 
-function base(chainTx: { hash: string; blockNumber: number; time: number }) {
-  return { chain: "ethereum" as const, txHash: chainTx.hash, blockNumber: chainTx.blockNumber, blockTime: chainTx.time, fromOwner: null, toOwner: null };
+function base(chain: Chain, chainTx: { hash: string; blockNumber: number; time: number }) {
+  return { chain, txHash: chainTx.hash, blockNumber: chainTx.blockNumber, blockTime: chainTx.time, fromOwner: null, toOwner: null };
 }
 
 /** Native ETH value moved by a top-level transaction (successful, value > 0). */
-export function normalizeEthTransactions(items: BsTx[]): RawTransfer[] {
+export function normalizeEthTransactions(items: BsTx[], chain: Chain = "ethereum"): RawTransfer[] {
   const out: RawTransfer[] = [];
   for (const t of items) {
     const time = sec(t.timestamp);
@@ -63,7 +70,7 @@ export function normalizeEthTransactions(items: BsTx[]): RawTransfer[] {
     const to = cs(t.to?.hash ?? t.created_contract?.hash);
     if (!from || !to) continue;
     out.push({
-      ...base({ hash: t.hash, blockNumber: t.block_number, time }),
+      ...base(chain, { hash: t.hash, blockNumber: t.block_number, time }),
       id: `${t.hash}_t0`,
       from,
       to,
@@ -73,14 +80,14 @@ export function normalizeEthTransactions(items: BsTx[]): RawTransfer[] {
       tokenDecimals: 18,
       tokenStandard: "native",
       amountRaw: t.value,
-      priceCoin: ETH_COIN,
+      priceCoin: NATIVE_COIN[chain],
     });
   }
   return out;
 }
 
 /** Native ETH moved by internal calls (successful, value > 0). Id `<tx>_i<index>`. */
-export function normalizeEthInternal(items: BsInternal[]): RawTransfer[] {
+export function normalizeEthInternal(items: BsInternal[], chain: Chain = "ethereum"): RawTransfer[] {
   const out: RawTransfer[] = [];
   for (const t of items) {
     const time = sec(t.timestamp);
@@ -89,7 +96,7 @@ export function normalizeEthInternal(items: BsInternal[]): RawTransfer[] {
     const to = cs(t.to?.hash ?? t.created_contract?.hash);
     if (!from || !to) continue;
     out.push({
-      ...base({ hash: t.transaction_hash, blockNumber: t.block_number, time }),
+      ...base(chain, { hash: t.transaction_hash, blockNumber: t.block_number, time }),
       id: `${t.transaction_hash}_i${t.index}`,
       from,
       to,
@@ -99,14 +106,14 @@ export function normalizeEthInternal(items: BsInternal[]): RawTransfer[] {
       tokenDecimals: 18,
       tokenStandard: "native",
       amountRaw: t.value,
-      priceCoin: ETH_COIN,
+      priceCoin: NATIVE_COIN[chain],
     });
   }
   return out;
 }
 
 /** ERC-20 / ERC-721 / ERC-1155 transfers. Id `<tx>_<logIndex>` (suffixed `_<n>` for batch duplicates). */
-export function normalizeEthTokenTransfers(items: BsTokenTransfer[]): RawTransfer[] {
+export function normalizeEthTokenTransfers(items: BsTokenTransfer[], chain: Chain = "ethereum"): RawTransfer[] {
   const out: RawTransfer[] = [];
   const seen = new Map<string, number>();
   for (const t of items) {
@@ -138,7 +145,7 @@ export function normalizeEthTokenTransfers(items: BsTokenTransfer[]): RawTransfe
     seen.set(key, n + 1);
     const contract = toChecksumAddress(t.token.address_hash);
     out.push({
-      ...base({ hash: t.transaction_hash, blockNumber: t.block_number, time }),
+      ...base(chain, { hash: t.transaction_hash, blockNumber: t.block_number, time }),
       id: n === 0 ? key : `${key}_${n}`,
       from,
       to,
@@ -148,16 +155,16 @@ export function normalizeEthTokenTransfers(items: BsTokenTransfer[]): RawTransfe
       tokenDecimals: decimals,
       tokenStandard: standard,
       amountRaw,
-      priceCoin: standard === "erc20" ? `ethereum:${contract}` : null,
+      priceCoin: standard === "erc20" ? tokenCoin(chain, contract) : null,
     });
   }
   return out;
 }
 
-export function normalizeEthBalances(addr: BsAddress | null, tokens: BsTokenBalance[]): RawBalance[] {
+export function normalizeEthBalances(addr: BsAddress | null, tokens: BsTokenBalance[], chain: Chain = "ethereum"): RawBalance[] {
   const out: RawBalance[] = [];
   if (addr?.coin_balance && /^\d+$/.test(addr.coin_balance)) {
-    out.push({ tokenId: "native", symbol: "ETH", name: "Ether", decimals: 18, amountRaw: addr.coin_balance, priceCoin: ETH_COIN });
+    out.push({ tokenId: "native", symbol: "ETH", name: "Ether", decimals: 18, amountRaw: addr.coin_balance, priceCoin: NATIVE_COIN[chain] });
   }
   // Tokens Blockscout knows a market for come first: the balances route prices only the first ~150.
   const ranked = [...tokens].sort((a, b) => Number(!!b.token?.exchange_rate) - Number(!!a.token?.exchange_rate));
@@ -171,7 +178,7 @@ export function normalizeEthBalances(addr: BsAddress | null, tokens: BsTokenBala
       name: t.token.name ?? null,
       decimals: d != null && /^\d+$/.test(d) ? Number(d) : null,
       amountRaw: t.value,
-      priceCoin: `ethereum:${contract}`,
+      priceCoin: tokenCoin(chain, contract),
       logoUrl: httpsUrl(t.token.icon_url),
     });
   }
@@ -183,14 +190,22 @@ const pageTimes = (items: { timestamp: string | null }[]) => {
   return { oldestTime: ts.length ? Math.min(...ts) : null, newestTime: ts.length ? Math.max(...ts) : null };
 };
 
+/** One per EVM chain that has its own Blockscout instance (eth.blockscout.com for Ethereum,
+ *  robinhoodchain.blockscout.com for Robinhood Chain) -- `chain` says which chain its rows belong
+ *  to, and defaults to Ethereum so existing callers keep their meaning. */
 export class BlockscoutProvider implements ChainProvider {
-  readonly chain = "ethereum" as const;
-  readonly id = "blockscout";
+  readonly chain: Chain;
+  /** "blockscout" for Ethereum (unchanged), "blockscout-<chain>" otherwise -- it's what errors and
+   *  SyncStatus.provider show, and "blockscout returned HTTP 403" alone wouldn't say which chain's
+   *  instance it was. */
+  readonly id: string;
   readonly name: string = "Blockscout (eth.blockscout.com)";
   readonly http: HttpClient;
   private readonly baseUrl: string;
-  constructor(baseUrl: string, fetchImpl?: typeof fetch) {
+  constructor(baseUrl: string, fetchImpl?: typeof fetch, chain: Chain = "ethereum") {
     this.baseUrl = baseUrl;
+    this.chain = chain;
+    this.id = chain === "ethereum" ? "blockscout" : `blockscout-${chain}`;
     this.http = new HttpClient(this.id, 4, fetchImpl);
     try {
       this.name = `Blockscout (${new URL(baseUrl).host})`;
@@ -220,10 +235,10 @@ export class BlockscoutProvider implements ChainProvider {
     if (!data || !Array.isArray(data.items)) throw new ProviderError(this.id, "Blockscout returned an unexpected response");
     const transfers =
       stream === "transactions"
-        ? normalizeEthTransactions(data.items)
+        ? normalizeEthTransactions(data.items, this.chain)
         : stream === "internal-transactions"
-          ? normalizeEthInternal(data.items)
-          : normalizeEthTokenTransfers(data.items);
+          ? normalizeEthInternal(data.items, this.chain)
+          : normalizeEthTokenTransfers(data.items, this.chain);
     return {
       transfers,
       nextCursor: data.next_page_params ? JSON.stringify(data.next_page_params) : null,
@@ -248,7 +263,7 @@ export class BlockscoutProvider implements ChainProvider {
         throw e;
       }),
     ]);
-    return normalizeEthBalances(addr.data, Array.isArray(tokens.data) ? tokens.data : []);
+    return normalizeEthBalances(addr.data, Array.isArray(tokens.data) ? tokens.data : [], this.chain);
   }
 
   async ping() {

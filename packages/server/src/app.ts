@@ -66,6 +66,10 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
   if (config.devSkipAuth) ensureDevUser(db); // local dev only -- config.ts refuses this when production is true
   const providers: Record<Chain, ChainProvider> = {
     ethereum: o.providers?.ethereum ?? new BlockscoutProvider(config.ethBlockscoutUrl, o.fetchImpl),
+    // Same provider class as Ethereum, its own chain's Blockscout instance: Robinhood Chain speaks the
+    // identical /api/v2 shape, and the "robinhood" argument is what keeps its rows (and their token
+    // prices) from being stored as Ethereum mainnet's.
+    robinhood: o.providers?.robinhood ?? new BlockscoutProvider(config.robinhoodBlockscoutUrl, o.fetchImpl, "robinhood"),
     bnb: o.providers?.bnb ?? new EtherscanBnbProvider({ apiUrl: config.etherscanUrl, apiKey: config.etherscanApiKey, rpcUrl: config.bnbRpcUrl }, o.fetchImpl),
     solana:
       o.providers?.solana ??

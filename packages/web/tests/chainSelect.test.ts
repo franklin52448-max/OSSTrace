@@ -70,7 +70,7 @@ const NEW_CHAINS = [
 test("ChainSelect offers Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network by their own names, after Base", async () => {
   assert.deepEqual(
     mod.CHAIN_OPTIONS.map((o) => o.value),
-    ["ethereum", "solana", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story", "gnosis", "ronin", "rootstock"],
+    ["ethereum", "solana", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story", "gnosis", "ronin", "rootstock", "zetachain", "mythos", "hyperliquid"],
   );
   const picked: string[] = [];
   const r = await render(createElement(mod.ChainSelect as ComponentType<any>, { value: "ethereum", onChange: (c: string) => picked.push(c) }));
@@ -123,7 +123,7 @@ const GRR_CHAINS = [
 ] as const;
 
 test("ChainSelect offers Gnosis Chain, Ronin and Rootstock by their own names, after the Data Network", async () => {
-  assert.deepEqual(mod.CHAIN_OPTIONS.slice(-4).map((o) => o.value), ["story", "gnosis", "ronin", "rootstock"]);
+  assert.deepEqual(mod.CHAIN_OPTIONS.slice(-7, -3).map((o) => o.value), ["story", "gnosis", "ronin", "rootstock"]);
   const picked: string[] = [];
   const r = await render(createElement(mod.ChainSelect as ComponentType<any>, { value: "ethereum", onChange: (c: string) => picked.push(c) }));
   await click(r.container.querySelector("button")!);
@@ -157,6 +157,58 @@ test("short badges: GNO / RON / RBTC -- not xDAI for Gnosis Chain (bridged DAI i
 
 test("validateAddress checks Gnosis Chain, Ronin and Rootstock addresses by EVM shape, with each chain's own name", () => {
   for (const [chain, label] of GRR_CHAINS) {
+    assert.equal(validateAddress(chain, "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"), null);
+    assert.equal(validateAddress(chain, "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"), `Not a ${label} address (0x followed by 40 hex characters).`);
+  }
+});
+
+const ZMH_CHAINS = [
+  ["zetachain", "ZetaChain", "ZETA"],
+  ["mythos", "Mythos", "MYTHOS"],
+  ["hyperliquid", "HyperEVM", "HYPE"],
+] as const;
+
+test("ChainSelect offers ZetaChain, Mythos and the HyperEVM by their own names, after Rootstock", async () => {
+  assert.deepEqual(mod.CHAIN_OPTIONS.slice(-4).map((o) => o.value), ["rootstock", "zetachain", "mythos", "hyperliquid"]);
+  const picked: string[] = [];
+  const r = await render(createElement(mod.ChainSelect as ComponentType<any>, { value: "ethereum", onChange: (c: string) => picked.push(c) }));
+  await click(r.container.querySelector("button")!);
+  for (const [, label] of ZMH_CHAINS) assert.ok(optionLabels(r.container).includes(label), `no ${label} option`);
+  const hyper = [...r.container.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent?.includes("HyperEVM"))!;
+  await click(hyper);
+  assert.deepEqual(picked, ["hyperliquid"]);
+});
+
+test("the legacy-service picker never offers ZetaChain, Mythos or the HyperEVM", async () => {
+  const r = await render(createElement(mod.ChainSelect as ComponentType<any>, { value: "ethereum", onChange: () => {}, chains: mod.LEGACY_SERVICE_CHAINS }));
+  await click(r.container.querySelector("button")!);
+  for (const [, label] of ZMH_CHAINS) assert.ok(!optionLabels(r.container).includes(label));
+});
+
+test("ChainIcon: ZetaChain a green disc with a drawn Z, Mythos a red disc with a white ring, the HyperEVM a dark disc with a mint ring -- none a neighbour's mark", async () => {
+  const z = await render(createElement(mod.ChainIcon, { chain: "zetachain" }));
+  assert.equal(z.container.querySelector("svg circle")?.getAttribute("fill"), "#008B5E");
+  assert.equal(z.container.querySelectorAll("svg circle").length, 1, "no ring: the drawn Z is what sets it apart from Lens's plain green");
+  assert.ok(z.container.querySelector("svg path"), "the Z is drawn");
+  assert.equal(z.container.textContent, "", "the mark adds no text of its own");
+  await cleanup();
+  const marks: Record<string, [string, string]> = { mythos: ["#C8102E", "#ffffff"], hyperliquid: ["#0F1A1F", "#97FCE4"] };
+  for (const chain of ["mythos", "hyperliquid"] as const) {
+    const r = await render(createElement(mod.ChainIcon, { chain }));
+    const circles = [...r.container.querySelectorAll("svg circle")];
+    assert.equal(circles[0]?.getAttribute("fill"), marks[chain]![0], chain);
+    assert.equal(circles[1]?.getAttribute("stroke"), marks[chain]![1], chain);
+    assert.equal(r.container.textContent, "", "the mark adds no text of its own");
+    await cleanup();
+  }
+});
+
+test("short badges: ZETA / MYTHOS / HYPE -- not ETH or MYTH for Mythos (it pays gas in ETH; MYTH is its ecosystem token)", () => {
+  for (const [chain, , short] of ZMH_CHAINS) assert.equal(CHAIN_SHORT[chain], short);
+});
+
+test("validateAddress checks ZetaChain, Mythos and HyperEVM addresses by EVM shape, with each chain's own name", () => {
+  for (const [chain, label] of ZMH_CHAINS) {
     assert.equal(validateAddress(chain, "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"), null);
     assert.equal(validateAddress(chain, "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"), `Not a ${label} address (0x followed by 40 hex characters).`);
   }

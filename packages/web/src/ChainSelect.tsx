@@ -10,6 +10,10 @@
 // Rootstock likewise, each a disc in its brand's general colour family with a ring so none reads as
 // a neighbour's plain disc (Lens's green, Base's blue, the deposit panel's orange Bitcoin "₿"): Gnosis
 // Chain dark green with a cream ring, Ronin blue with a white ring, Rootstock orange with a black ring.
+// ZetaChain, Mythos and the HyperEVM the same way again: ZetaChain a green disc with a drawn white "Z"
+// (a plain green disc would read as Lens's), Mythos a red disc with a white ring (its explorer's own
+// icon is red; the ring keeps it from reading as OP Mainnet's plain red disc), and the HyperEVM a dark
+// disc with a mint ring (Hyperliquid's mint-on-dark family, not Zora's white ring).
 import { useEffect, useId, useRef, useState } from "react";
 import { CHAIN_NAMES, type Chain } from "@osstrace/contract";
 import { cx } from "./prism/components.tsx";
@@ -29,6 +33,9 @@ export const CHAIN_OPTIONS: readonly { value: Chain; label: string }[] = [
   { value: "gnosis", label: CHAIN_NAMES.gnosis },
   { value: "ronin", label: CHAIN_NAMES.ronin },
   { value: "rootstock", label: CHAIN_NAMES.rootstock },
+  { value: "zetachain", label: CHAIN_NAMES.zetachain },
+  { value: "mythos", label: CHAIN_NAMES.mythos },
+  { value: "hyperliquid", label: CHAIN_NAMES.hyperliquid },
 ];
 
 /** Base's brand blue (base.org's "Base Blue"). */
@@ -48,16 +55,23 @@ const GNOSIS_GREEN = "#133629";
 const GNOSIS_CREAM = "#F0EBDE";
 const RONIN_BLUE = "#1273EA";
 const ROOTSTOCK_ORANGE = "#FF9100";
+/** General colour families again, not exact brand values: ZetaChain's green, Mythos's red, Hyperliquid's
+ *  mint on a near-black. */
+const ZETACHAIN_GREEN = "#008B5E";
+const MYTHOS_RED = "#C8102E";
+const HYPERLIQUID_DARK = "#0F1A1F";
+const HYPERLIQUID_MINT = "#97FCE4";
 
 /** A plain disc, optionally with an inner ring -- the honest generic mark for a chain whose exact
  *  brand artwork isn't copied here. */
-function DiscMark({ fill, ring, size, className, letter }: { fill: string; ring?: string; size: number; className?: string; letter?: "D" }) {
+function DiscMark({ fill, ring, size, className, letter }: { fill: string; ring?: string; size: number; className?: string; letter?: "D" | "Z" }) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" className={cx("shrink-0", className)}>
       <circle cx="12" cy="12" r="12" fill={fill} />
       {ring && <circle cx="12" cy="12" r="7" fill="none" stroke={ring} strokeWidth="2.5" />}
       {/* Drawn, not <text>: a glyph would leak into the option's own text ("DData Network"). */}
       {letter === "D" && <path d="M9 7h2.5a5 5 0 0 1 0 10H9z" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinejoin="round" />}
+      {letter === "Z" && <path d="M8 7.5h8l-8 9h8" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
     </svg>
   );
 }
@@ -76,6 +90,9 @@ export function ChainIcon({ chain, size = 18, className }: { chain: Chain; size?
   if (chain === "gnosis") return <DiscMark fill={GNOSIS_GREEN} ring={GNOSIS_CREAM} size={size} className={className} />;
   if (chain === "ronin") return <DiscMark fill={RONIN_BLUE} ring="#ffffff" size={size} className={className} />;
   if (chain === "rootstock") return <DiscMark fill={ROOTSTOCK_ORANGE} ring="#000000" size={size} className={className} />;
+  if (chain === "zetachain") return <DiscMark fill={ZETACHAIN_GREEN} letter="Z" size={size} className={className} />;
+  if (chain === "mythos") return <DiscMark fill={MYTHOS_RED} ring="#ffffff" size={size} className={className} />;
+  if (chain === "hyperliquid") return <DiscMark fill={HYPERLIQUID_DARK} ring={HYPERLIQUID_MINT} size={size} className={className} />;
   if (chain === "base") {
     return (
       <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" className={cx("shrink-0", className)}>

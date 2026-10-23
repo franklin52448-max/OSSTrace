@@ -6,8 +6,10 @@ import { cn } from "./cn.ts";
  *  indistinguishable from Ethereum's. Lens Chain's native GHO is also an Ethereum token, so it gets
  *  "LENS"; the Data Network's DATA is its own and stays. Gnosis Chain's xDAI is bridged DAI -- an
  *  Ethereum token too -- so it gets "GNO" (the chain's own short code); Ronin's RON and Rootstock's
- *  RBTC are each that chain's own and stay. */
-export const CHAIN_SHORT: Record<Chain, string> = { ...NATIVE_SYMBOLS, robinhood: "RH", base: "BASE", arbitrum: "ARB", optimism: "OP", zora: "ZORA", lens: "LENS", gnosis: "GNO" };
+ *  RBTC are each that chain's own and stay. Mythos pays gas in ETH too, so it gets "MYTHOS" -- not "MYTH",
+ *  which is its ecosystem token's symbol and would read as the unit moved; ZetaChain's ZETA and the
+ *  HyperEVM's HYPE are each that chain's own and stay. */
+export const CHAIN_SHORT: Record<Chain, string> = { ...NATIVE_SYMBOLS, robinhood: "RH", base: "BASE", arbitrum: "ARB", optimism: "OP", zora: "ZORA", lens: "LENS", gnosis: "GNO", mythos: "MYTHOS" };
 const SHORT = CHAIN_SHORT;
 
 /** Text badge for a chain (no third-party logos). */

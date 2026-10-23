@@ -670,6 +670,16 @@ describe("tracer agent", () => {
     expect(none.note).toMatch(/loaded back to \d{4}-\d{2}-\d{2}/);
   });
 
+  it("the model is told today's date, so a relative question ('the last day', 'yesterday') isn't dated from its training data", async () => {
+    const seen: Seen[] = [];
+    await setup([{ content: "ok" }], seen);
+    const anon = new Browser(t.app);
+    await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "what did A receive yesterday?", doc: emptyScratch() });
+    const system = seen[0]!.body.messages.find((m) => m.role === "system")!.content!;
+    expect(system).toContain(new Date().toISOString().slice(0, 10));
+    expect(system).toMatch(/UTC/);
+  });
+
   it("rename / annotate / remove act on this doc's real node ids only", async () => {
     await setup([
       { tools: [{ name: "get_doc_state", args: {} }] },

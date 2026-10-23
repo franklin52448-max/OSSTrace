@@ -29,6 +29,9 @@ function systemPrompt(docKind: AgentDoc["kind"], signedIn: boolean): string {
     "- To refer to existing nodes (\"that node\", \"the second one\"), call get_doc_state first and use real node ids from it.",
     "- Prefer chain:address form for addresses. A 0x address is valid on Ethereum, BNB Chain, Robinhood Chain and Base; if the user didn't say which, use ethereum and mention that assumption.",
     "- Keep replies short and concrete: what you did, what you found (with numbers from tool results), and anything that couldn't be checked.",
+    // Without this the model dates "today" from its training data, so "the last day" became a window a
+    // year or more in the past -- and an honest-looking "no transfers in the last day".
+    `- The current date and time is ${new Date().toISOString().slice(0, 16)}Z (UTC). For "today", "yesterday", "this week" and the like, use list_transfers' timeLast where it fits, or work the dates out from this -- never from what you assume the date is.`,
     docKind === "scratch"
       ? "- This trace is a local-only canvas: it is not saved and is lost on refresh unless the user connects a wallet or shares it."
       : "- This trace is saved to the user's account; your edits are saved automatically.",

@@ -1,6 +1,6 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { connectEthereum, connectSolana, getEthereumProvider, getSolanaProvider, signEthereumMessage, signSolanaMessage } from "./walletConnect.ts";
+import { connectEthereum, connectSolana, getMetaMaskProvider, getSolanaProvider, signEthereumMessage, signSolanaMessage, subscribeEip6963 } from "./walletConnect.ts";
 import { serverChallenge, serverSignOut, serverVerify, setServerUser, useServerSession, type ServerUser, type WalletChain } from "./serverSession.ts";
 import { useUpdateSettings } from "./settings/api.ts";
 import { ChainIcon } from "./ChainSelect.tsx";
@@ -263,7 +263,10 @@ function ConnectForm({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState<WalletChain | null>(null);
   const [error, setError] = useState<string | null>(null);
   const hasPhantom = !!getSolanaProvider();
-  const hasMetaMask = !!getEthereumProvider();
+  // EIP-6963 announcements arrive asynchronously after module load (see walletConnect.ts), so this
+  // re-renders the moment a wallet that was installed all along finally responds, instead of only
+  // checking once at first render and risking a false "not installed".
+  const hasMetaMask = useSyncExternalStore(subscribeEip6963, () => !!getMetaMaskProvider());
 
   async function connect(chain: WalletChain): Promise<void> {
     setBusy(chain);
@@ -279,7 +282,7 @@ function ConnectForm({ onDone }: { onDone: () => void }) {
         if (!challenge.ok) throw new Error(challenge.message);
         signature = await signSolanaMessage(provider, challenge.body.message);
       } else {
-        const provider = getEthereumProvider();
+        const provider = getMetaMaskProvider();
         if (!provider) throw new Error("MetaMask not found");
         address = await connectEthereum(provider);
         const challenge = await serverChallenge(chain, address);

@@ -11,7 +11,27 @@ import { useSyncExternalStore } from "react";
  * `session.ts`; pages backed by the new server use this one.
  */
 
-export const SERVER_URL: string = import.meta.env["VITE_SERVER_URL"] ?? "http://localhost:5320";
+/**
+ * The session cookie is httpOnly + SameSite=Lax (see packages/server/src/auth/sessions.ts), which
+ * browsers never attach to a cross-SITE fetch -- "site" meaning registrable domain (eTLD+1), not
+ * origin, so a fixed VITE_SERVER_URL pointing at a raw *.fly.dev host would never work from either
+ * real frontend domain no matter what SameSite/CORS config the server used. Each production domain
+ * has its own same-site API subdomain (api.osstrace.com, api.opensourcetrace.org -- both already
+ * have Fly certs issued) specifically so the cookie's "site" matches the page's. Vercel serves both
+ * domains from the same build, so this has to be resolved at runtime from the page's own hostname,
+ * not baked in once at build time via VITE_SERVER_URL (which remains the right override for local
+ * dev and any other host, e.g. a tailscale address, where there's no same-site subdomain to use).
+ */
+function resolveServerUrl(): string {
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname.replace(/^www\./, "");
+    if (host === "osstrace.com") return "https://api.osstrace.com";
+    if (host === "opensourcetrace.org") return "https://api.opensourcetrace.org";
+  }
+  return import.meta.env["VITE_SERVER_URL"] ?? "http://localhost:5320";
+}
+
+export const SERVER_URL: string = resolveServerUrl();
 
 export interface ServerUser {
   id: string;

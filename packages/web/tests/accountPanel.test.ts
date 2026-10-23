@@ -44,6 +44,7 @@ after(() => {
 let server: RunningNewServer;
 let AccountPanel: ComponentType;
 let serverSignOut: () => Promise<void>;
+let resetEip6963: () => void;
 let queryClient: QueryClient;
 
 function solanaKeypair(seed: string): { address: string; secretKey: Uint8Array } {
@@ -82,6 +83,7 @@ before(async () => {
   process.env["VITE_SERVER_URL"] = server.url;
   ({ default: AccountPanel } = await import("../src/AccountPanel.tsx"));
   ({ serverSignOut } = await import("../src/serverSession.ts"));
+  ({ __resetEip6963ProvidersForTests: resetEip6963 } = await import("../src/walletConnect.ts"));
 });
 
 after(async () => {
@@ -96,6 +98,7 @@ beforeEach(async () => {
   queryClient = new QueryClient();
   delete (window as unknown as { solana?: unknown }).solana;
   delete (window as unknown as { ethereum?: unknown }).ethereum;
+  resetEip6963();
 });
 afterEach(cleanup);
 
@@ -220,5 +223,49 @@ test("a Solana wallet without signMessage support puts the real error into the a
   const region = alertRegion(menu);
   await click(walletButton("Phantom", menu));
   await waitFor(() => text(region).includes("this wallet doesn't support message signing"), "the unsupported-signMessage error");
+  assert.deepEqual(consoleErrors, []);
+});
+
+/** Mirrors the server's own shortHandle() (routes/auth.ts) so a test can assert which specific
+ *  wallet actually got verified, not just that *some* eth_ handle appeared. */
+function ethHandle(address: string): string {
+  return `eth_${address.slice(0, 4)}${address.slice(-4)}`;
+}
+
+function announceEip6963(rdns: string, name: string, provider: unknown): void {
+  window.dispatchEvent(
+    new window.CustomEvent("eip6963:announceProvider", {
+      detail: { info: { uuid: rdns, name, icon: "", rdns }, provider },
+    }),
+  );
+}
+
+test("EIP-6963: clicking MetaMask connects through its own announced provider, not whichever wallet won window.ethereum", async () => {
+  // Simulates the real bug this fixes: two wallet extensions installed, a non-MetaMask one won
+  // the window.ethereum race (exactly what MetaMask's own "another Ethereum wallet extension..."
+  // console warning describes), but both announce themselves individually via EIP-6963.
+  const decoy = mockMetaMask("decoy-wallet-won-window-ethereum");
+  const realMetaMask = mockMetaMask("the-actual-metamask");
+  (window as unknown as { ethereum: unknown }).ethereum = decoy;
+  announceEip6963("io.somethingelse", "Some Other Wallet", decoy);
+  announceEip6963("io.metamask", "MetaMask", realMetaMask);
+
+  const menu = await openConnectMenu();
+  await click(walletButton("MetaMask", menu));
+  await waitFor(() => text().includes(ethHandle(realMetaMask.address)), "the real MetaMask wallet's own handle");
+  assert.ok(!text().includes(ethHandle(decoy.address)), "must not have connected through the decoy that won window.ethereum");
+  assert.deepEqual(consoleErrors, []);
+});
+
+test("EIP-6963: other wallets announced but not MetaMask shows MetaMask as not detected, never falls back to window.ethereum (which could be any of them)", async () => {
+  const decoy = mockMetaMask("another-decoy");
+  (window as unknown as { ethereum: unknown }).ethereum = decoy;
+  announceEip6963("io.somethingelse", "Some Other Wallet", decoy);
+  // No "io.metamask" entry announced -- getMetaMaskProvider() must return null, not decoy, so the
+  // menu correctly offers an Install link instead of a connect button that would silently use it.
+
+  const menu = await openConnectMenu();
+  assert.equal(menu.querySelectorAll('button[aria-label="MetaMask"]').length, 0, "no connect button for an undetected wallet");
+  assert.ok(menu.querySelector('a[href="https://metamask.io/download/"]'), "an Install link instead");
   assert.deepEqual(consoleErrors, []);
 });

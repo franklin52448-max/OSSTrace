@@ -150,10 +150,14 @@ export function describeToolCall(call: AgentToolCall, doc: TraceDoc | null): Age
     case "expand_node": {
       const nodes = num(r["nodesAdded"]) ?? 0;
       const edges = num(r["edgesAdded"]) ?? 0;
-      const partial = /partial|stopped short/i.test(str(r["note"]) ?? "");
+      // "Stopped short" is the result's own word for nodes it didn't get to (budget, provider errors,
+      // a full trace); an incompletely loaded history is a different caveat and is worded as itself.
+      const stoppedShort = /stopped short/i.test(str(r["note"]) ?? "");
+      const partialHistory = num(r["nodesWithPartialHistory"]) ?? 0;
       const base = nameOf(doc, r["rootNodeId"]);
       const summary = nodes || edges ? `Expanded ${base}: ${plural(nodes, "node")}, ${plural(edges, "edge")} added` : `Expanded ${base}: nothing new to add`;
-      return step(nodes || edges ? "applied" : "read", partial ? `${summary} (partial: some nodes couldn't be expanded)` : summary);
+      const caveats = [stoppedShort ? "partial: some nodes couldn't be expanded" : null, partialHistory ? "ranked from history that isn't fully loaded yet" : null].filter(Boolean);
+      return step(nodes || edges ? "applied" : "read", caveats.length ? `${summary} (${caveats.join("; ")})` : summary);
     }
     case "list_transfers": {
       const n = Array.isArray(r["transfers"]) ? r["transfers"].length : 0;

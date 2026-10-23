@@ -433,8 +433,9 @@ const findConnections = defineTool({
 const expandNode = defineTool({
   name: "expand_node",
   description:
-    `Follow money outward from an address: add its top counterparties (by USD moved) as nodes with aggregate edges, then theirs, up to \`hops\` hops (1-${MAX_HOPS}). ` +
-    `\`breadth\` (1-${MAX_BREADTH}, default ${DEFAULT_BREADTH}) is how many counterparties per node. Hard-capped on chain lookups; the result says honestly what was not expanded and why.`,
+    `Expand outward from an address hop by hop: add its top counterparties -- addresses it sent to OR received from, both directions, ranked by USD moved -- as nodes with aggregate edges, then theirs, up to \`hops\` hops (1-${MAX_HOPS}). ` +
+    `\`breadth\` (1-${MAX_BREADTH}, default ${DEFAULT_BREADTH}) is how many counterparties per node. It does not say which way money went: get_doc_state's aggregate edges have each direction's totals, and list_transfers' flow filters by direction. ` +
+    `Hard-capped on chain lookups; the result says honestly what was not expanded and why, and when the history it ranked from was incomplete.`,
   parameters: {
     type: "object",
     properties: { chain: chainJson, address: { type: "string" }, hops: { type: "integer", minimum: 1, maximum: MAX_HOPS }, breadth: { type: "integer", minimum: 1, maximum: MAX_BREADTH } },
@@ -455,6 +456,8 @@ const expandNode = defineTool({
     let skippedTraceFull = 0;
     const unavailable: string[] = [];
     let budgetExhausted = 0;
+    /** Expanded nodes whose history wasn't fully loaded: their "top counterparties" are the top of what's loaded. */
+    let partialHistory = 0;
     for (let hop = 1; hop <= hops && frontier.length; hop++) {
       // Keyed by node id: a node reached from two parents in one hop is one node to expand (or to
       // report as not expanded), not two.
@@ -469,7 +472,8 @@ const expandNode = defineTool({
         const a = { chain: n.chain, address: n.address };
         syncs++;
         try {
-          await syncAll(env.ctx, [a], null, { maxRounds: 1, anon: !env.userId });
+          const s = await syncAll(env.ctx, [a], null, { maxRounds: 1, anon: !env.userId });
+          if (s.state !== "ready") partialHistory++;
         } catch {
           unavailable.push(key(a)); // couldn't check -- never reported as "no counterparties"
           continue;
@@ -530,11 +534,22 @@ const expandNode = defineTool({
       notExpanded: { depthCap: depthCapped, budgetExhausted, unavailable },
       counterpartiesNotAdded,
       ...(skippedTraceFull ? { notAddedTraceFull: skippedTraceFull } : {}),
-      note: skippedTraceFull
+      ...(partialHistory ? { nodesWithPartialHistory: partialHistory } : {}),
+      note: [
+        skippedTraceFull
         ? `Stopped short: the trace reached its size limit (${MAX_DOC_NODES} nodes, ${MAX_DOC_EDGES} edges), so ${skippedTraceFull} counterpart${skippedTraceFull === 1 ? "y was" : "ies were"} not added -- the picture is partial. Remove nodes to make room.`
         : budgetExhausted || unavailable.length
           ? "Stopped short: some nodes were not expanded (lookup budget or provider errors) -- the picture is partial, not complete."
           : "Aggregate edges carry real totals from the transfer history loaded so far.",
+        // One sync round per node is the whole budget, so for a busy address the ranking is the top
+        // of its newest slice, not of its history -- and without this said, the result read like the
+        // address's real top counterparties.
+        partialHistory
+          ? `For ${partialHistory} of the expanded nodes the transfer history is not fully loaded: their counterparties are the top ones in the history loaded so far, not necessarily the all-time top, and their totals are lower bounds. Tell the user that.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
     };
   },
 });

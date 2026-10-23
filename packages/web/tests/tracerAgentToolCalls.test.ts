@@ -91,7 +91,11 @@ test("describeToolCall words only what each real result says", () => {
   assert.equal(say("find_connections", { ok: true, connections: [{}, {}], edgesAdded: 2, indirectLeads: [{}] }), "applied: Found 2 direct connections, drew 2 edges, 1 possible indirect link (shared counterparties, not drawn)");
   assert.equal(say("find_connections", { ok: true, connections: [{}], edgesAdded: 1, transfersNotDrawnTraceFull: 2 }), "applied: Found 1 direct connection, drew 1 edge, 2 transfers not drawn (the trace is full)");
   assert.equal(say("expand_node", { ok: true, rootNodeId: a.id, nodesAdded: 3, edgesAdded: 3, note: "Stopped short: some nodes were not expanded" }), "applied: Expanded 0x1111…1111: 3 nodes, 3 edges added (partial: some nodes couldn't be expanded)");
-  assert.equal(say("list_transfers", { ok: true, transfers: [{}, {}], sortedBy: "usd desc" }), "read: Looked at 2 transfers, sorted by usd desc");
+  assert.equal(
+    say("expand_node", { ok: true, rootNodeId: a.id, nodesAdded: 2, edgesAdded: 2, nodesWithPartialHistory: 1, note: "Aggregate edges carry real totals from the transfer history loaded so far. For 1 of the expanded nodes the transfer history is not fully loaded: ..." }),
+    "applied: Expanded 0x1111…1111: 2 nodes, 2 edges added (ranked from history that isn't fully loaded yet)",
+  );
+  assert.equal(say("list_transfers",{ ok: true, transfers: [{}, {}], sortedBy: "usd desc" }), "read: Looked at 2 transfers, sorted by usd desc");
   assert.equal(say("remove_node", { ok: true, removedNodeId: a.id, edgesRemoved: 2 }), "applied: Removed a node and 2 edges");
   assert.equal(say("annotate_node", { ok: true, nodeId: a.id, note: "exchange?" }), "applied: Added a note on 0x1111…1111");
   assert.equal(say("open_trace_doc", { ok: true, url: "#trace/scratch", persistent: false }), "read: This canvas is local-only: connect a wallet to save it");

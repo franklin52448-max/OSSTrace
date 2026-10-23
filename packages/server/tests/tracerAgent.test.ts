@@ -670,6 +670,39 @@ describe("tracer agent", () => {
     expect(res.toolCalls[0]!.result).toMatchObject({ ok: true, nodesAdded: 3, edgesAdded: 4, notExpanded: { depthCap: 1, budgetExhausted: 0 } });
   });
 
+  it("expand_node adds counterparties from both directions, and its description says so rather than 'follow money outward'", async () => {
+    await setup([{ tools: [{ name: "expand_node", args: { chain: "ethereum", address: ETH_A, hops: 1 } }] }, { content: "ok" }]);
+    // B only ever SENT to A: a "where did A's money go" reading of expand_node would report B as a recipient.
+    t.eth.add([ethTransfer(ETH_B, ETH_A, base + 1), ethTransfer(ETH_A, ETH_C, base + 2)]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "expand A" })).json() as TracerAgentChatResponse;
+    expect(res.toolCalls[0]!.result).toMatchObject({ ok: true, nodesAdded: 2 });
+    expect(res.doc.nodes.map((n) => n.address).sort()).toEqual([ETH_A, ETH_B, ETH_C].sort());
+    const desc = TOOL_SPECS.find((s) => s.function.name === "expand_node")!.function.description;
+    expect(desc).not.toMatch(/follow money/i);
+    expect(desc).toMatch(/sent to OR received from, both directions/);
+    expect(desc).toMatch(/does not say which way money went/);
+  });
+
+  it("expand_node on an address whose history isn't fully loaded says its 'top counterparties' are the top of what's loaded", async () => {
+    await setup([{ tools: [{ name: "expand_node", args: { chain: "ethereum", address: ETH_A, hops: 1, breadth: 1 } }] }, { content: "ok" }, { tools: [{ name: "expand_node", args: { chain: "ethereum", address: ETH_C, hops: 1 } }] }, { content: "ok" }]);
+    // A's biggest counterparty by far (B, 50 ETH) is older than the one page a sync round loads.
+    t.eth.add([ethTransfer(ETH_B, ETH_A, base - 9000, { amountRaw: "50000000000000000000" }), ...Array.from({ length: 12 }, (_, i) => ethTransfer(ETH_A, evm(i), base + i))]);
+    t.eth.add([ethTransfer(ETH_C, evm(50), base + 1)]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "who is A's top counterparty?" })).json() as TracerAgentChatResponse;
+    const r = res.toolCalls[0]!.result as { nodesWithPartialHistory?: number; note: string };
+    expect(res.doc.nodes.some((n) => n.address === ETH_B)).toBe(false); // the real top one isn't loaded, so isn't what was added...
+    expect(r.nodesWithPartialHistory).toBe(1); // ...and the result says so, rather than reading as A's real top counterparty
+    expect(r.note).toMatch(/not necessarily the all-time top, and their totals are lower bounds/);
+    // A fully loaded history says nothing of the kind.
+    const full = (await c.post("/api/tracer-agent/chat", { docId: id, message: "expand C" })).json() as TracerAgentChatResponse;
+    expect(full.toolCalls[0]!.result).not.toHaveProperty("nodesWithPartialHistory");
+    expect((full.toolCalls[0]!.result as { note: string }).note).toBe("Aggregate edges carry real totals from the transfer history loaded so far.");
+  });
+
   it("list_transfers on a never-synced address with no time window loads more than the newest page, and an empty partial answer says it isn't proof", async () => {
     await setup([
       {

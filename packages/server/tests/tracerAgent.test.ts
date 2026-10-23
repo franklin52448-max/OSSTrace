@@ -664,6 +664,22 @@ describe("tracer agent", () => {
     expect(mid.doc.nodes).toHaveLength(1);
   });
 
+  it("tool calls that come without an id, or reuse one, still run, and each gets its own result id", async () => {
+    const seen: Seen[] = [];
+    const call = (address: string, id?: string) => ({ ...(id !== undefined ? { id } : {}), type: "function", function: { name: "add_node", arguments: JSON.stringify({ chain: "ethereum", address }) } });
+    await setup([{ status: 200, body: { choices: [{ index: 0, finish_reason: "tool_calls", message: { role: "assistant", content: null, tool_calls: [call(ETH_A), call(ETH_B, "dup"), call(ETH_C, "dup")] } }] } }, { content: "added three" }], seen);
+    const anon = new Browser(t.app);
+    const res = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "add A, B and C", doc: emptyScratch() })).json() as TracerAgentChatResponse;
+    expect(res.toolCalls.map((x) => (x.result as { ok: boolean }).ok)).toEqual([true, true, true]);
+    expect(res.doc.nodes).toHaveLength(3);
+    const next = seen[1]!.body.messages as { role: string; tool_call_id?: string; tool_calls?: { id: string }[] }[];
+    const asked = next.find((m) => m.role === "assistant")!.tool_calls!.map((x) => x.id);
+    const answered = next.filter((m) => m.role === "tool").map((m) => m.tool_call_id);
+    expect(new Set(asked).size).toBe(3);
+    expect(answered).toEqual(asked); // every call answered once, under the id the assistant message carries
+    expect(asked[1]).toBe("dup"); // a real id is kept; only the repeat is replaced
+  });
+
   it("remembers the conversation per doc, and forgets it on DELETE", async () => {
     const seen: Seen[] = [];
     await setup([{ tools: [{ name: "add_node", args: { chain: "ethereum", address: ETH_A } }] }, { content: "Added A." }, { content: "It was A." }, { content: "fresh" }], seen);

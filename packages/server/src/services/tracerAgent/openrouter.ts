@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { ProviderError } from "../../lib/errors.ts";
 
 /** OpenRouter's OpenAI-compatible chat-completions endpoint. */
@@ -98,11 +99,18 @@ export function parseCompletion(body: unknown): ChatCompletion {
   const content = typeof msg.content === "string" ? msg.content : null;
   const toolCalls: ToolCallMsg[] = [];
   if (Array.isArray(msg.tool_calls)) {
+    const ids = new Set<string>();
     for (const raw of msg.tool_calls as unknown[]) {
       const c = raw as { id?: unknown; function?: { name?: unknown; arguments?: unknown } };
-      if (typeof c?.id !== "string" || typeof c.function?.name !== "string") continue;
+      if (typeof c?.function?.name !== "string") continue;
       const args = typeof c.function.arguments === "string" ? c.function.arguments : JSON.stringify(c.function.arguments ?? {});
-      toolCalls.push({ id: c.id.slice(0, 200), type: "function", function: { name: c.function.name.slice(0, 100), arguments: args } });
+      // The id only pairs a call with its tool result. A call that came without one (or reused one
+      // from the same message) is still a real request: give it its own id rather than dropping it
+      // silently, or answering two calls under one id, which the next request would be refused for.
+      let id = typeof c.id === "string" ? c.id.slice(0, 200) : "";
+      if (!id || ids.has(id)) id = `call_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+      ids.add(id);
+      toolCalls.push({ id, type: "function", function: { name: c.function.name.slice(0, 100), arguments: args } });
     }
   }
   return { content, toolCalls, finishReason: typeof choice?.finish_reason === "string" ? choice.finish_reason : null };

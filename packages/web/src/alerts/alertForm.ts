@@ -126,6 +126,21 @@ export function describeRule(rule: RuleLike, entities: Pick<Entity, "id" | "name
   return `Fires when ${subject} ${VERB[rule.direction]} ${amount} ${token}. Notifies: ${names.join(", ")}.`;
 }
 
+/** A sensible default name from what's watched and which way, used when the name is left blank. */
+export function suggestAlertName(form: Pick<AlertFormState, "targets" | "direction">, entities: Pick<Entity, "id" | "name">[] = []): string {
+  const targets = dedupeTargets(form.targets);
+  if (targets.length === 0) return "";
+  const first = targets[0]!;
+  const subject =
+    targets.length > 1
+      ? `${targets.length} targets`
+      : first.type === "entity"
+        ? (entities.find((x) => x.id === first.entityId)?.name ?? "entity")
+        : shortAddr(first.address);
+  const name = form.direction === "in" ? `Inflows to ${subject}` : form.direction === "out" ? `Outflows from ${subject}` : `Activity on ${subject}`;
+  return name.slice(0, ALERT_NAME_MAX);
+}
+
 function tokenTitle(t: string): string {
   return t === "native" ? "the native coin (ETH or SOL)" : shortAddr(t);
 }

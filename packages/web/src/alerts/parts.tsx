@@ -1,10 +1,10 @@
 import type { AlertRule, AlertTarget, Chain, Entity } from "@osstrace/contract";
 import { Building2 } from "lucide-react";
 import { useAddressInfo } from "../kit/address.ts";
-import { ChainBadge } from "../kit/ChainBadge.tsx";
 import { cn } from "../kit/cn.ts";
 import { Chip, type ChipTone } from "../kit/Chip.tsx";
 import { addressDisplayName, formatUsd, shortAddress } from "../kit/format.ts";
+import { ChainIcon } from "../ChainSelect.tsx";
 
 export const DIRECTION_LABEL: Record<AlertRule["direction"], string> = { in: "Incoming", out: "Outgoing", both: "Both directions" };
 
@@ -29,7 +29,7 @@ function AddressTargetLabel({ chain, address, link }: { chain: Chain; address: s
   const named = !!name && name !== shortAddress(address);
   const body = (
     <>
-      <ChainBadge chain={chain} />
+      <ChainIcon chain={chain} size={15} />
       {named ? <span className="truncate font-medium">{name}</span> : null}
       <span className={cn("kit-mono truncate", named && "hidden text-xs text-faint xl:inline")}>{shortAddress(address, 6, 4)}</span>
     </>

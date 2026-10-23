@@ -176,3 +176,30 @@ official public RPC (`BASE_RPC_URL`, default `https://mainnet.base.org`), into `
 - **Sender check** against an *Ethereum* sign-in (`DEPOSIT_SIGNER`), for BNB's reason, and
   **connect-and-send** moves the wallet to chain 8453 first (`switchEvmNetwork`), for Robinhood
   Chain's: both are ETH-native, so only the chain id tells them apart.
+
+## Addendum (2026-10-23): Arbitrum One, OP Mainnet, Zora, Lens Chain, Data Network
+
+Five more EVM chains are full `Chain`s and take deposits the way Base does: `verifyPinnedEvmDeposit`
+runs the shared EVM RPC verifier against that chain's own RPC (`ARBITRUM_RPC_URL`,
+`OPTIMISM_RPC_URL`, `ZORA_RPC_URL`, `LENS_RPC_URL`, `STORY_RPC_URL`; each defaults to the chain's own
+public RPC), into `DEPOSIT_WALLET_<CHAIN>`, with the transaction's EIP-155 chain id pinned to that
+chain's (42161, 10, 7777777, 232, 1514). Checked live against each default RPC with a real native
+transfer: each verified, and the same hash claimed as another chain's payment was refused.
+
+- **Native currency.** ETH on Arbitrum One, OP Mainnet and Zora; GHO on Lens Chain; DATA on the Data
+  Network (chain 1514 launched as Story with IP as its token and has since been rebranded; its chain
+  id in this codebase stays `story`, everything a person reads says "Data Network" and "DATA").
+- **Allowlists.** Arbitrum One and OP Mainnet: Circle's native USDC on each
+  (`0xaf88d065e77c8cC2239327C5EDb3A432268e5831`, `0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85` -- the
+  addresses on Circle's own USDC contract-address list, reading "USD Coin"/"USDC"/6 on-chain), not
+  the older bridged USDC.e; no USDT default, Base's call. Zora, Lens Chain and the Data Network:
+  native only. Circle issues no USDC on any of them (none is on Circle's list), and the dollar tokens
+  that circulate there are bridge wrappers -- adding one is an operator call via
+  `DEPOSIT_ALLOWED_TOKENS_ZORA` / `_LENS` / `_STORY`. Lens Chain's native GHO is already a dollar
+  stablecoin.
+- **Sender check** against an *Ethereum* sign-in, and **connect-and-send** moves the wallet to the
+  chain's id first (with the chain's own RPC, explorer and native currency for EIP-3085), for the
+  reasons given for BNB and Robinhood Chain above.
+- **Lens Chain caveat.** It's a ZKsync-stack chain, where native GHO moved by a contract call shows
+  up only as an L2BaseToken Transfer log; a deposit counts only when the transaction itself sends GHO
+  to the wallet (`tx.to`/`tx.value`), the same rule as every other EVM chain here.

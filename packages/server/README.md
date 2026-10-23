@@ -40,6 +40,21 @@ so their rows are stored under chains `robinhood` / `base` and their tokens pric
 transfers on Base only, so Robinhood Chain's (and BNB's) history covers top-level native transfers
 and token transfers, not native value moved by internal calls.
 
+**Arbitrum One** (42161), **OP Mainnet** (10), **Zora** (7777777), **Lens Chain** (232) and the
+**Data Network** (1514; formerly Story, so its chain id here is `story` and its env vars `STORY_*`)
+are read the same way again, on `ARBITRUM_RPC_URL`, `OPTIMISM_RPC_URL`, `ZORA_RPC_URL`,
+`LENS_RPC_URL` and `STORY_RPC_URL` (each also `*_RPC_URL_FILE`). Each defaults to the chain's own
+public RPC (`https://arb1.arbitrum.io/rpc`, `https://mainnet.optimism.io`, `https://rpc.zora.energy`,
+`https://rpc.lens.xyz`, `https://mainnet.datarpc.io`): enough for deposit checks; address lookups need
+Alchemy URLs. Native currency is ETH on the first three, GHO on Lens Chain and DATA (formerly IP) on
+the Data Network; DefiLlama prices their tokens under `arbitrum:`, `optimism:`, `zora:`, `lens:` and
+`sty:`. Alchemy serves no internal transfers on any of the five. Two differences the provider handles
+(checked against live Alchemy answers, 2026-10-23): on Zora, Lens Chain and the Data Network Alchemy
+sends no block timestamps, so the provider reads each row's block time with batched
+`eth_getBlockByNumber` calls (extra compute units per page on those three chains only); and Lens
+Chain's L2BaseToken system contract (`0x...800a`) mirrors every native GHO movement as an ERC-20
+Transfer log, which is dropped so native transfers aren't counted twice.
+
 **`DEV_SKIP_AUTH=1`**: local dev only, treats every request as signed in as a fixed fake user
 (no wallet, no cookie needed) so every feature can be driven without going through the real
 Phantom/MetaMask flow. Refused outright when `NODE_ENV=production`, so it can never activate on a

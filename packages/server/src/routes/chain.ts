@@ -68,8 +68,11 @@ export function registerChainRoutes(app: FastifyInstance, ctx: Ctx) {
     return chainStatuses();
   });
 
+  // Anon (signed-out) access, same as /api/address/... below (ADR 0024): an anonymous caller can
+  // still search by pasting an address, it just never matches private labels/entities (there's no
+  // account for those to belong to) -- u is null rather than requireUser() throwing.
   app.get("/api/search", async (req) => {
-    const u = requireUser(req);
+    const u = req.user ?? null;
     const { q, limit } = parse(searchQuery, req.query);
     const s = q.trim();
     const hits: SearchHit[] = [];
@@ -77,25 +80,28 @@ export function registerChainRoutes(app: FastifyInstance, ctx: Ctx) {
     const chain = detectChain(s);
     if (chain) {
       const address = normalizeAddress(chain, s);
-      hits.push({ type: "address", chain, address, info: LabelIndex.load(db, u.id, [{ chain, address }]).info(chain, address) });
+      hits.push({ type: "address", chain, address, info: LabelIndex.load(db, u?.id ?? null, [{ chain, address }]).info(chain, address) });
     }
     const like = `%${s.replace(/[\\%_]/g, (m) => "\\" + m)}%`;
-    const ents = db.all<{ id: string; name: string; n: number }>(
-      `SELECT e.id, e.name, (SELECT COUNT(*) FROM labels l WHERE l.entity_id = e.id) AS n FROM entities e
-       WHERE e.user_id = ? AND e.name LIKE ? ESCAPE '\\' ORDER BY e.name LIMIT ?`,
-      u.id,
-      like,
-      limit,
-    );
-    for (const e of ents) hits.push({ type: "entity", id: e.id, name: e.name, addressCount: Number(e.n) });
-    const labels = db.all<{ id: string; chain: "solana" | "ethereum"; address: string; name: string }>(
-      `SELECT id, chain, address, name FROM labels WHERE user_id = ? AND (name LIKE ? ESCAPE '\\' OR address LIKE ? ESCAPE '\\') ORDER BY name LIMIT ?`,
-      u.id,
-      like,
-      like,
-      limit,
-    );
-    for (const l of labels) hits.push({ type: "label", id: l.id, chain: l.chain, address: l.address, name: l.name });
+    let labels: { id: string; chain: "solana" | "ethereum"; address: string; name: string }[] = [];
+    if (u) {
+      const ents = db.all<{ id: string; name: string; n: number }>(
+        `SELECT e.id, e.name, (SELECT COUNT(*) FROM labels l WHERE l.entity_id = e.id) AS n FROM entities e
+         WHERE e.user_id = ? AND e.name LIKE ? ESCAPE '\\' ORDER BY e.name LIMIT ?`,
+        u.id,
+        like,
+        limit,
+      );
+      for (const e of ents) hits.push({ type: "entity", id: e.id, name: e.name, addressCount: Number(e.n) });
+      labels = db.all<{ id: string; chain: "solana" | "ethereum"; address: string; name: string }>(
+        `SELECT id, chain, address, name FROM labels WHERE user_id = ? AND (name LIKE ? ESCAPE '\\' OR address LIKE ? ESCAPE '\\') ORDER BY name LIMIT ?`,
+        u.id,
+        like,
+        like,
+        limit,
+      );
+      for (const l of labels) hits.push({ type: "label", id: l.id, chain: l.chain, address: l.address, name: l.name });
+    }
     // A label hit carries the name, so it replaces an address hit for the same (chain, address).
     const labelled = new Set(labels.map((l) => `${l.chain}:${l.address}`));
     const deduped = hits.filter((h) => !(h.type === "address" && labelled.has(`${h.chain}:${h.address}`)));

@@ -12,7 +12,7 @@
  * visitor without a wallet having used their free messages. Neither ever shows an invented reply.
  */
 import { ArrowUp, Check, CircleAlert, Eye, Sparkles, X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { Button, IconButton } from "../../kit/Button.tsx";
 import { cn } from "../../kit/cn.ts";
 import { Textarea } from "../../kit/Field.tsx";
@@ -30,6 +30,24 @@ const EXAMPLES = ["Find connections between the addresses on the canvas", "Add 0
 
 const STEP_ICON = { applied: Check, read: Eye, failed: CircleAlert } as const;
 
+const DEFAULT_WIDTH = 340;
+const MIN_WIDTH = 280;
+const MAX_WIDTH = 640;
+const WIDTH_KEY = "osstrace:tracer-agent-width";
+
+/** A per-viewer convenience, not real state -- reset to the default if it's missing, unparseable,
+ *  or out of today's bounds (a narrower MAX_WIDTH shipped later shouldn't leave an old saved value
+ *  stuck off-screen). */
+function loadWidth(): number {
+  try {
+    const raw = localStorage.getItem(WIDTH_KEY);
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) && n >= MIN_WIDTH && n <= MAX_WIDTH ? n : DEFAULT_WIDTH;
+  } catch {
+    return DEFAULT_WIDTH;
+  }
+}
+
 export default function AgentChatPanel({ canvas, onClose, className }: { canvas: AgentCanvas; onClose: () => void; className?: string }) {
   const session = useServerSession();
   const signedIn = session.status === "signed-in";
@@ -41,6 +59,8 @@ export default function AgentChatPanel({ canvas, onClose, className }: { canvas:
   const [remaining, setRemaining] = useState<number | null>(null);
   const [limit, setLimit] = useState(ANON_MESSAGE_LIMIT);
   const [limitReached, setLimitReached] = useState(false);
+  const [width, setWidth] = useState(loadWidth);
+  const [resizing, setResizing] = useState(false);
   const seq = useRef(0);
   const logRef = useRef<HTMLOListElement>(null);
   const canvasRef = useRef(canvas);
@@ -128,8 +148,76 @@ export default function AgentChatPanel({ canvas, onClose, className }: { canvas:
     }
   };
 
+  // The panel docks to the left of the inspector (see TracerPage.tsx), so its own left edge is
+  // the one that's draggable -- dragging left widens it, right narrows it. Width is clamped live
+  // during the drag (not just on release) so the handle never visually detaches from the cursor
+  // at the bounds. Saved to localStorage as a per-viewer convenience only; nothing server-side
+  // depends on it.
+  const startResize = (startEvent: ReactPointerEvent<HTMLDivElement>) => {
+    startEvent.preventDefault();
+    const startX = startEvent.clientX;
+    const startWidth = width;
+    setResizing(true);
+    const onMove = (e: PointerEvent) => {
+      const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth - (e.clientX - startX)));
+      setWidth(next);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      setResizing(false);
+      setWidth((w) => {
+        try {
+          localStorage.setItem(WIDTH_KEY, String(w));
+        } catch {
+          // Per-viewer convenience only -- a private window or blocked storage just means the
+          // next session starts at the default width again, nothing else depends on this.
+        }
+        return w;
+      });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   return (
-    <aside aria-label="Tracer agent" className={cn("kit-overlay pointer-events-auto flex h-full w-[340px] max-w-[calc(100vw-32px)] flex-col overflow-hidden", className)} data-canvas-scroll-region>
+    <aside
+      aria-label="Tracer agent"
+      className={cn("kit-overlay pointer-events-auto relative flex h-full max-w-[calc(100vw-32px)] flex-col overflow-hidden", className)}
+      style={{ width }}
+      data-canvas-scroll-region
+    >
+      <div
+        role="separator"
+        aria-label="Resize agent panel"
+        aria-orientation="vertical"
+        aria-valuemin={MIN_WIDTH}
+        aria-valuemax={MAX_WIDTH}
+        aria-valuenow={Math.round(width)}
+        tabIndex={0}
+        onPointerDown={startResize}
+        onDoubleClick={() => {
+          setWidth(DEFAULT_WIDTH);
+          try {
+            localStorage.removeItem(WIDTH_KEY);
+          } catch {
+            // Same per-viewer-only reasoning as the save path above.
+          }
+        }}
+        onKeyDown={(e) => {
+          const step = e.shiftKey ? 40 : 12;
+          if (e.key === "ArrowLeft") setWidth((w) => Math.min(MAX_WIDTH, w + step));
+          else if (e.key === "ArrowRight") setWidth((w) => Math.max(MIN_WIDTH, w - step));
+          else return;
+          e.preventDefault();
+        }}
+        className={cn(
+          "absolute inset-y-0 left-0 z-10 w-2 -translate-x-1/2 cursor-col-resize touch-none select-none",
+          "after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-border after:transition-colors",
+          "hover:after:bg-accent focus-visible:after:bg-accent",
+          resizing && "after:bg-accent",
+        )}
+      />
       <header className="flex h-[52px] shrink-0 items-center gap-2 border-b border-border pl-3 pr-2">
         <Sparkles aria-hidden className="size-4 text-accent" />
         <h2 className="min-w-0 flex-1 truncate text-[13px] font-semibold">Agent</h2>

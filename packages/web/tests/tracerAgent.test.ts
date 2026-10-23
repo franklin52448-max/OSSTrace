@@ -2,7 +2,7 @@ import { after, afterEach, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo as NetAddress } from "node:net";
-import { createElement, type ComponentType } from "react";
+import { act, createElement, type ComponentType } from "react";
 import { addTransfersEdit, applyTraceOps, makeAddressNode, type TraceDoc, type TraceOp, type Transfer } from "@osstrace/contract";
 import { window } from "./harness/env.ts";
 import { fill } from "./harness/forms.ts";
@@ -321,5 +321,39 @@ test("signed in (unlimited): no counter; a failing tool is reported as failed; o
   await waitFor(() => panel.querySelector('[role="alert"]'), "the error notice");
   assert.ok(text(panel.querySelector('[role="alert"]')!).includes("Still working on your previous message."));
   assert.ok(panel.querySelector("textarea"), "still usable");
+  assert.deepEqual(consoleErrors, []);
+});
+
+test("resize: dragging the left edge resizes the panel within bounds, clamps past them, persists, and double-click resets", async () => {
+  window.localStorage.removeItem("osstrace:tracer-agent-width");
+  status = { configured: false, signedIn: false, messageLimit: null, messagesRemaining: null };
+  await renderScratch();
+  const panel = await openAgent();
+  const handle = panel.querySelector<HTMLElement>('[aria-label="Resize agent panel"]');
+  assert.ok(handle, "a resize handle");
+  assert.equal(panel.style.width, "340px", "starts at the default width");
+
+  const drag = async (fromX: number, toX: number) => {
+    await act(async () => {
+      handle!.dispatchEvent(new window.PointerEvent("pointerdown", { bubbles: true, pointerId: 1, clientX: fromX, clientY: 10 }));
+      window.dispatchEvent(new window.PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: toX, clientY: 10 }));
+      window.dispatchEvent(new window.PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientX: toX, clientY: 10 }));
+    });
+  };
+
+  // Dragging the left edge left (lower clientX) widens the panel -- it docks on the page's right.
+  await drag(300, 240);
+  assert.equal(panel.style.width, "400px");
+  assert.equal(window.localStorage.getItem("osstrace:tracer-agent-width"), "400", "saved for next time");
+
+  // Clamped at both ends, even when the drag goes well past them.
+  await drag(300, -5000);
+  assert.equal(panel.style.width, "640px", "clamped at the max");
+  await drag(300, 5000);
+  assert.equal(panel.style.width, "280px", "clamped at the min");
+
+  await act(async () => handle!.dispatchEvent(new window.MouseEvent("dblclick", { bubbles: true })));
+  assert.equal(panel.style.width, "340px", "double-click resets to the default");
+  assert.equal(window.localStorage.getItem("osstrace:tracer-agent-width"), null, "and clears the saved value");
   assert.deepEqual(consoleErrors, []);
 });

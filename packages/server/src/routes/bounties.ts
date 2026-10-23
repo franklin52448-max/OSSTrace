@@ -5,7 +5,7 @@ import type { Bounty, BountyDeposit, BountySubmission, BountyWallets, DepositCha
 import { BOUNTY_DIFFICULTIES, BOUNTY_TAGS, type BountyDifficulty, type BountyTag } from "@osstrace/contract";
 import { requireUser, type Ctx } from "../context.ts";
 import { HttpClient, budgetMs } from "../lib/http.ts";
-import { verifyBaseDeposit, verifyBitcoinDeposit, verifyBnbDeposit, verifyEthereumDeposit, verifyRobinhoodDeposit, verifySolanaDeposit, type DepositVerification } from "../chain/deposits.ts";
+import { verifyBaseDeposit, verifyBitcoinDeposit, verifyBnbDeposit, verifyEthereumDeposit, verifyPinnedEvmDeposit, verifyRobinhoodDeposit, verifySolanaDeposit, type DepositVerification } from "../chain/deposits.ts";
 import { normalizeAddress, type WalletChain } from "../auth/wallet.ts";
 import { ApiErr, badRequest, conflict, forbidden, notFound } from "../lib/errors.ts";
 import { nowIso } from "../lib/time.ts";
@@ -78,9 +78,37 @@ type SubmissionRow = { id: string; bounty_id: string; submitted_by: string; pr_u
  * wallet signed in as "ethereum" controls exactly the BNB account at that address. Robinhood Chain
  * is the same case: an EOA's address comes from its key alone, never the chain id, so the key that
  * signed in as 0xabc on Ethereum is the only one that can send from 0xabc on chain 4663. Base (chain
- * 8453) likewise. Bitcoin has no entry: it has no sender check at all (see the deposit route).
+ * 8453) likewise, and Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network too. Bitcoin has
+ * no entry: it has no sender check at all (see the deposit route).
  */
-const DEPOSIT_SIGNER: Record<Exclude<DepositChain, "bitcoin">, WalletChain> = { solana: "solana", ethereum: "ethereum", bnb: "ethereum", robinhood: "ethereum", base: "ethereum" };
+const DEPOSIT_SIGNER: Record<Exclude<DepositChain, "bitcoin">, WalletChain> = {
+  solana: "solana",
+  ethereum: "ethereum",
+  bnb: "ethereum",
+  robinhood: "ethereum",
+  base: "ethereum",
+  arbitrum: "ethereum",
+  optimism: "ethereum",
+  zora: "ethereum",
+  lens: "ethereum",
+  story: "ethereum",
+};
+
+/** What a payment in an untracked asset is told, per chain: each chain's own default list, so a
+ *  chain with no USDC/USDT never claims to track them. Bitcoin never gets this (no token standard). */
+const TRACKED_ASSETS: Record<DepositChain, string> = {
+  solana: "for deposits (native SOL/ETH/BNB, USDC or USDT)",
+  ethereum: "for deposits (native SOL/ETH/BNB, USDC or USDT)",
+  bnb: "for deposits (native SOL/ETH/BNB, USDC or USDT)",
+  bitcoin: "for deposits (native SOL/ETH/BNB, USDC or USDT)",
+  robinhood: "for Robinhood Chain deposits (native ETH or USDG)",
+  base: "for Base deposits (native ETH or USDC)",
+  arbitrum: "for Arbitrum One deposits (native ETH or USDC)",
+  optimism: "for OP Mainnet deposits (native ETH or USDC)",
+  zora: "for Zora deposits (native ETH)",
+  lens: "for Lens Chain deposits (native GHO)",
+  story: "for Data Network deposits (native DATA)",
+};
 
 type DepositRow = { id: string; bounty_id: string; chain: DepositChain; asset_contract: string | null; amount: string; tx_ref: string; from_address: string; to_wallet: string; memo: string | null; recorded_by: string; recorded_at: string };
 
@@ -248,6 +276,11 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
       robinhood: () => verifyRobinhoodDeposit(http, config.robinhoodRpcUrl, txRef, wallet, config.depositAllowedTokens.robinhood, budget),
       bitcoin: () => verifyBitcoinDeposit(http, config.esploraUrl, txRef, wallet, budget),
       base: () => verifyBaseDeposit(http, config.baseRpcUrl, txRef, wallet, config.depositAllowedTokens.base, budget),
+      arbitrum: () => verifyPinnedEvmDeposit(http, "arbitrum", config.arbitrumRpcUrl, txRef, wallet, config.depositAllowedTokens.arbitrum, budget),
+      optimism: () => verifyPinnedEvmDeposit(http, "optimism", config.optimismRpcUrl, txRef, wallet, config.depositAllowedTokens.optimism, budget),
+      zora: () => verifyPinnedEvmDeposit(http, "zora", config.zoraRpcUrl, txRef, wallet, config.depositAllowedTokens.zora, budget),
+      lens: () => verifyPinnedEvmDeposit(http, "lens", config.lensRpcUrl, txRef, wallet, config.depositAllowedTokens.lens, budget),
+      story: () => verifyPinnedEvmDeposit(http, "story", config.storyRpcUrl, txRef, wallet, config.depositAllowedTokens.story, budget),
     };
     const verified = await verifiers[body.chain]();
     if (!verified.ok) {
@@ -259,13 +292,8 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
         not_confirmed:
           body.chain === "bitcoin" ? "That transaction isn't confirmed in a block yet -- try again once it has at least one confirmation" : "That transaction didn't succeed on-chain",
         wrong_wallet: "That transaction doesn't pay the configured deposit wallet",
-        // Robinhood Chain gets its own list: it has no USDC/USDT, so the generic one would be wrong there.
-        unsupported_asset:
-          body.chain === "robinhood"
-            ? "That transaction pays the right wallet, but not in an asset this server tracks for Robinhood Chain deposits (native ETH or USDG)"
-            : body.chain === "base"
-              ? "That transaction pays the right wallet, but not in an asset this server tracks for Base deposits (native ETH or USDC)"
-              : "That transaction pays the right wallet, but not in an asset this server tracks for deposits (native SOL/ETH/BNB, USDC or USDT)",
+        // Per chain (TRACKED_ASSETS): Robinhood Chain has no USDC/USDT, Zora/Lens/Data Network take native only.
+        unsupported_asset: `That transaction pays the right wallet, but not in an asset this server tracks ${TRACKED_ASSETS[body.chain]}`,
         malformed_reference: {
           solana: "That doesn't look like a real Solana signature",
           ethereum: "That doesn't look like a real Ethereum transaction hash",
@@ -273,6 +301,11 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
           robinhood: "That doesn't look like a real Robinhood Chain transaction hash",
           bitcoin: "That doesn't look like a real Bitcoin transaction ID (64 hex characters)",
           base: "That doesn't look like a real Base transaction hash",
+          arbitrum: "That doesn't look like a real Arbitrum One transaction hash",
+          optimism: "That doesn't look like a real OP Mainnet transaction hash",
+          zora: "That doesn't look like a real Zora transaction hash",
+          lens: "That doesn't look like a real Lens Chain transaction hash",
+          story: "That doesn't look like a real Data Network transaction hash",
         }[body.chain],
       };
       throw badRequest(messages[verified.reason]);

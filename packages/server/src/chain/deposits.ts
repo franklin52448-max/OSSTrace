@@ -17,6 +17,11 @@
 // (config.ts's baseRpcUrl), and additionally pinned to Base's EIP-155 chain id -- so even a mis-set
 // BASE_RPC_URL pointed at another chain can't make that chain's payment verify as a Base one.
 //
+// Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network are the same again
+// (verifyPinnedEvmDeposit), each against its own RPC (config.ts's *RpcUrl, the chain's own public one
+// by default) and pinned to its own chain id the way Base is. Native value is 18 decimals on all five
+// (ETH, ETH, ETH, GHO and DATA respectively).
+//
 // Ethereum has two verification paths now. When a dedicated `ETH_RPC_URL` is configured (see
 // config.ts), deposits are checked via real `eth_getTransactionByHash`/`eth_getTransactionReceipt`
 // JSON-RPC calls -- the same approach the old standalone @osstrace/bounties service originally
@@ -86,6 +91,24 @@ export const DEFAULT_ALLOWED_TOKENS_SOLANA = new Set<string>([
 export const DEFAULT_ALLOWED_TOKENS_BASE = new Set<string>([
   "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC
 ]);
+/** Arbitrum One and OP Mainnet: Circle's own native USDC on each -- the address Circle's "USDC
+ *  contract addresses" page lists for that chain, and on-chain name() "USD Coin", symbol() "USDC",
+ *  decimals() 6 (read through each chain's RPC 2026-10-23) -- NOT the older bridged "USDC.e" at a
+ *  different address. No USDT default, the same call as Base's: an operator who wants one adds it. */
+export const DEFAULT_ALLOWED_TOKENS_ARBITRUM = new Set<string>([
+  "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", // USDC
+]);
+export const DEFAULT_ALLOWED_TOKENS_OPTIMISM = new Set<string>([
+  "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", // USDC
+]);
+/** Zora, Lens Chain and the Data Network: native only by default. Circle issues no USDC on any of
+ *  the three (none is on Circle's USDC contract-address list, checked 2026-10-23); the dollar tokens
+ *  that do circulate there (Zora's USDzC, Lens Chain's and the Data Network's bridged USDC) are bridge
+ *  wrappers, exactly the look-alikes this list keeps out unless an operator adds one deliberately via
+ *  DEPOSIT_ALLOWED_TOKENS_ZORA/_LENS/_STORY. (Lens Chain's native GHO is already a dollar stablecoin.) */
+export const DEFAULT_ALLOWED_TOKENS_ZORA = new Set<string>();
+export const DEFAULT_ALLOWED_TOKENS_LENS = new Set<string>();
+export const DEFAULT_ALLOWED_TOKENS_STORY = new Set<string>();
 const isAllowedEvmToken = (allowed: Set<string>, contract: string) => [...allowed].some((a) => sameAddress(a, contract));
 
 /** The real, public SPL Memo program -- not this project's own invention. */
@@ -387,6 +410,28 @@ export async function verifyBaseDeposit(http: HttpClient, baseRpcUrl: string, tx
   if (!wallet) return { ok: false, reason: "not_configured" };
   if (!ETH_TX_HASH_FORMAT.test(txHash)) return { ok: false, reason: "malformed_reference" };
   return verifyEvmDepositViaRpc(http, baseRpcUrl, txHash, wallet, allowedTokens, budget, BASE_CHAIN_ID);
+}
+
+/** EIP-155 chain ids of the EVM chains verified through verifyPinnedEvmDeposit. */
+export const PINNED_EVM_CHAIN_IDS = { arbitrum: 42161n, optimism: 10n, zora: 7777777n, lens: 232n, story: 1514n } as const;
+export type PinnedEvmChain = keyof typeof PINNED_EVM_CHAIN_IDS;
+
+/** Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network: the same EVM RPC verification as
+ *  Base's, against that chain's own `rpcUrl`, with that chain's own token allowlist, pinned to that
+ *  chain's id -- so a payment on any other chain (the same wallet address exists on all of them)
+ *  never verifies as one on this chain, even through a mis-set RPC URL. */
+export async function verifyPinnedEvmDeposit(
+  http: HttpClient,
+  chain: PinnedEvmChain,
+  rpcUrl: string,
+  txHash: string,
+  wallet: string | undefined,
+  allowedTokens: Set<string>,
+  budget: Budget,
+): Promise<DepositVerification> {
+  if (!wallet) return { ok: false, reason: "not_configured" };
+  if (!ETH_TX_HASH_FORMAT.test(txHash)) return { ok: false, reason: "malformed_reference" };
+  return verifyEvmDepositViaRpc(http, rpcUrl, txHash, wallet, allowedTokens, budget, PINNED_EVM_CHAIN_IDS[chain]);
 }
 
 const BTC_TXID_FORMAT = /^[0-9a-fA-F]{64}$/;

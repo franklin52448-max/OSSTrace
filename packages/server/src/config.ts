@@ -1,7 +1,19 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { DEFAULT_ALLOWED_TOKENS_BASE, DEFAULT_ALLOWED_TOKENS_BNB, DEFAULT_ALLOWED_TOKENS_ETHEREUM, DEFAULT_ALLOWED_TOKENS_ROBINHOOD, DEFAULT_ALLOWED_TOKENS_SOLANA } from "./chain/deposits.ts";
+import type { DepositChain } from "@osstrace/contract";
+import {
+  DEFAULT_ALLOWED_TOKENS_ARBITRUM,
+  DEFAULT_ALLOWED_TOKENS_BASE,
+  DEFAULT_ALLOWED_TOKENS_BNB,
+  DEFAULT_ALLOWED_TOKENS_ETHEREUM,
+  DEFAULT_ALLOWED_TOKENS_LENS,
+  DEFAULT_ALLOWED_TOKENS_OPTIMISM,
+  DEFAULT_ALLOWED_TOKENS_ROBINHOOD,
+  DEFAULT_ALLOWED_TOKENS_SOLANA,
+  DEFAULT_ALLOWED_TOKENS_STORY,
+  DEFAULT_ALLOWED_TOKENS_ZORA,
+} from "./chain/deposits.ts";
 
 export type Config = {
   port: number;
@@ -63,13 +75,15 @@ export type Config = {
   defillamaUrl: string;
   jupiterTokensUrl: string;
   /** Public wallet addresses bounty depositors pay into -- never a key this server holds (ADR 0020). */
-  depositWallets: { ethereum?: string; solana?: string; bnb?: string; robinhood?: string; bitcoin?: string; base?: string };
+  depositWallets: Partial<Record<DepositChain, string>>;
   /** Assets a bounty deposit may be verified in, beyond each chain's own native currency (always
-   *  allowed) -- defaults to real USDC/USDT (Base: USDC only), extendable per-deployment via
-   *  DEPOSIT_ALLOWED_TOKENS_ETHEREUM/_SOLANA/_BNB/_ROBINHOOD/_BASE (comma-separated, added to the
-   *  defaults, never replacing them). Without this, any worthless token a depositor mints themselves
-   *  would verify as a real "deposit" (see chain/deposits.ts). */
-  depositAllowedTokens: { ethereum: Set<string>; solana: Set<string>; bnb: Set<string>; robinhood: Set<string>; base: Set<string> };
+   *  allowed) -- defaults to real USDC/USDT (Base, Arbitrum One, OP Mainnet: USDC only; Robinhood
+   *  Chain: USDG; Zora, Lens Chain, Data Network: none, native only), extendable per-deployment via
+   *  DEPOSIT_ALLOWED_TOKENS_<CHAIN> (ETHEREUM, SOLANA, BNB, ROBINHOOD, BASE, ARBITRUM, OPTIMISM, ZORA,
+   *  LENS, STORY; comma-separated, added to the defaults, never replacing them). Without this, any
+   *  worthless token a depositor mints themselves would verify as a real "deposit" (see
+   *  chain/deposits.ts). */
+  depositAllowedTokens: Record<Exclude<DepositChain, "bitcoin">, Set<string>>;
   /** Enables POST /api/_test/alerts/tick (off unless SERVER_TEST_HOOKS=1). */
   testHooks: boolean;
   /** Local-dev-only: every request is treated as signed in as a fixed fake user, no cookie needed.
@@ -103,6 +117,9 @@ const bool = (v: string | undefined, dflt: boolean) => {
 };
 
 const expandHome = (p: string) => (p.startsWith("~/") ? resolve(homedir(), p.slice(2)) : p);
+
+/** A comma-separated DEPOSIT_ALLOWED_TOKENS_* value as its entries. */
+const extraTokens = (v: string | undefined) => v?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
 
 /** `<NAME>_RPC_URL_FILE` (a file holding only the URL, which may embed a key) wins over
  *  `<NAME>_RPC_URL`; neither set means `dflt`. The same split bnbRpcUrl/robinhoodRpcUrl/baseRpcUrl use. */
@@ -218,6 +235,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       ...(env.DEPOSIT_WALLET_ROBINHOOD ? { robinhood: env.DEPOSIT_WALLET_ROBINHOOD.trim() } : {}),
       ...(env.DEPOSIT_WALLET_BITCOIN ? { bitcoin: env.DEPOSIT_WALLET_BITCOIN.trim() } : {}),
       ...(env.DEPOSIT_WALLET_BASE ? { base: env.DEPOSIT_WALLET_BASE.trim() } : {}),
+      ...(env.DEPOSIT_WALLET_ARBITRUM ? { arbitrum: env.DEPOSIT_WALLET_ARBITRUM.trim() } : {}),
+      ...(env.DEPOSIT_WALLET_OPTIMISM ? { optimism: env.DEPOSIT_WALLET_OPTIMISM.trim() } : {}),
+      ...(env.DEPOSIT_WALLET_ZORA ? { zora: env.DEPOSIT_WALLET_ZORA.trim() } : {}),
+      ...(env.DEPOSIT_WALLET_LENS ? { lens: env.DEPOSIT_WALLET_LENS.trim() } : {}),
+      ...(env.DEPOSIT_WALLET_STORY ? { story: env.DEPOSIT_WALLET_STORY.trim() } : {}),
     },
     depositAllowedTokens: {
       ethereum: new Set([
@@ -242,6 +264,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         ...DEFAULT_ALLOWED_TOKENS_BASE,
         ...(env.DEPOSIT_ALLOWED_TOKENS_BASE?.split(",").map((s) => s.trim()).filter(Boolean) ?? []),
       ]),
+      // Arbitrum One / OP Mainnet: Circle's native USDC only; Zora, Lens Chain, Data Network: none by
+      // default (see deposits.ts).
+      arbitrum: new Set([...DEFAULT_ALLOWED_TOKENS_ARBITRUM, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_ARBITRUM)]),
+      optimism: new Set([...DEFAULT_ALLOWED_TOKENS_OPTIMISM, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_OPTIMISM)]),
+      zora: new Set([...DEFAULT_ALLOWED_TOKENS_ZORA, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_ZORA)]),
+      lens: new Set([...DEFAULT_ALLOWED_TOKENS_LENS, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_LENS)]),
+      story: new Set([...DEFAULT_ALLOWED_TOKENS_STORY, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_STORY)]),
     },
     testHooks: bool(env.SERVER_TEST_HOOKS, false),
     // The `&& !production` is load-bearing: this must never activate on a deployed instance,

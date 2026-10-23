@@ -93,7 +93,49 @@ const EVM_NETWORKS = {
     rpcUrls: ["https://mainnet.base.org"],
     blockExplorerUrls: ["https://basescan.org"],
   },
+  // Arbitrum One (42161), OP Mainnet (10) and Zora (7777777): ETH-native too, the same trap. Each
+  // chain's own public RPC and real explorer, for a wallet that has to add it first.
+  arbitrum: {
+    chainId: "0xa4b1",
+    chainName: "Arbitrum One",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: ["https://arb1.arbitrum.io/rpc"],
+    blockExplorerUrls: ["https://arbiscan.io"],
+  },
+  optimism: {
+    chainId: "0xa",
+    chainName: "OP Mainnet",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: ["https://mainnet.optimism.io"],
+    blockExplorerUrls: ["https://optimistic.etherscan.io"],
+  },
+  zora: {
+    chainId: "0x76adf1",
+    chainName: "Zora",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: ["https://rpc.zora.energy"],
+    blockExplorerUrls: ["https://explorer.zora.energy"],
+  },
+  // Lens Chain (232) pays gas in GHO; the Data Network (1514, formerly Story) in DATA.
+  lens: {
+    chainId: "0xe8",
+    chainName: "Lens Chain",
+    nativeCurrency: { name: "GHO", symbol: "GHO", decimals: 18 },
+    rpcUrls: ["https://rpc.lens.xyz"],
+    blockExplorerUrls: ["https://explorer.lens.xyz"],
+  },
+  story: {
+    chainId: "0x5ea",
+    chainName: "Data Network",
+    nativeCurrency: { name: "DATA", symbol: "DATA", decimals: 18 },
+    rpcUrls: ["https://mainnet.datarpc.io"],
+    blockExplorerUrls: ["https://www.datanetscan.io"],
+  },
 } as const;
+
+/** The EIP-155 chain id a deposit on `chain` is sent on (decimal), for telling the user which
+ *  network their wallet is about to be moved to. */
+export const evmNetworkChainId = (chain: keyof typeof EVM_NETWORKS): number => Number(BigInt(EVM_NETWORKS[chain].chainId));
 
 const onNetwork = async (provider: EthereumProvider, chainId: string) => BigInt((await provider.request({ method: "eth_chainId" })) as string) === BigInt(chainId);
 

@@ -70,6 +70,19 @@ test("assetLabel: native symbols per chain, real symbols for the default stablec
   assert.notEqual(assetKey("ethereum", { contract: USDC_ETH }), assetKey("bnb", { contract: USDC_ETH }), "same contract string on two chains is two assets");
 });
 
+test("assetLabel: Arbitrum One / OP Mainnet ETH says which ETH, their Circle USDC reads USDC; Lens Chain's GHO and the Data Network's DATA are their own", () => {
+  assert.equal(assetLabel("arbitrum", "native"), "ETH (Arbitrum One)");
+  assert.equal(assetLabel("optimism", "native"), "ETH (OP Mainnet)");
+  assert.equal(assetLabel("zora", "native"), "ETH (Zora)");
+  assert.equal(assetLabel("lens", "native"), "GHO");
+  assert.equal(assetLabel("story", "native"), "DATA");
+  assert.equal(assetDescription("story", "native"), "DATA on Data Network");
+  assert.equal(assetDescription("arbitrum", { contract: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" }), "USDC on Arbitrum One");
+  assert.equal(assetDescription("optimism", { contract: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85" }), "USDC on OP Mainnet");
+  // Arbitrum's USDC address means nothing on Zora: shown as an address, never a guessed name.
+  assert.equal(assetLabel("zora", { contract: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" }), "0xaf88…5831");
+});
+
 test("compareDecimalAmounts: exact, across differing fractional digits", () => {
   assert.equal(compareDecimalAmounts("0.1", "0.10"), 0);
   assert.equal(compareDecimalAmounts("2", "10"), -1);

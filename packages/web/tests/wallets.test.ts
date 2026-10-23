@@ -208,6 +208,31 @@ test("switchEvmNetwork: a Base deposit moves a mainnet wallet onto Base (8453 = 
   await assert.rejects(switchEvmNetwork(new NetworkWallet("0x1", ["0x1", "0x2105"], false), "base"), /switch it to Base/);
 });
 
+test("switchEvmNetwork: Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network each move a mainnet wallet onto that chain's own id, adding it with the chain's real RPC/explorer/native currency if needed", async () => {
+  const { switchEvmNetwork, evmNetworkChainId } = await import("../src/wallets.ts");
+  const ether = { name: "Ether", symbol: "ETH", decimals: 18 };
+  const cases = [
+    ["arbitrum", 42161n, "Arbitrum One", ether, "https://arb1.arbitrum.io/rpc", "https://arbiscan.io"],
+    ["optimism", 10n, "OP Mainnet", ether, "https://mainnet.optimism.io", "https://optimistic.etherscan.io"],
+    ["zora", 7777777n, "Zora", ether, "https://rpc.zora.energy", "https://explorer.zora.energy"],
+    ["lens", 232n, "Lens Chain", { name: "GHO", symbol: "GHO", decimals: 18 }, "https://rpc.lens.xyz", "https://explorer.lens.xyz"],
+    ["story", 1514n, "Data Network", { name: "DATA", symbol: "DATA", decimals: 18 }, "https://mainnet.datarpc.io", "https://www.datanetscan.io"],
+  ] as const;
+  for (const [chain, id, name, nativeCurrency, rpc, explorer] of cases) {
+    const w = new NetworkWallet("0x1");
+    await switchEvmNetwork(w, chain);
+    assert.equal(BigInt(w.chainId), id, chain);
+    assert.equal(evmNetworkChainId(chain), Number(id));
+    const add = w.calls.find((c) => c.method === "wallet_addEthereumChain")?.params?.[0] as { chainId: string; chainName: string; nativeCurrency: unknown; rpcUrls: string[]; blockExplorerUrls: string[] };
+    assert.equal(BigInt(add.chainId), id);
+    assert.equal(add.chainName, name);
+    assert.deepEqual(add.nativeCurrency, nativeCurrency);
+    assert.deepEqual(add.rpcUrls, [rpc]);
+    assert.deepEqual(add.blockExplorerUrls, [explorer]);
+    await assert.rejects(switchEvmNetwork(new NetworkWallet("0x1", ["0x1", add.chainId], false), chain), new RegExp(`switch it to ${name}`));
+  }
+});
+
 test("sendEthereumNative: builds a plain value transfer with the exact wei amount, no data field", async () => {
   const { sendEthereumNative } = await import("../src/wallets.ts");
   const provider = new FakeEthereumProvider();

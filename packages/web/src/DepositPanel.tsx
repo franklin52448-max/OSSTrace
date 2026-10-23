@@ -22,6 +22,7 @@ import {
   sendEthereumToken,
   sendSolanaNative,
   sendSolanaToken,
+  evmNetworkChainId,
   switchEvmNetwork,
 } from "./wallets.ts";
 
@@ -37,14 +38,30 @@ const TX_REF_PLACEHOLDER: Record<DepositChain, string> = {
   robinhood: "Transaction hash (0x…)",
   bitcoin: "Transaction ID (txid)",
   base: "Transaction hash (0x…)",
+  arbitrum: "Transaction hash (0x…)",
+  optimism: "Transaction hash (0x…)",
+  zora: "Transaction hash (0x…)",
+  lens: "Transaction hash (0x…)",
+  story: "Transaction hash (0x…)",
 };
 /** Display/selection order everywhere in this panel. */
-const DEPOSIT_CHAINS: readonly DepositChain[] = ["solana", "ethereum", "bnb", "robinhood", "base", "bitcoin"];
+const DEPOSIT_CHAINS: readonly DepositChain[] = ["solana", "ethereum", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story", "bitcoin"];
 /** The chains a connected browser wallet can send on: every deposit chain but Bitcoin (paste-only).
  *  Derived from DepositChain, so a chain that gains deposits must also say how it's sent here. */
 type SendChain = Exclude<DepositChain, "bitcoin">;
-const SEND_CHAINS: readonly SendChain[] = ["solana", "ethereum", "bnb", "robinhood", "base"];
-const TOKEN_STANDARD: Record<SendChain, string> = { solana: "SPL token", ethereum: "ERC-20 token", bnb: "BEP-20 token", robinhood: "ERC-20 token", base: "ERC-20 token" };
+const SEND_CHAINS: readonly SendChain[] = ["solana", "ethereum", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story"];
+const TOKEN_STANDARD: Record<SendChain, string> = {
+  solana: "SPL token",
+  ethereum: "ERC-20 token",
+  bnb: "BEP-20 token",
+  robinhood: "ERC-20 token",
+  base: "ERC-20 token",
+  arbitrum: "ERC-20 token",
+  optimism: "ERC-20 token",
+  zora: "ERC-20 token",
+  lens: "ERC-20 token",
+  story: "ERC-20 token",
+};
 
 /** The shared icon for the two app-wide chains; a plain orange "₿" disc for Bitcoin -- an honest
  *  generic mark, not an attempt at the exact brand artwork. */
@@ -278,9 +295,9 @@ function FundForm({ bountyId, wallets, onRecorded }: { bountyId: string; wallets
           {chain === "solana" && (
             <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Memo (optional, shown as a cross-check — not required)" maxLength={200} className="ctl w-full" />
           )}
-          {chain === "robinhood" && (
+          {chain !== "solana" && chain !== "ethereum" && chain !== "bnb" && (
             <p className="text-xs text-ink-faint">
-              Sent from your Ethereum wallet on Robinhood Chain (chain id 4663) — it's asked to switch to that network, or add it, before anything is sent.
+              Sent from your Ethereum wallet on {CHAIN_NAME[chain]} (chain id {evmNetworkChainId(chain)}) — it's asked to switch to that network, or add it, before anything is sent.
             </p>
           )}
           <p className="text-xs text-ink-faint">

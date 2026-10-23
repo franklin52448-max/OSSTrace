@@ -6,6 +6,8 @@ import { loadConfig, type Config } from "../src/config.ts";
 import { buildApp } from "../src/app.ts";
 import { openDb } from "../src/db/index.ts";
 import { PriceService } from "../src/chain/prices.ts";
+import { verifySolanaDeposit, DEFAULT_ALLOWED_TOKENS_SOLANA } from "../src/chain/deposits.ts";
+import { HttpClient, budgetMs } from "../src/lib/http.ts";
 import { Client, FakeProvider, llamaFetch, signup, testWallet } from "./helpers.ts";
 
 /** Runs the real challenge -> sign -> verify flow for an Ethereum wallet and returns a signed-in client. */
@@ -398,6 +400,101 @@ describe("bounties", () => {
         const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef: TXID });
         expect(r.statusCode).toBe(400);
         expect(r.json().error.message).toMatch(/no bitcoin deposit wallet/i);
+      } finally {
+        await close();
+      }
+    });
+  });
+
+  describe("Solana deposit sender = the real transfer authority, not the fee payer", () => {
+    const SIG = "A".repeat(64);
+    const SYSTEM = "11111111111111111111111111111111";
+    const TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+    const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    // A real-shaped wallet for the deposit side, distinct from the System Program id: in a native
+    // transfer the System Program is itself in accountKeys, which would otherwise collide.
+    const WALLET = testWallet("attribution-deposit-wallet").address;
+    const relayer = testWallet("attribution-relayer").address;
+    const payer = testWallet("attribution-real-payer").address;
+    const verify = (solTx: unknown) => verifySolanaDeposit(new HttpClient("test", 1, depositFetch({ solTx })), "https://rpc.test", SIG, WALLET, DEFAULT_ALLOWED_TOKENS_SOLANA, budgetMs(2000));
+
+    /** A sponsored native SOL transfer: the relayer pays the fee (accountKeys[0]), `payer` signs the transfer. */
+    const relayedNative = (instructions: unknown[] = [{ program: "system", programId: SYSTEM, parsed: { type: "transfer", info: { source: payer, destination: WALLET, lamports: 1_000_000_000 } } }]) => ({
+      transaction: { message: { accountKeys: [relayer, payer, WALLET, SYSTEM], instructions } },
+      meta: { err: null, preBalances: [10_000_000, 5_000_000_000, 1_000_000_000, 1], postBalances: [9_995_000, 4_000_000_000, 2_000_000_000, 1] },
+    });
+
+    /** A sponsored USDC transfer made via CPI (inner instruction), next to an unrelated transfer to someone else's account. */
+    const relayedToken = (info: Record<string, unknown>, type = "transferChecked") => {
+      const payerAta = testWallet("attribution-payer-ata").address;
+      const walletAta = testWallet("attribution-wallet-ata").address;
+      const otherAta = testWallet("attribution-other-ata").address;
+      return {
+        transaction: { message: { accountKeys: [relayer, payerAta, walletAta, otherAta, USDC, TOKEN], instructions: [{ programId: "SomeRelayerProgram1111111111111111111111111" }] } },
+        meta: {
+          err: null,
+          preBalances: [10_000_000, 2_039_280, 2_039_280, 2_039_280, 1, 1],
+          postBalances: [9_995_000, 2_039_280, 2_039_280, 2_039_280, 1, 1],
+          preTokenBalances: [{ accountIndex: 2, mint: USDC, owner: WALLET, uiTokenAmount: { amount: "1000000", decimals: 6 } }],
+          postTokenBalances: [{ accountIndex: 2, mint: USDC, owner: WALLET, uiTokenAmount: { amount: "8500000", decimals: 6 } }],
+          innerInstructions: [
+            {
+              instructions: [
+                // Unrelated: pays a different account, signed by a different authority -- must not be picked.
+                { program: "spl-token", programId: TOKEN, parsed: { type: "transfer", info: { source: payerAta, destination: otherAta, amount: "1", authority: relayer } } },
+                { program: "spl-token", programId: TOKEN, parsed: { type, info: { source: payerAta, destination: walletAta, mint: USDC, ...info } } },
+              ],
+            },
+          ],
+        },
+      };
+    };
+
+    it("native SOL: attributes the System transfer's source, not accountKeys[0]", async () => {
+      const r = await verify(relayedNative());
+      expect(r).toMatchObject({ ok: true, deposit: { asset: "native", amount: "1", fromAddress: payer } });
+    });
+
+    it("SPL transferChecked via CPI: attributes the authority of the transfer into the wallet's own token account", async () => {
+      const r = await verify(relayedToken({ authority: payer, tokenAmount: { amount: "7500000", decimals: 6 } }));
+      expect(r).toMatchObject({ ok: true, deposit: { asset: { contract: USDC }, amount: "7.5", fromAddress: payer } });
+    });
+
+    it("SPL transfer signed by a multisig: attributes the multisigAuthority", async () => {
+      const multisig = testWallet("attribution-multisig").address;
+      const r = await verify(relayedToken({ multisigAuthority: multisig, signers: [payer], amount: "7500000" }, "transfer"));
+      expect(r).toMatchObject({ ok: true, deposit: { fromAddress: multisig } });
+    });
+
+    it("falls back to the fee payer (never fails the deposit) when no transfer instruction can be attributed", async () => {
+      const r = await verify(relayedNative([]));
+      expect(r).toMatchObject({ ok: true, deposit: { amount: "1", fromAddress: relayer } });
+    });
+
+    it("through the route: the real signer can record the relayed deposit; the relayer who only paid the fee can't", async () => {
+      const stub = new FakeProvider("solana");
+      const signer = testWallet("attribution-route-signer");
+      const feePayer = testWallet("attribution-route-relayer");
+      const solTx = {
+        transaction: {
+          message: {
+            accountKeys: [feePayer.address, signer.address, SOL_WALLET],
+            instructions: [{ program: "system", programId: SYSTEM, parsed: { type: "transfer", info: { source: signer.address, destination: SOL_WALLET, lamports: 1_000_000_000 } } }],
+          },
+        },
+        meta: { err: null, preBalances: [10_000_000, 5_000_000_000, 1_000_000_000], postBalances: [9_995_000, 4_000_000_000, 2_000_000_000] },
+      };
+      const { app, close } = await makeBountyApp(depositFetch({ solTx }), stub, stub);
+      try {
+        const relayerClient = await signup(app, "attribution-route-relayer");
+        const b = (await relayerClient.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const byRelayer = await relayerClient.post(`/api/bounties/${b.id}/deposits`, { chain: "solana", txRef: SIG });
+        expect(byRelayer.statusCode).toBe(403); // before this fix, the fee payer was "the sender" and this was accepted
+
+        const signerClient = await signup(app, "attribution-route-signer");
+        const bySigner = await signerClient.post(`/api/bounties/${b.id}/deposits`, { chain: "solana", txRef: SIG });
+        expect(bySigner.statusCode).toBe(201);
+        expect(bySigner.json()).toMatchObject({ fromAddress: signer.address, amount: "1" });
       } finally {
         await close();
       }

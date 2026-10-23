@@ -51,6 +51,9 @@ const isAllowedEthToken = (allowed: Set<string>, contract: string) => [...allowe
 
 /** The real, public SPL Memo program -- not this project's own invention. */
 const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
+/** The real System Program and SPL Token / Token-2022 program ids -- not this project's own invention. */
+const SYSTEM_PROGRAM_IDS = new Set(["11111111111111111111111111111111"]);
+const TOKEN_PROGRAM_IDS = new Set(["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"]);
 
 type ParsedIx = { program?: string; programId: string; parsed?: unknown };
 type TokenBal = { accountIndex: number; mint: string; owner?: string; uiTokenAmount: { amount: string; decimals: number } };
@@ -68,11 +71,58 @@ type SolTx = {
 
 const keyOf = (k: { pubkey: string } | string) => (typeof k === "string" ? k : k.pubkey);
 
+/** Top-level instructions plus every CPI'd inner one -- a transfer made through another program
+ *  (a relayer, an aggregator, a smart wallet) only shows up in the inner list. */
+const allInstructions = (tx: SolTx): ParsedIx[] => [...tx.transaction.message.instructions, ...(tx.meta?.innerInstructions?.flatMap((i) => i.instructions) ?? [])];
+
 function extractMemo(tx: SolTx): string | undefined {
-  const all = [...tx.transaction.message.instructions, ...(tx.meta?.innerInstructions?.flatMap((i) => i.instructions) ?? [])];
-  for (const ix of all) {
+  for (const ix of allInstructions(tx)) {
     if (ix.programId !== MEMO_PROGRAM_ID) continue;
     if (typeof ix.parsed === "string" && ix.parsed.length > 0) return ix.parsed;
+  }
+  return undefined;
+}
+
+type TransferInfo = { source?: unknown; destination?: unknown; authority?: unknown; multisigAuthority?: unknown };
+const nonEmpty = (v: unknown): string | undefined => (typeof v === "string" && v.length > 0 ? v : undefined);
+
+/** The `info` of a jsonParsed instruction from `programIds` whose parsed `type` is one of `types`,
+ *  or null -- the RPC only fills `parsed` for programs it knows, so anything else is skipped. */
+function transferInfo(ix: ParsedIx, programIds: Set<string>, types: string[]): TransferInfo | null {
+  if (!programIds.has(ix.programId) || !ix.parsed || typeof ix.parsed !== "object") return null;
+  const { type, info } = ix.parsed as { type?: unknown; info?: unknown };
+  if (typeof type !== "string" || !types.includes(type) || !info || typeof info !== "object") return null;
+  return info as TransferInfo;
+}
+
+/**
+ * Who actually authorized the payment, not just who paid the fee. `accountKeys[0]` is always the
+ * fee payer, which for a sponsored/relayed transaction is the relayer, not the depositor -- and the
+ * deposit route matches this address against the signed-in caller (routes/bounties.ts), so getting
+ * it wrong both refuses the real depositor and lets the relayer claim their payment.
+ *
+ * Native SOL: the `source` of a System Program `transfer` into the wallet (the runtime requires
+ * `source` to sign). SPL/Token-2022: the `authority` (or `multisigAuthority`) of a `transfer`/
+ * `transferChecked` into `tokenAccount` -- the exact token account whose balance increase was
+ * counted -- which the token program requires to sign (an owner, approved delegate, or a program
+ * signing for its own PDA via CPI). Undefined when no such instruction is found (e.g. lamports
+ * moved by a program directly, with no System transfer); the caller then falls back to the fee
+ * payer, the pre-existing behavior, since this is attribution and never what makes a deposit count.
+ */
+function nativeTransferSender(tx: SolTx, wallet: string): string | undefined {
+  for (const ix of allInstructions(tx)) {
+    const info = transferInfo(ix, SYSTEM_PROGRAM_IDS, ["transfer"]);
+    const source = info?.destination === wallet ? nonEmpty(info.source) : undefined;
+    if (source) return source;
+  }
+  return undefined;
+}
+
+function tokenTransferSender(tx: SolTx, tokenAccount: string): string | undefined {
+  for (const ix of allInstructions(tx)) {
+    const info = transferInfo(ix, TOKEN_PROGRAM_IDS, ["transfer", "transferChecked"]);
+    const authority = info?.destination === tokenAccount ? (nonEmpty(info.authority) ?? nonEmpty(info.multisigAuthority)) : undefined;
+    if (authority) return authority;
   }
   return undefined;
 }
@@ -81,7 +131,9 @@ function extractMemo(tx: SolTx): string | undefined {
  * Solana: a raw `getParsedTransaction` RPC call against this server's already-configured
  * `config.solanaRpcUrl` (same HttpClient conventions as chain/solana.ts). Native SOL is read off
  * the real pre/post balance delta of the configured wallet's account; an SPL/Token-2022 transfer
- * is read off the real pre/post token-balance delta for an account owned by that wallet.
+ * is read off the real pre/post token-balance delta for an account owned by that wallet. The
+ * balance delta alone decides THAT the wallet was paid and how much; the transfer instructions are
+ * only read to attribute who sent it (see nativeTransferSender/tokenTransferSender).
  */
 export async function verifySolanaDeposit(http: HttpClient, rpcUrl: string, signature: string, wallet: string | undefined, allowedTokens: Set<string>, budget: Budget): Promise<DepositVerification> {
   if (!wallet) return { ok: false, reason: "not_configured" };
@@ -107,7 +159,8 @@ export async function verifySolanaDeposit(http: HttpClient, rpcUrl: string, sign
   if (walletIdx >= 0) {
     const delta = (tx.meta.postBalances[walletIdx] ?? 0) - (tx.meta.preBalances[walletIdx] ?? 0);
     if (delta > 0) {
-      return { ok: true, deposit: { asset: "native", amount: formatUnits(String(delta), SOL_DECIMALS), fromAddress: keys[0] ?? "unknown", toWallet: wallet, ...(memo ? { memo } : {}) } };
+      const fromAddress = nativeTransferSender(tx, wallet) ?? keys[0] ?? "unknown";
+      return { ok: true, deposit: { asset: "native", amount: formatUnits(String(delta), SOL_DECIMALS), fromAddress, toWallet: wallet, ...(memo ? { memo } : {}) } };
     }
   }
 
@@ -125,9 +178,11 @@ export async function verifySolanaDeposit(http: HttpClient, rpcUrl: string, sign
       sawDisallowedIncrease = true;
       continue;
     }
+    const tokenAccount = keys[post.accountIndex];
+    const fromAddress = (tokenAccount ? tokenTransferSender(tx, tokenAccount) : undefined) ?? keys[0] ?? "unknown";
     return {
       ok: true,
-      deposit: { asset: { contract: post.mint }, amount: formatUnits(String(after - before), post.uiTokenAmount.decimals), fromAddress: keys[0] ?? "unknown", toWallet: wallet, ...(memo ? { memo } : {}) },
+      deposit: { asset: { contract: post.mint }, amount: formatUnits(String(after - before), post.uiTokenAmount.decimals), fromAddress, toWallet: wallet, ...(memo ? { memo } : {}) },
     };
   }
 

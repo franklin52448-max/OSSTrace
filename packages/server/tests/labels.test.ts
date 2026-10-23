@@ -87,13 +87,21 @@ describe("labels, entities, tags", () => {
     const hits = (await a.get("/api/search?q=exch")).json().hits;
     expect(hits.find((h: { type: string }) => h.type === "entity")).toMatchObject({ name: "Exchange X", addressCount: 1 });
     // Labelled address: the label hit replaces the address hit for that same chain only -- the same
-    // 0x address on BNB, Robinhood Chain or Base is a different (unlabelled) account and is still offered.
+    // 0x address on every other EVM chain is a different (unlabelled) account and is still offered.
     const dupHits = (await a.get(`/api/search?q=${ETH_A.toLowerCase()}`)).json().hits;
-    expect(dupHits).toHaveLength(4);
-    expect(dupHits[0]).toMatchObject({ type: "address", chain: "bnb", address: ETH_A });
-    expect(dupHits[1]).toMatchObject({ type: "address", chain: "robinhood", address: ETH_A });
-    expect(dupHits[2]).toMatchObject({ type: "address", chain: "base", address: ETH_A });
-    expect(dupHits[3]).toMatchObject({ type: "label", chain: "ethereum", address: ETH_A, name: "Hot 1" });
+    expect(dupHits.map((h: { type: string; chain: string }) => `${h.type}:${h.chain}`)).toEqual([
+      "address:bnb",
+      "address:robinhood",
+      "address:base",
+      "address:arbitrum",
+      "address:optimism",
+      "address:zora",
+      "address:lens",
+      "address:story",
+      "label:ethereum",
+    ]);
+    expect(dupHits.every((h: { address: string }) => h.address === ETH_A)).toBe(true);
+    expect(dupHits.at(-1)).toMatchObject({ type: "label", chain: "ethereum", address: ETH_A, name: "Hot 1" });
     // Unlabelled address: an address hit with info, one per EVM chain (Ethereum first).
     const addrHit = (await a.get(`/api/search?q=${ETH_B}`)).json().hits;
     expect(addrHit).toEqual([
@@ -101,6 +109,7 @@ describe("labels, entities, tags", () => {
       expect.objectContaining({ type: "address", chain: "bnb", address: ETH_B, info: expect.objectContaining({ label: null }) }),
       expect.objectContaining({ type: "address", chain: "robinhood", address: ETH_B, info: expect.objectContaining({ label: null }) }),
       expect.objectContaining({ type: "address", chain: "base", address: ETH_B, info: expect.objectContaining({ label: null }) }),
+      ...(["arbitrum", "optimism", "zora", "lens", "story"] as const).map((chain) => expect.objectContaining({ type: "address", chain, address: ETH_B, info: expect.objectContaining({ label: null }) })),
     ]);
     expect((await a.patch(`/api/labels/${lab.json().id}`, { name: "Hot 1b", note: "n" })).json()).toMatchObject({ name: "Hot 1b", note: "n" });
     expect((await a.del(`/api/entities/${ent.id}`)).statusCode).toBe(204);

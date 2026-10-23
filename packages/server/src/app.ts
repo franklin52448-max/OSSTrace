@@ -79,6 +79,19 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
     base:
       o.providers?.base ??
       new AlchemyProvider({ chain: "base", chainId: 8453, nativeSymbol: "ETH", nativeName: "Ether", rpcUrl: config.baseRpcUrl, rpcEnv: "BASE_RPC_URL", internal: true, fetchImpl: o.fetchImpl }),
+    // Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network: the same provider again, each on
+    // its own RPC URL and pinned to its own chain id. Alchemy serves internal transfers on none of them
+    // (-32602, checked 2026-10-23). Lens Chain's native currency is GHO and the Data Network's is DATA
+    // (formerly Story's IP); the other three pay gas in ETH.
+    arbitrum:
+      o.providers?.arbitrum ??
+      new AlchemyProvider({ chain: "arbitrum", chainId: 42161, nativeSymbol: "ETH", nativeName: "Ether", rpcUrl: config.arbitrumRpcUrl, rpcEnv: "ARBITRUM_RPC_URL", fetchImpl: o.fetchImpl }),
+    optimism:
+      o.providers?.optimism ??
+      new AlchemyProvider({ chain: "optimism", chainId: 10, nativeSymbol: "ETH", nativeName: "Ether", rpcUrl: config.optimismRpcUrl, rpcEnv: "OPTIMISM_RPC_URL", fetchImpl: o.fetchImpl }),
+    zora: o.providers?.zora ?? new AlchemyProvider({ chain: "zora", chainId: 7777777, nativeSymbol: "ETH", nativeName: "Ether", rpcUrl: config.zoraRpcUrl, rpcEnv: "ZORA_RPC_URL", fetchImpl: o.fetchImpl }),
+    lens: o.providers?.lens ?? new AlchemyProvider({ chain: "lens", chainId: 232, nativeSymbol: "GHO", nativeName: "GHO", rpcUrl: config.lensRpcUrl, rpcEnv: "LENS_RPC_URL", fetchImpl: o.fetchImpl }),
+    story: o.providers?.story ?? new AlchemyProvider({ chain: "story", chainId: 1514, nativeSymbol: "DATA", nativeName: "DATA", rpcUrl: config.storyRpcUrl, rpcEnv: "STORY_RPC_URL", fetchImpl: o.fetchImpl }),
     solana:
       o.providers?.solana ??
       new SolanaRpcProvider(config.solanaRpcUrl, config.solanaRpcCustom, o.fetchImpl, {

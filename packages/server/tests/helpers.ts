@@ -149,6 +149,8 @@ export type TestApp = {
   bnb: FakeProvider;
   rh: FakeProvider;
   base: FakeProvider;
+  /** Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network's fakes, by chain id. */
+  more: Record<"arbitrum" | "optimism" | "zora" | "lens" | "story", FakeProvider>;
   sent: { url: string; body: string; headers: Record<string, string> }[];
   close: () => Promise<void>;
 };
@@ -162,10 +164,17 @@ export async function makeApp(over: Partial<Config> = {}, opts: { sendWebhook?: 
   const rh = new FakeProvider("robinhood");
   // Every chain gets a fake: the real providers would go to the network (health pings all of them).
   const base = new FakeProvider("base");
+  const more: TestApp["more"] = {
+    arbitrum: new FakeProvider("arbitrum"),
+    optimism: new FakeProvider("optimism"),
+    zora: new FakeProvider("zora"),
+    lens: new FakeProvider("lens"),
+    story: new FakeProvider("story"),
+  };
   const sent: TestApp["sent"] = [];
   const { app, ctx, worker } = await buildApp(config, {
     db,
-    providers: { ethereum: eth, solana: sol, bnb, robinhood: rh, base },
+    providers: { ethereum: eth, solana: sol, bnb, robinhood: rh, base, ...more },
     prices: new PriceService(db, "https://prices.test", llamaFetch()),
     resolver: async (host) => (host === "hooks.example.com" ? [{ address: "93.184.216.34", family: 4 }] : [{ address: "10.0.0.5", family: 4 }]),
     sendWebhook:
@@ -186,6 +195,7 @@ export async function makeApp(over: Partial<Config> = {}, opts: { sendWebhook?: 
     bnb,
     rh,
     base,
+    more,
     sent,
     close: async () => {
       await app.close();

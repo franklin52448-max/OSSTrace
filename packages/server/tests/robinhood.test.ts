@@ -120,7 +120,7 @@ describe("Robinhood Chain through the API", () => {
     expect(info.label.name).toBe("RH treasury");
     const imp = (await c.post("/api/labels/import", { format: "csv", data: `chain,address,name\nrobinhood,${ETH_B},Imported RH\ndogecoin,${ETH_B},nope`, onConflict: "update" })).json();
     expect(imp.created).toBe(1);
-    expect(imp.skipped).toEqual([{ row: 3, reason: "chain must be one of solana, ethereum, bnb, robinhood, base" }]); // row 1 is the CSV header
+    expect(imp.skipped).toEqual([{ row: 3, reason: "chain must be one of solana, ethereum, bnb, robinhood, base, arbitrum, optimism, zora, lens, story" }]); // row 1 is the CSV header
   });
 
   it("health lists Robinhood Chain by its display name", async () => {

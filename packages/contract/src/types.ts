@@ -13,16 +13,51 @@
 //
 // "base" is Base (Coinbase's OP Stack L2, EVM chain id 8453): the same shape again, gas paid in ETH
 // too -- still its own `Chain` with its own history, and still no "base" login.
-export type Chain = "solana" | "ethereum" | "bnb" | "robinhood" | "base";
-export const CHAINS: readonly Chain[] = ["solana", "ethereum", "bnb", "robinhood", "base"] as const;
+//
+// Five more EVM chains, each read the same way (Alchemy's enhanced API) and each its own `Chain` for
+// the same reasons, none with a login of its own:
+// - "arbitrum": Arbitrum One (chain id 42161), gas paid in ETH.
+// - "optimism": OP Mainnet (chain id 10), gas paid in ETH.
+// - "zora": Zora (OP Stack L2, chain id 7777777), gas paid in ETH.
+// - "lens": Lens Chain (a ZKsync-stack L2, chain id 232). Its gas token is GHO -- Aave's dollar
+//   stablecoin, the chain's own native currency there -- not ETH.
+// - "story": chain id 1514, launched as Story (native token IP) and since rebranded the Data Network
+//   (native token DATA; chainid.network, CoinGecko and the chain's own foundation site all say so as of
+//   2026-10). The id stays "story" -- the network's original name and Alchemy's own subdomain for it
+//   (story-mainnet) -- while everything shown to a person says "Data Network" and "DATA".
+export type Chain = "solana" | "ethereum" | "bnb" | "robinhood" | "base" | "arbitrum" | "optimism" | "zora" | "lens" | "story";
+export const CHAINS: readonly Chain[] = ["solana", "ethereum", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story"] as const;
 export const isChain = (v: unknown): v is Chain => typeof v === "string" && (CHAINS as readonly string[]).includes(v);
 
 /** Display name per chain -- one place, so a new chain can't end up as "Solana" in a two-way ternary. */
-export const CHAIN_NAMES: Record<Chain, string> = { solana: "Solana", ethereum: "Ethereum", bnb: "BNB Chain", robinhood: "Robinhood Chain", base: "Base" };
-/** Each chain's native unit, known without a successful balance call. Robinhood Chain's and Base's
- *  really are ETH (bridged from Ethereum), not a token of their own -- so this symbol alone can't
- *  tell their transfers from Ethereum's; show the chain next to it. */
-export const NATIVE_SYMBOLS: Record<Chain, string> = { solana: "SOL", ethereum: "ETH", bnb: "BNB", robinhood: "ETH", base: "ETH" };
+export const CHAIN_NAMES: Record<Chain, string> = {
+  solana: "Solana",
+  ethereum: "Ethereum",
+  bnb: "BNB Chain",
+  robinhood: "Robinhood Chain",
+  base: "Base",
+  arbitrum: "Arbitrum One",
+  optimism: "OP Mainnet",
+  zora: "Zora",
+  lens: "Lens Chain",
+  story: "Data Network",
+};
+/** Each chain's native unit, known without a successful balance call. Robinhood Chain's, Base's,
+ *  Arbitrum One's, OP Mainnet's and Zora's really are ETH (bridged from Ethereum), not a token of their
+ *  own -- so this symbol alone can't tell their transfers from Ethereum's; show the chain next to it.
+ *  Lens Chain's is GHO and the Data Network's is DATA (formerly IP), each that chain's own. */
+export const NATIVE_SYMBOLS: Record<Chain, string> = {
+  solana: "SOL",
+  ethereum: "ETH",
+  bnb: "BNB",
+  robinhood: "ETH",
+  base: "ETH",
+  arbitrum: "ETH",
+  optimism: "ETH",
+  zora: "ETH",
+  lens: "GHO",
+  story: "DATA",
+};
 
 export type XY = { x: number; y: number };
 

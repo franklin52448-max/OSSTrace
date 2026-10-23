@@ -22,12 +22,42 @@ export const bucketOf = (t: number) => Math.floor(t / HOUR) * HOUR;
 // It must never be "ethereum": a contract address is only unique per chain, so that key would price a
 // Robinhood Chain token as whatever lives at the same address on mainnet. Base's is "base", checked
 // the same way (`base:0x8335...2913` prices as USDC, 6 dp).
-export const LLAMA_CHAIN_PREFIX: Record<Chain, string> = { ethereum: "ethereum", solana: "solana", bnb: "bsc", robinhood: "robinhood", base: "base" };
+//
+// Checked the same way on 2026-10-23: Arbitrum One is "arbitrum" and OP Mainnet "optimism" (each
+// chain's Circle USDC prices at ~$1.00, 6 dp), Zora "zora" (USDzC, WETH), Lens Chain "lens" (WGHO),
+// and the Data Network "sty" -- DefiLlama's key from its Story days: `sty:0x1514...0000` (WIP) prices at
+// DATA's own price, while `story:`, `data:` and `data_network:` keys all price as nothing.
+export const LLAMA_CHAIN_PREFIX: Record<Chain, string> = {
+  ethereum: "ethereum",
+  solana: "solana",
+  bnb: "bsc",
+  robinhood: "robinhood",
+  base: "base",
+  arbitrum: "arbitrum",
+  optimism: "optimism",
+  zora: "zora",
+  lens: "lens",
+  story: "sty",
+};
 /** Native coins are keyed by their CoinGecko id on DefiLlama (BNB's is "binancecoin", not "bnb").
  *  Robinhood Chain pays gas in real ETH -- CoinGecko's asset platform for it says `native_coin_id:
  *  "ethereum"`, DefiLlama's chain list `gasTokenGeckoId: "ethereum"` -- so it prices off ETH's own id.
- *  Base's gas asset is ether too (bridged 1:1, the same asset), so the same series. */
-export const NATIVE_COIN: Record<Chain, string> = { ethereum: "coingecko:ethereum", solana: "coingecko:solana", bnb: "coingecko:binancecoin", robinhood: "coingecko:ethereum", base: "coingecko:ethereum" };
+ *  Base's gas asset is ether too (bridged 1:1, the same asset), so the same series -- and so is
+ *  Arbitrum One's, OP Mainnet's and Zora's. Lens Chain's gas token is GHO ("coingecko:gho", ~$1.00),
+ *  and the Data Network's is DATA, whose CoinGecko id is still "story-2" from before the rebrand
+ *  (DefiLlama answers it with symbol "DATA"). */
+export const NATIVE_COIN: Record<Chain, string> = {
+  ethereum: "coingecko:ethereum",
+  solana: "coingecko:solana",
+  bnb: "coingecko:binancecoin",
+  robinhood: "coingecko:ethereum",
+  base: "coingecko:ethereum",
+  arbitrum: "coingecko:ethereum",
+  optimism: "coingecko:ethereum",
+  zora: "coingecko:ethereum",
+  lens: "coingecko:gho",
+  story: "coingecko:story-2",
+};
 export const tokenCoin = (chain: Chain, tokenId: string) => `${LLAMA_CHAIN_PREFIX[chain]}:${tokenId}`;
 
 /**

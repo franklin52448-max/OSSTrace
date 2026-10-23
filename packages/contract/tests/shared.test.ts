@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   addressNodeId,
+  CHAIN_NAMES,
+  NATIVE_SYMBOLS,
   aggregateEdgeId,
   applyTraceOps,
   applyVisualizerOps,
@@ -83,6 +85,25 @@ describe("chain detection", () => {
     expect(isChain("base")).toBe(true);
     expect(isChain("bsc")).toBe(false);
     expect(chainForAddress("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", "base")).toBe("base");
+  });
+  it("Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network are EVM chains, each its own", () => {
+    const addr = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+    const t = "11111111-1111-4111-8111-111111111111";
+    for (const chain of ["arbitrum", "optimism", "zora", "lens", "story"] as const) {
+      expect(isChain(chain)).toBe(true);
+      expect(isEvmChain(chain)).toBe(true);
+      expect(normalizeAddress(chain, addr.toLowerCase())).toBe(addr);
+      expect(isAddressOnChain(chain, "So11111111111111111111111111111111111111112")).toBe(false);
+      expect(chainForAddress(addr, chain)).toBe(chain);
+      expect(addressNodeId(t, chain, addr)).not.toBe(addressNodeId(t, "ethereum", addr));
+    }
+    // "story" is the chain id; what a person reads is the network's current name and token.
+    expect(CHAIN_NAMES.story).toBe("Data Network");
+    expect(NATIVE_SYMBOLS.story).toBe("DATA");
+    expect(NATIVE_SYMBOLS.lens).toBe("GHO");
+    expect([NATIVE_SYMBOLS.arbitrum, NATIVE_SYMBOLS.optimism, NATIVE_SYMBOLS.zora]).toEqual(["ETH", "ETH", "ETH"]);
+    expect(isChain("data")).toBe(false);
+    expect(isChain("arb")).toBe(false);
   });
 });
 

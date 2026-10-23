@@ -4,14 +4,23 @@ import type { Chain } from "@osstrace/contract";
  * entry for anything else, rather than fabricate a link to data we don't have. BscScan is BNB
  * Smart Chain's own explorer (Etherscan's, for chain 56), same /address/ and /tx/ paths. Robinhood
  * Chain's is its own official Blockscout instance. Base links to BaseScan, its Etherscan-family
- * explorer. (The server reads all three through Alchemy -- packages/server/src/chain/alchemy.ts --
- * which is a keyed data source, not somewhere a person clicks through to.) */
+ * explorer. Arbitrum One links to Arbiscan and OP Mainnet to Optimistic Etherscan (each chain's
+ * Etherscan-family explorer); Zora and Lens Chain to their own official explorers, and the Data
+ * Network to datanetscan.io, its Blockscout instance (storyscan.io, its name as Story, now redirects
+ * there). (The server reads every EVM chain but Ethereum through Alchemy --
+ * packages/server/src/chain/alchemy.ts -- which is a keyed data source, not somewhere a person clicks
+ * through to.) */
 export const EXPLORERS: Record<Chain, { name: string; address: string; tx: string }> = {
   ethereum: { name: "Etherscan", address: "https://etherscan.io/address/", tx: "https://etherscan.io/tx/" },
   solana: { name: "Solscan", address: "https://solscan.io/account/", tx: "https://solscan.io/tx/" },
   bnb: { name: "BscScan", address: "https://bscscan.com/address/", tx: "https://bscscan.com/tx/" },
   robinhood: { name: "Blockscout", address: "https://robinhoodchain.blockscout.com/address/", tx: "https://robinhoodchain.blockscout.com/tx/" },
   base: { name: "BaseScan", address: "https://basescan.org/address/", tx: "https://basescan.org/tx/" },
+  arbitrum: { name: "Arbiscan", address: "https://arbiscan.io/address/", tx: "https://arbiscan.io/tx/" },
+  optimism: { name: "Optimistic Etherscan", address: "https://optimistic.etherscan.io/address/", tx: "https://optimistic.etherscan.io/tx/" },
+  zora: { name: "Zora Explorer", address: "https://explorer.zora.energy/address/", tx: "https://explorer.zora.energy/tx/" },
+  lens: { name: "Lens Explorer", address: "https://explorer.lens.xyz/address/", tx: "https://explorer.lens.xyz/tx/" },
+  story: { name: "DataNetScan", address: "https://www.datanetscan.io/address/", tx: "https://www.datanetscan.io/tx/" },
 };
 
 export function explorerName(chain: Chain): string {

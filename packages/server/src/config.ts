@@ -43,6 +43,19 @@ export type Config = {
    *  Base. The default is Base's official public endpoint ("not for production" per Base's own docs --
    *  fine for occasional deposit checks): address lookups on it report that an Alchemy URL is needed. */
   baseRpcUrl: string;
+  /** Never logged. Arbitrum One, OP Mainnet, Zora, Lens Chain and Data Network JSON-RPC, the same
+   *  shape as robinhoodRpcUrl/baseRpcUrl: bounty-deposit verification over plain `eth_*` calls, and --
+   *  when it's an Alchemy URL -- address history and balances through Alchemy's enhanced API
+   *  (chain/alchemy.ts). Each defaults to that chain's own official public RPC (no key; chain ids
+   *  checked against each one 2026-10-23): deposits work on it, address lookups on it report that an
+   *  Alchemy URL is needed, never an empty wallet. Unlike Ethereum mainnet, each of these chains'
+   *  operators runs a public endpoint of its own, so there is a safe zero-config default to give. */
+  arbitrumRpcUrl: string;
+  optimismRpcUrl: string;
+  zoraRpcUrl: string;
+  lensRpcUrl: string;
+  /** Data Network (formerly Story): the chain's id here is "story", so its env var is STORY_RPC_URL. */
+  storyRpcUrl: string;
   /** Bitcoin bounty-deposit verification source (an Esplora-API block explorer, no key needed) --
    *  Blockstream.info by default; mempool.space speaks the same API and can be swapped in via
    *  ESPLORA_URL. Bitcoin is deposit-only here: nothing else in this server reads Bitcoin. */
@@ -72,6 +85,17 @@ export const DEFAULT_BNB_RPC = "https://bsc-dataseed.bnbchain.org";
 export const DEFAULT_ROBINHOOD_RPC = "https://rpc.mainnet.chain.robinhood.com";
 /** Base's own official public RPC (chain id 8453, no key). */
 export const DEFAULT_BASE_RPC = "https://mainnet.base.org";
+/** Arbitrum One's public RPC, run by Offchain Labs (chain id 42161, no key, rate-limited). */
+export const DEFAULT_ARBITRUM_RPC = "https://arb1.arbitrum.io/rpc";
+/** OP Mainnet's public RPC, run by the Optimism Foundation (chain id 10, no key, rate-limited). */
+export const DEFAULT_OPTIMISM_RPC = "https://mainnet.optimism.io";
+/** Zora's own public RPC (chain id 7777777, no key). */
+export const DEFAULT_ZORA_RPC = "https://rpc.zora.energy";
+/** Lens Chain's own public RPC (chain id 232, no key). */
+export const DEFAULT_LENS_RPC = "https://rpc.lens.xyz";
+/** The Data Network's own public RPC (chain id 1514, no key) -- the rebranded name of Story's
+ *  mainnet.storyrpc.io, which answers for the same chain. */
+export const DEFAULT_STORY_RPC = "https://mainnet.datarpc.io";
 
 const bool = (v: string | undefined, dflt: boolean) => {
   if (v === undefined || v === "") return dflt;
@@ -79,6 +103,18 @@ const bool = (v: string | undefined, dflt: boolean) => {
 };
 
 const expandHome = (p: string) => (p.startsWith("~/") ? resolve(homedir(), p.slice(2)) : p);
+
+/** `<NAME>_RPC_URL_FILE` (a file holding only the URL, which may embed a key) wins over
+ *  `<NAME>_RPC_URL`; neither set means `dflt`. The same split bnbRpcUrl/robinhoodRpcUrl/baseRpcUrl use. */
+function rpcUrlFrom(env: NodeJS.ProcessEnv, name: string, dflt: string): string {
+  const file = env[`${name}_RPC_URL_FILE`];
+  if (file) {
+    const raw = readFileSync(expandHome(file), "utf8").trim();
+    if (!/^https?:\/\//.test(raw)) throw new Error(`${name}_RPC_URL_FILE does not contain an http(s) URL`);
+    return raw;
+  }
+  return env[`${name}_RPC_URL`]?.trim() || dflt;
+}
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const production = env.NODE_ENV === "production";
@@ -134,6 +170,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     baseRpcUrl = env.BASE_RPC_URL.trim();
   }
 
+  const arbitrumRpcUrl = rpcUrlFrom(env, "ARBITRUM", DEFAULT_ARBITRUM_RPC);
+  const optimismRpcUrl = rpcUrlFrom(env, "OPTIMISM", DEFAULT_OPTIMISM_RPC);
+  const zoraRpcUrl = rpcUrlFrom(env, "ZORA", DEFAULT_ZORA_RPC);
+  const lensRpcUrl = rpcUrlFrom(env, "LENS", DEFAULT_LENS_RPC);
+  const storyRpcUrl = rpcUrlFrom(env, "STORY", DEFAULT_STORY_RPC);
+
   const solscanApiKey = env.SOLSCAN_API_KEY?.trim() || null;
 
   const origins = (env.ALLOWED_ORIGINS ?? "http://127.0.0.1:5301,http://localhost:5301")
@@ -161,6 +203,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     bnbRpcUrl,
     robinhoodRpcUrl,
     baseRpcUrl,
+    arbitrumRpcUrl,
+    optimismRpcUrl,
+    zoraRpcUrl,
+    lensRpcUrl,
+    storyRpcUrl,
     esploraUrl: (env.ESPLORA_URL ?? "https://blockstream.info").replace(/\/$/, ""),
     defillamaUrl: (env.DEFILLAMA_URL ?? "https://coins.llama.fi").replace(/\/$/, ""),
     jupiterTokensUrl: (env.JUPITER_TOKENS_URL ?? "https://lite-api.jup.ag/tokens/v2").replace(/\/$/, ""),

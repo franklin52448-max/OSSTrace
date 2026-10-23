@@ -1,5 +1,4 @@
-@import "@fontsource-variable/instrument-sans";
-@import "@fontsource-variable/jetbrains-mono";
+@import "./fonts.css";
 @import "tailwindcss";
 @import "./prism/prism.css";
 @import "./kit/tokens.css";

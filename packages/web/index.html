@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- The API server's own origin (VITE_SERVER_URL, set per-deploy -- see .env.example): warms
+         the DNS/TLS connection ahead of the first real fetch (e.g. the session check on load),
+         instead of paying that cost inside the request itself. Vite substitutes %VITE_SERVER_URL%
+         from the real build-time env, same mechanism as import.meta.env in JS; empty/unset in a
+         build that doesn't define it, in which case these are harmless no-ops. -->
+    <link rel="preconnect" href="%VITE_SERVER_URL%" crossorigin />
+    <link rel="dns-prefetch" href="%VITE_SERVER_URL%" />
     <title>OSSTrace</title>
   </head>
   <body>

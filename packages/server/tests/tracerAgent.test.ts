@@ -538,7 +538,7 @@ describe("tracer agent", () => {
     expect(usdc).toHaveLength(1); // not "no transfers": the prefixed asset/counterparty were read as the addresses they are
     expect(usdc[0]!.token.id.toLowerCase()).toBe(USDC.toLowerCase());
     expect(res.toolCalls[2]!.result).toMatchObject({ ok: true, rootNodeId: addressNodeId(id, "ethereum", ETH_A) });
-    expect(errors[3]).toMatch(/names chain ethereum, but chain is base/);
+    expect(errors[3]).toMatch(/names chain ethereum, but the step was for base/);
     expect(((await c.get(`/api/traces/${id}`)).json() as Trace).nodes.some((n) => n.chain === "base")).toBe(false);
   });
 
@@ -818,6 +818,41 @@ describe("tracer agent", () => {
     expect(errors[0]).toMatch(/^Invalid arguments -- hops/);
     expect(errors[1]).toMatch(/^Not run: this exact call was already refused this message \(Invalid arguments -- hops/);
     expect(errors[2]).toBe("ok"); // changed arguments run normally
+  });
+
+  it("a tool's error is worded for the user, who sees it under the reply; what the model should do about it goes to the model as a separate hint", async () => {
+    const seen: Seen[] = [];
+    await setup(
+      [
+        {
+          tools: [
+            { name: "rename_node", args: { nodeId: "node-that-isnt-there", label: "x" } },
+            { name: "add_node", args: { chain: "base", address: `ethereum:${ETH_A}` } },
+            { name: "expand_node", args: { chain: "ethereum", address: ETH_A, hops: 9 } },
+          ],
+        },
+        { content: "ok" },
+      ],
+      seen,
+    );
+    const anon = new Browser(t.app);
+    const res = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "rename it", doc: emptyScratch() })).json() as TracerAgentChatResponse;
+    const [missing, wrongChain, invalid] = res.toolCalls.map((x) => x.result as { error: string; hint?: string; refused?: boolean });
+    // What the user reads: no instructions addressed to the model ("call get_doc_state", "use chain:address").
+    expect(missing!.error).toBe('No node "node-that-isnt-there" on this trace');
+    expect(wrongChain!.error).toMatch(/names chain ethereum, but the step was for base$/);
+    for (const r of [missing!, wrongChain!]) {
+      expect(r.error).not.toMatch(/get_doc_state|use chain|-- use/);
+      expect(r.refused).toBeUndefined(); // it ran, and the trace said no
+    }
+    // What the model reads: the same error, plus what to do next.
+    expect(missing!.hint).toMatch(/Call get_doc_state for the real node ids/);
+    const toModel = seen[1]!.body.messages.filter((m) => m.role === "tool").map((m) => JSON.parse(m.content!) as { hint?: string; refused?: boolean });
+    expect(toModel[0]!.hint).toMatch(/get_doc_state/);
+    expect(toModel[1]!.hint).toMatch(/same chain/);
+    // Refused before running (the model's own request was invalid): marked, so the panel can say so plainly.
+    expect(invalid!.refused).toBe(true);
+    expect(toModel[2]!.refused).toBe(true);
   });
 
   it("provider failure: 502 with no upstream text, and the anon message is refunded", async () => {

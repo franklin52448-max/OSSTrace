@@ -127,7 +127,12 @@ function nameOf(doc: TraceDoc | null, id: unknown, fallback?: unknown): string {
 export function describeToolCall(call: AgentToolCall, doc: TraceDoc | null): AgentStep {
   const { tool, result: r } = call;
   const step = (status: AgentStepStatus, summary: string, href?: string): AgentStep => ({ tool, status, summary, ...(href ? { href } : {}) });
-  if (r["ok"] === false) return step("failed", str(r["error"]) ?? "This step didn't work.");
+  // A call the server refused before running it (an unknown tool, arguments that didn't parse or
+  // pass the schema) failed on the model's side: its error text is written for the model --
+  // "Invalid arguments -- hops: ...", "Change the arguments, or tell the user..." -- so the user
+  // gets what it means for them instead. Any other error is already worded for the user; the
+  // result's `hint` is advice to the model and isn't shown.
+  if (r["ok"] === false) return step("failed", r["refused"] === true ? "Skipped: the agent asked for this step in a way the tool doesn't accept, so nothing ran." : (str(r["error"]) ?? "This step didn't work."));
 
   switch (tool) {
     case "add_node": {

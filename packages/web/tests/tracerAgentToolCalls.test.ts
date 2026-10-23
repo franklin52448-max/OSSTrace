@@ -87,6 +87,11 @@ test("describeToolCall words only what each real result says", () => {
   assert.equal(say("add_node", { ok: true, nodeId: a.id, alreadyOnCanvas: false }), "applied: Added 0x1111…1111");
   assert.equal(say("add_node", { ok: true, nodeId: a.id, alreadyOnCanvas: true }), "read: 0x1111…1111 was already on the canvas");
   assert.equal(say("add_node", { ok: false, error: "That isn't a valid address." }), "failed: That isn't a valid address.");
+  // The model's advice to itself isn't shown to the user as if it were addressed to them.
+  assert.equal(say("rename_node", { ok: false, error: 'No node "x" on this trace', hint: "Call get_doc_state for the real node ids." }), 'failed: No node "x" on this trace');
+  // A request the server refused before running it is worded for the user, not as the model's validation error.
+  for (const error of ["Invalid arguments -- hops: Number must be less than or equal to 3", "Not run: this exact call was already refused this message (Invalid arguments -- hops: ...). Change the arguments, or tell the user what went wrong.", 'Unknown tool "fetch_url". Only these exist: add_node'])
+    assert.equal(say("expand_node", { ok: false, refused: true, error }), "failed: Skipped: the agent asked for this step in a way the tool doesn't accept, so nothing ran.");
   assert.equal(say("find_connections", { ok: true, connections: [], edgesAdded: 0, pairsFailed: 1 }), "read: No direct connections found, 1 pair couldn't be checked");
   assert.equal(
     say("find_connections", { ok: true, connections: [], edgesAdded: 0, pairsWithPartialHistory: 1 }),

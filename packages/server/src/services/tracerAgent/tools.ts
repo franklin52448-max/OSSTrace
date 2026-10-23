@@ -53,9 +53,21 @@ type ToolDef<S extends z.ZodTypeAny> = {
 /** Ties each tool's `run` argument type to its own `args` schema. */
 const defineTool = <S extends z.ZodTypeAny>(t: ToolDef<S>): ToolDef<S> => t;
 
-class ToolError extends Error {}
-const fail = (m: string): never => {
-  throw new ToolError(m);
+/**
+ * A tool's refusal. `message` is what went wrong, in words the user can read -- the panel shows it
+ * under the reply as the step's result. `hint` is what the *model* should do about it ("call
+ * get_doc_state..."): sent to the model next to the error, never shown as if it were addressed to
+ * the user, who has no get_doc_state to call.
+ */
+class ToolError extends Error {
+  readonly hint: string | undefined;
+  constructor(message: string, hint?: string) {
+    super(message);
+    this.hint = hint;
+  }
+}
+const fail = (m: string, hint?: string): never => {
+  throw new ToolError(m, hint);
 };
 
 /** A model calling a tool often sends `""` or `null` for an argument it has no value for, instead
@@ -145,7 +157,7 @@ function placeNear(anchor: XY | null, taken: XY[]): XY {
 function dropChainPrefix(chain: Chain, s: string): string {
   const i = s.indexOf(":");
   if (i <= 0 || !isChain(s.slice(0, i))) return s;
-  if (s.slice(0, i) !== chain) fail(`"${safeText(s, 80)}" names chain ${s.slice(0, i)}, but chain is ${chain} -- use the same chain for both`);
+  if (s.slice(0, i) !== chain) fail(`"${safeText(s, 80)}" names chain ${s.slice(0, i)}, but the step was for ${chain}`, "Use the same chain in the address prefix and the chain argument.");
   return s.slice(i + 1).trim();
 }
 
@@ -171,7 +183,7 @@ function findNode(doc: AgentDoc, ref: string): TraceNode | null {
   if ("ambiguousEvm" in target) {
     const hits = EVM_CHAINS.map((c) => d.nodes.find((n) => n.id === addressNodeId(doc.traceId, c, target.address))).filter((n): n is TraceNode => !!n);
     if (hits.length === 1) return hits[0]!;
-    if (hits.length > 1) fail(`${safeText(s, 60)} is on the canvas on more than one chain -- use chain:address`);
+    if (hits.length > 1) fail(`${safeText(s, 60)} is on the canvas on more than one chain`, "Name it as chain:address, or ask the user which chain they mean.");
     return null;
   }
   return d.nodes.find((n) => n.id === addressNodeId(doc.traceId, target.chain, target.address)) ?? null;
@@ -196,7 +208,7 @@ function parseAddrRef(ref: string, defaultEvm: boolean): AddrKey | { ambiguousEv
 }
 
 function nodeOrFail(doc: AgentDoc, ref: string): TraceNode {
-  return findNode(doc, ref) ?? fail(`No node "${safeText(ref, 80)}" on this trace -- call get_doc_state for the real node ids`);
+  return findNode(doc, ref) ?? fail(`No node "${safeText(ref, 80)}" on this trace`, "Call get_doc_state for the real node ids.");
 }
 
 /** Adds an address node if it isn't on the canvas yet; returns the node either way. */
@@ -231,7 +243,7 @@ function transferOut(t: Transfer, subject?: AddrKey) {
   };
 }
 
-const userFacing = (e: unknown) => (e instanceof ApiErr || e instanceof ProviderError ? e.message : "unexpected error");
+const userFacing = (e: unknown) => (e instanceof ApiErr || e instanceof ProviderError ? e.message : "Something went wrong running this step.");
 
 // ---------- the tools ----------
 const chainSchema = z.enum(CHAINS as unknown as [Chain, ...Chain[]]);
@@ -858,29 +870,31 @@ const MAX_ARG_CHARS = 8000;
  * Runs one model-requested tool call. The name must be on the whitelist, the arguments must parse
  * as JSON and pass that tool's strict schema (unknown keys rejected, enums and ranges enforced), and
  * only then does any code run. Every failure comes back as `{ ok: false, error }` for the model to
- * read -- never a thrown error that could leak internals, never a partial guess.
+ * read -- never a thrown error that could leak internals, never a partial guess. A call refused
+ * before any tool code ran (unknown tool, unparseable or invalid arguments) is marked `refused`:
+ * its error is about the model's request, not about the trace, and is worded for the model.
  */
 export async function runTool(env: ToolEnv, name: string, rawArgs: string): Promise<{ args: Record<string, unknown>; result: ToolResult }> {
   const tool = BY_NAME.get(name);
-  if (!tool) return { args: {}, result: { ok: false, error: `Unknown tool "${safeText(name, 60)}". Only these exist: ${TOOLS.map((t) => t.name).join(", ")}.` } };
+  if (!tool) return { args: {}, result: { ok: false, refused: true, error: `Unknown tool "${safeText(name, 60)}". Only these exist: ${TOOLS.map((t) => t.name).join(", ")}.` } };
   let parsed: unknown;
   try {
     if (rawArgs.length > MAX_ARG_CHARS) throw new Error();
     parsed = rawArgs.trim() === "" ? {} : JSON.parse(rawArgs);
   } catch {
-    return { args: {}, result: { ok: false, error: "Arguments were not valid JSON." } };
+    return { args: {}, result: { ok: false, refused: true, error: "Arguments were not valid JSON." } };
   }
   const v = (tool.args as z.ZodTypeAny).safeParse(parsed);
   if (!v.success) {
     const issue = v.error.issues[0];
     const where = issue?.path.length ? `${issue.path.join(".")}: ` : "";
-    return { args: typeof parsed === "object" && parsed ? (parsed as Record<string, unknown>) : {}, result: { ok: false, error: `Invalid arguments -- ${where}${issue?.message ?? "rejected"}` } };
+    return { args: typeof parsed === "object" && parsed ? (parsed as Record<string, unknown>) : {}, result: { ok: false, refused: true, error: `Invalid arguments -- ${where}${issue?.message ?? "rejected"}` } };
   }
   const args = v.data as Record<string, unknown>;
   try {
     return { args, result: await (tool.run as (e: ToolEnv, a: unknown) => Promise<ToolResult>)(env, args) };
   } catch (e) {
-    if (e instanceof ToolError) return { args, result: { ok: false, error: e.message } };
+    if (e instanceof ToolError) return { args, result: { ok: false, error: e.message, ...(e.hint ? { hint: e.hint } : {}) } };
     return { args, result: { ok: false, error: userFacing(e) } };
   }
 }

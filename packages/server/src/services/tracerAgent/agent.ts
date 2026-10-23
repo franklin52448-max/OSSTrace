@@ -232,7 +232,7 @@ export async function runAgentTurn(args: {
         // Seen live: a model resent the exact call its arguments had just been refused for, six times,
         // spending the user's whole message on one validation error. A refusal of the arguments
         // themselves can't come out differently on a retry, so say so instead of repeating it.
-        result = { ok: false, error: `Not run: this exact call was already refused this message (${before}). Change the arguments, or tell the user what went wrong.` };
+        result = { ok: false, refused: true, error: `Not run: this exact call was already refused this message (${before}). Change the arguments, or tell the user what went wrong.` };
         toolCalls.push({ tool: call.function.name.slice(0, 64), args: {}, result });
       } else {
         const r = await runTool({ ctx, userId, doc, deadline }, call.function.name, call.function.arguments);
@@ -240,7 +240,8 @@ export async function runAgentTurn(args: {
         callArgs = r.args;
         toolCalls.push({ tool: call.function.name.slice(0, 64), args: callArgs, result });
         const err = (result as { ok?: boolean; error?: unknown }).error;
-        if (result.ok === false && typeof err === "string" && REFUSED_BEFORE_RUNNING.test(err)) refused.set(sig, err);
+        // runTool marks a call refused before any tool code ran: the same input always gets the same refusal.
+        if (result.ok === false && result.refused === true && typeof err === "string") refused.set(sig, err);
       }
       // Every requested call gets an answer, or the provider rejects the next request.
       messages.push({ role: "tool", tool_call_id: call.id, content: clip(result) });
@@ -248,9 +249,6 @@ export async function runAgentTurn(args: {
   }
   return { reply: honestStop(toolCalls, `Stopped after ${MAX_ROUNDS} steps for this message.`), toolCalls, llmAnswered };
 }
-
-/** runTool's errors for a call refused before any tool code ran -- the same input always gets them. */
-const REFUSED_BEFORE_RUNNING = /^(Invalid arguments|Arguments were not valid JSON|Unknown tool)/;
 
 /** Tool arguments as one comparable string: key order and whitespace don't make a call different. */
 function canonicalArgs(raw: string): string {

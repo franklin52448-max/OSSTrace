@@ -227,6 +227,20 @@ test("follow-ups send the canvas as it now is, and act on it (rename, then remov
   assert.deepEqual(consoleErrors, []);
 });
 
+test("before the first message: says what the agent works from and what it can't answer, and every example maps onto a real tool", async () => {
+  await renderScratch();
+  const panel = await openAgent();
+  const t = text(panel);
+  assert.ok(t.includes("It works only from real transfers on Solana, Ethereum, BNB Chain, Robinhood Chain and Base."), t);
+  assert.ok(t.includes("It can't tell you who owns an address, predict what a wallet will do, or help with anything outside tracing, and it says so rather than guess."), t);
+  assert.ok(t.includes("It can't see what you've selected, so name the address."), t);
+  assert.ok(t.includes("Add 0x… and expand its top counterparties"));
+  assert.ok(t.includes("List the largest transfers into 0x… in the last 30 days"));
+  // expand_node adds counterparties from both directions: no example may promise one direction of it.
+  assert.ok(!t.includes("who it sent funds to"), "no example promises a direction expand_node doesn't have");
+  assert.deepEqual(consoleErrors, []);
+});
+
 test("not configured (status): says so from the start, with no input and no request to the model", async () => {
   status = { configured: false, signedIn: false, messageLimit: 5, messagesRemaining: 5 };
   await renderScratch();

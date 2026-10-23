@@ -11,6 +11,7 @@
  * turned on -- checked up front via GET /api/tracer-agent/status, and again on any 503), and a
  * visitor without a wallet having used their free messages. Neither ever shows an invented reply.
  */
+import { CHAIN_NAMES, CHAINS } from "@osstrace/contract";
 import { ArrowUp, Check, CircleAlert, Eye, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { Button, IconButton } from "../../kit/Button.tsx";
@@ -26,7 +27,11 @@ type Entry =
   | { id: number; role: "agent"; text: string; steps: AgentStep[] }
   | { id: number; role: "notice"; text: string };
 
-const EXAMPLES = ["Find connections between the addresses on the canvas", "Add 0x… and show who it sent funds to", "Remove the node I just added"];
+/** Each one maps onto what a tool really does. (An earlier "show who it sent funds to" promised a
+ *  direction expand_node doesn't have: it adds counterparties from both directions.) */
+const EXAMPLES = ["Find connections between the addresses on the canvas", "Add 0x… and expand its top counterparties", "List the largest transfers into 0x… in the last 30 days", "Remove the node I just added"];
+
+const CHAIN_LIST = `${CHAINS.slice(0, -1).map((c) => CHAIN_NAMES[c]).join(", ")} and ${CHAIN_NAMES[CHAINS[CHAINS.length - 1]!]}`;
 
 const STEP_ICON = { applied: Check, read: Eye, failed: CircleAlert } as const;
 
@@ -235,6 +240,12 @@ export default function AgentChatPanel({ canvas, onClose, className }: { canvas:
         {entries.length === 0 && !notConfigured ? (
           <li className="space-y-2 text-muted">
             <p>Tell the agent what to trace in plain words. Everything it does happens on this canvas, and one Undo takes a reply's changes back.</p>
+            {/* What it won't do, said before the first message: a first-time user's natural questions
+                ("who owns this?", "will it dump?") are exactly the ones it has no real answer for. */}
+            <p>
+              It works only from real transfers on {CHAIN_LIST}. It can't tell you who owns an address, predict what a wallet will do, or help with anything outside tracing, and it
+              says so rather than guess. It can't see what you've selected, so name the address.
+            </p>
             <ul className="space-y-1">
               {EXAMPLES.map((ex) => (
                 <li key={ex} className="rounded-sm border border-dashed border-border px-2 py-1.5 text-[12px] text-faint">

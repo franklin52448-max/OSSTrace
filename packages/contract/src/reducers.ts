@@ -15,6 +15,11 @@ export type TraceDoc = Pick<Trace, "title" | "notes" | "shareable" | "nodes" | "
 
 export type ApplyResult<D> = { doc: D; applied: number; skipped: number };
 
+/** Upper bounds for a node's own `label` / `note` (TraceNode). The reducer clamps rather than
+ *  rejects, same as `set_title`'s 256, so every consumer (server, optimistic client) agrees. */
+export const NODE_LABEL_MAX = 120;
+export const NODE_NOTE_MAX = 2000;
+
 const removeById = <T extends { id: string }>(xs: T[], id: string) => xs.filter((x) => x.id !== id);
 
 /**
@@ -100,6 +105,22 @@ export function applyTraceOps(input: TraceDoc, ops: TraceOp[]): ApplyResult<Trac
         if (!hasNode(op.id)) skip();
         else {
           nodes = nodes.map((n): TraceNode => (n.id === op.id ? { ...n, color: op.color } : n));
+          ok();
+        }
+        break;
+      case "set_node_label":
+        if (!hasNode(op.id)) skip();
+        else {
+          const label = op.label === null ? null : op.label.slice(0, NODE_LABEL_MAX) || null;
+          nodes = nodes.map((n): TraceNode => (n.id === op.id ? { ...n, label } : n));
+          ok();
+        }
+        break;
+      case "set_node_note":
+        if (!hasNode(op.id)) skip();
+        else {
+          const note = op.note === null ? null : op.note.slice(0, NODE_NOTE_MAX) || null;
+          nodes = nodes.map((n): TraceNode => (n.id === op.id ? { ...n, note } : n));
           ok();
         }
         break;

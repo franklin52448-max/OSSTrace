@@ -1,9 +1,11 @@
 /** Builders for composite tracer edits: {doOps, undoOps}. Ids come only from @osstrace/contract helpers. */
 import {
-  addressNodeId,
   aggregateEdgeId,
+  edgesBetween,
+  effectiveAddress,
   entityNodeId,
-  normalizeAddress,
+  findNodeForAddress,
+  makeAddressNode,
   transferEdgeId,
   type AddressInfo,
   type AggregateSummary,
@@ -12,60 +14,27 @@ import {
   type NodeColor,
   type TraceDoc,
   type TraceEdge,
+  type TraceEdit,
   type TraceNode,
   type TraceOp,
-  type Transfer,
   type XY,
 } from "@osstrace/contract";
 import { clientTimestamp } from "../../optimistic/index.ts";
-import { pairKey } from "./edges.ts";
 
-export type Edit = { label: string; doOps: TraceOp[]; undoOps: TraceOp[] };
+// Moved to @osstrace/contract (tracerEdits.ts) so the server's Tracer agent runs the exact same
+// "Find connections" / add-transfers logic as this canvas instead of a second copy -- re-exported
+// here unchanged, so every existing import of these from ops.ts keeps working.
+export { addTransfersEdit, edgesBetween, effectiveAddress, findNodeForAddress, makeAddressNode, pairsToCompare, sharedCounterparties } from "@osstrace/contract";
+
+export type Edit = TraceEdit;
 
 const nowIso = () => new Date().toISOString();
-
-/** Solana token accounts collapse onto their owner wallet when the server provides it. */
-export const effectiveAddress = (info: AddressInfo): AddressInfo => info.ownerAddress ?? info;
-
-export function makeAddressNode(traceId: string, info: AddressInfo, position: XY): TraceNode {
-  const address = normalizeAddress(info.chain, info.address);
-  return {
-    id: addressNodeId(traceId, info.chain, address),
-    kind: "address",
-    currentPosition: roundXY(position),
-    createdAt: nowIso(),
-    address,
-    chain: info.chain,
-    displayAddress: { ...info, address },
-  };
-}
 
 export function makeEntityNode(traceId: string, entity: EntityRef, position: XY): TraceNode {
   return { id: entityNodeId(traceId, entity.id), kind: "entity", currentPosition: roundXY(position), createdAt: nowIso(), entityID: entity.id, displayEntity: entity };
 }
 
 const roundXY = (p: XY): XY => ({ x: Math.round(p.x), y: Math.round(p.y) });
-
-/** Existing node that already represents this address: its own address node, or a node of its entity. */
-export function findNodeForAddress(traceId: string, doc: Pick<TraceDoc, "nodes">, info: AddressInfo): TraceNode | undefined {
-  const eff = effectiveAddress(info);
-  let id: string;
-  try {
-    id = addressNodeId(traceId, eff.chain, eff.address);
-  } catch {
-    return undefined;
-  }
-  const own = doc.nodes.find((n) => n.id === id);
-  if (own) return own;
-  const entityId = eff.entity?.id;
-  if (entityId) return doc.nodes.find((n) => n.kind === "entity" && n.entityID === entityId);
-  return undefined;
-}
-
-export const edgesBetween = (doc: Pick<TraceDoc, "edges">, a: string, b: string) => {
-  const k = pairKey(a, b);
-  return doc.edges.filter((e) => pairKey(e.fromNodeID, e.toNodeID) === k);
-};
 
 const recreateEdge = (e: TraceEdge): TraceOp => ({ type: "create_edge", edge: e });
 const dropEdge = (e: TraceEdge): TraceOp => ({ type: "delete_edge", id: e.id });
@@ -114,52 +83,6 @@ export function addCounterpartyEdit(args: {
   undoOps.push(...existing.map(recreateEdge));
   if (createdNode) undoOps.push({ type: "delete_node", id: createdNode.id });
   return { label: createdNode ? "Add node and relationship" : "Add relationship", doOps, undoOps, nodeId };
-}
-
-/**
- * Add transfers as transfer edges, creating missing endpoint nodes at the given positions
- * (keyed by node id). Drops the pair's aggregate edge (mutual exclusivity).
- */
-export function addTransfersEdit(args: {
-  traceId: string;
-  doc: TraceDoc;
-  transfers: Transfer[];
-  positionFor: (info: AddressInfo, index: number) => XY;
-}): Edit {
-  const { traceId, doc, transfers, positionFor } = args;
-  const nodes = new Map(doc.nodes.map((n) => [n.id, n]));
-  const created: TraceNode[] = [];
-  const createdEdges: TraceEdge[] = [];
-  const removedAggs = new Map<string, TraceEdge>();
-  const resolve = (info: AddressInfo, i: number): string => {
-    const found = findNodeForAddress(traceId, { nodes: [...nodes.values()] }, info);
-    if (found) return found.id;
-    const n = makeAddressNode(traceId, effectiveAddress(info), positionFor(info, i));
-    nodes.set(n.id, n);
-    created.push(n);
-    return n.id;
-  };
-  transfers.forEach((t, i) => {
-    const id = transferEdgeId(traceId, t.chain, t.id);
-    if (doc.edges.some((e) => e.id === id) || createdEdges.some((e) => e.id === id)) return;
-    const from = resolve(t.from, i);
-    const to = resolve(t.to, i);
-    if (from === to) return; // self transfer collapses onto one node: nothing to draw
-    for (const e of edgesBetween(doc, from, to)) if (e.kind === "aggregate") removedAggs.set(e.id, e);
-    createdEdges.push({ id, kind: "transfer", fromNodeID: from, toNodeID: to, createdAt: nowIso(), chain: t.chain, transferID: t.id, displayTransfer: t });
-  });
-  const doOps: TraceOp[] = [
-    ...created.map((node): TraceOp => ({ type: "create_node", node })),
-    ...[...removedAggs.values()].map(dropEdge),
-    ...createdEdges.map(recreateEdge),
-  ];
-  const undoOps: TraceOp[] = [
-    ...createdEdges.map(dropEdge),
-    ...[...removedAggs.values()].map(recreateEdge),
-    ...created.map((n): TraceOp => ({ type: "delete_node", id: n.id })),
-  ];
-  const n = createdEdges.length;
-  return { label: n === 1 ? (created.length ? "Add node and transfer" : "Add transfer") : `Add ${n} transfers`, doOps, undoOps };
 }
 
 /** Replace every edge between a pair with one aggregate edge. */
@@ -260,20 +183,3 @@ export function sizeEdit(node: TraceNode, width: number | null, height: number |
 /** Is this transfer edge already on the canvas? (deterministic id) */
 export const hasTransfer = (traceId: string, doc: Pick<TraceDoc, "edges">, chain: Chain, transferId: string) =>
   doc.edges.some((e) => e.id === transferEdgeId(traceId, chain, transferId));
-
-/** Every unordered pair of address nodes on the same chain -- "Find connections" only compares
- * same-chain pairs (cross-chain bridge detection is a separate, not-yet-built feature). */
-export function pairsToCompare(nodes: readonly TraceNode[]): [TraceNode, TraceNode][] {
-  const addr = nodes.filter((n) => n.kind === "address" && n.chain && n.address);
-  const pairs: [TraceNode, TraceNode][] = [];
-  for (let i = 0; i < addr.length; i++) for (let j = i + 1; j < addr.length; j++) if (addr[i]!.chain === addr[j]!.chain) pairs.push([addr[i]!, addr[j]!]);
-  return pairs;
-}
-
-/** Keys two nodes' counterparty sets both contain, excluding the nodes themselves -- a lead (both
- * touched the same third party), never proof of a direct relationship between the two nodes. */
-export function sharedCounterparties(setA: ReadonlyMap<string, string>, setB: ReadonlyMap<string, string>, selfKeys: ReadonlySet<string>): { key: string; address: string }[] {
-  const out: { key: string; address: string }[] = [];
-  for (const [key, address] of setA) if (setB.has(key) && !selfKeys.has(key)) out.push({ key, address });
-  return out;
-}

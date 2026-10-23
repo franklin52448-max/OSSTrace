@@ -128,6 +128,11 @@ export type TraceNode = {
   displayEntity?: EntityRef;
   transactionChain?: Chain;
   transactionHash?: string;
+  /** Free-text name for this card, set on the trace itself (not a private label: it belongs to this
+   *  trace document only, travels with it into a share, and never touches the labels table). */
+  label?: string | null;
+  /** Free-text investigator note on this card, same scope as `label`. */
+  note?: string | null;
 };
 
 export type AggregateSummary = {
@@ -186,6 +191,8 @@ export type TraceOp =
   | { type: "update_node_position"; id: string; position: XY; clientTimestamp: string }
   | { type: "update_node_size"; id: string; width: number | null; height: number | null }
   | { type: "set_node_color"; id: string; color: NodeColor | null }
+  | { type: "set_node_label"; id: string; label: string | null }
+  | { type: "set_node_note"; id: string; note: string | null }
   | { type: "set_title"; title: string }
   | { type: "set_notes"; notes: string }
   | { type: "set_shareable"; shareable: boolean };

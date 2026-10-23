@@ -294,7 +294,10 @@ test("Funding: pasting an already-verified real tx reference records it, sums pe
   await openBounty({ title: "Funding paste-flow check", description: ALPHA.description, reward: "backer-funded" });
   const bountyId = ((await (await fetch(`${server.url}/api/bounties`)).json()) as { id: string; title: string }[]).find((b) => b.title === "Funding paste-flow check")!.id;
 
-  const payer = solanaKeypair("some-real-funder").address;
+  // The signed-in depositor's own wallet must be the tx's real sender -- the deposit route
+  // requires that match (anyone could otherwise attach someone else's public on-chain payment to
+  // a bounty of their own choosing).
+  const payer = solanaKeypair("funding-depositor").address;
   depositMocks.solTx = {
     transaction: { message: { accountKeys: [payer, SOL_WALLET], instructions: [] } },
     meta: { err: null, preBalances: [5_000_000_000, 1_000_000_000], postBalances: [3_500_000_000, 3_500_000_000] }, // +2.5 SOL to the configured wallet

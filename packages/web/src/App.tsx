@@ -139,8 +139,9 @@ function routeFromHash(): Route {
 export const addressHref = (chain: ChainId, address: string): string => `#address/${chain}/${encodeURIComponent(address)}`;
 const viewHref = (view: "graph" | "trace" | "pathfind", chain: ChainId, address: string): string => `#${view}/${chain}/${encodeURIComponent(address)}`;
 
+// "Explorer" isn't listed here: its own route (view "lookup") is the bare "#" home page itself --
+// a separate tab for it would just be a second link to wherever the wordmark/logo already goes.
 const NAV: readonly { id: View; label: string; href: string }[] = [
-  { id: "lookup", label: "Explorer", href: "#" },
   { id: "graph", label: "Visualizer", href: "#graph" },
   { id: "trace", label: "Tracer", href: "#trace" },
   { id: "alerts", label: "Alerts", href: "#alerts" },
@@ -196,24 +197,24 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-ground text-ink">
-      {/* Top bar: wordmark, views, global address search, account. Pinned to the original look
-          while on the home route too (see HOME_PINNED_STYLE) -- it's the one page asked to stay
-          exactly as it was, header included, not just the content below it. Every other route
-          sits on a fixed dark "rail" bar instead (see RAIL_PINNED_STYLE), independent of the
-          site's live light/dark setting -- the theme toggle, customize and account controls are
-          untouched, just recoloured by the pin like everything else in the bar. */}
+      {/* Top bar: wordmark, views, global address search, account. The same fixed dark "rail" bar
+          on every route including home (see RAIL_PINNED_STYLE) -- independent of the site's live
+          light/dark setting, so there's no header color/height jump navigating in from home. Only
+          the content below the header still pins to its own look on home (see HOME_PINNED_STYLE on
+          Home() itself) -- just the bar itself is unified. The theme toggle, customize and account
+          controls are untouched, just recoloured by the pin like everything else in the bar. */}
       <header
         ref={headerRef}
-        className={cx("sticky top-0 z-30 border-b", home ? "border-line bg-ground/85 backdrop-blur-md" : "border-[var(--trace-rail-border)] bg-[var(--trace-rail)]")}
-        style={home ? HOME_PINNED_STYLE : RAIL_PINNED_STYLE}
+        className="sticky top-0 z-30 border-b border-[var(--trace-rail-border)] bg-[var(--trace-rail)]"
+        style={RAIL_PINNED_STYLE}
       >
-        <div className={cx("mx-auto flex w-full max-w-[96rem] items-center gap-4 px-4 sm:px-6", home ? "h-16" : "h-14")}>
+        <div className="mx-auto flex h-14 w-full max-w-[96rem] items-center gap-4 px-4 sm:px-6">
           <a href="#" className="shrink-0 rounded-md transition-opacity duration-150 hover:opacity-85">
             <Wordmark />
           </a>
           <nav className="hidden items-center gap-0.5 lg:flex" aria-label="Views">
             {NAV.map((tab) => (
-              <NavLink key={tab.id} tab={tab} active={route.view === tab.id} rail={!home} />
+              <NavLink key={tab.id} tab={tab} active={route.view === tab.id} />
             ))}
           </nav>
           {/* Home has its own big search; everywhere else the bar carries it. */}
@@ -230,7 +231,7 @@ export default function App() {
         {/* Narrow screens: views scroll horizontally under the bar. */}
         <nav className="flex gap-0.5 overflow-x-auto px-3 pb-2 lg:hidden" aria-label="Views">
           {NAV.map((tab) => (
-            <NavLink key={tab.id} tab={tab} active={route.view === tab.id} rail={!home} />
+            <NavLink key={tab.id} tab={tab} active={route.view === tab.id} />
           ))}
         </nav>
       </header>
@@ -264,30 +265,16 @@ export default function App() {
   );
 }
 
-function NavLink({ tab, active, rail }: { tab: (typeof NAV)[number]; active: boolean; rail?: boolean }) {
-  if (rail) {
-    return (
-      <a
-        href={tab.href}
-        aria-current={active ? "page" : undefined}
-        className={cx(
-          "relative inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-md px-3 text-[13.5px] font-medium transition-colors duration-150",
-          active
-            ? "text-ink after:absolute after:inset-x-3 after:-bottom-[10px] after:h-0.5 after:rounded-full after:bg-[var(--color-helium)]"
-            : "text-ink-dim hover:bg-[var(--helium-elevated-7)] hover:text-ink",
-        )}
-      >
-        {tab.label}
-      </a>
-    );
-  }
+function NavLink({ tab, active }: { tab: (typeof NAV)[number]; active: boolean }) {
   return (
     <a
       href={tab.href}
       aria-current={active ? "page" : undefined}
       className={cx(
-        "button transparent small shrink-0",
-        active ? "!bg-[var(--helium-elevated-10)] text-ink" : "!text-ink-dim hover:!text-ink",
+        "relative inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-md px-3 text-[13.5px] font-medium transition-colors duration-150",
+        active
+          ? "text-ink after:absolute after:inset-x-3 after:-bottom-[10px] after:h-0.5 after:rounded-full after:bg-[var(--color-helium)]"
+          : "text-ink-dim hover:bg-[var(--helium-elevated-7)] hover:text-ink",
       )}
     >
       {tab.label}

@@ -69,3 +69,9 @@ cb0f1dee31f8333669062c83916b240c1c7db405:packages/web/src/App.tsx:generic-api-ke
 # A fake Alchemy pagination cursor (a random UUID-like string) used as test fixture data in
 # AlchemyProvider's tests -- a pageKey is an opaque pagination token, not a credential.
 0f5ad1b2346b7296da294012499c815ea49f8e1f:packages/server/tests/alchemy.test.ts:generic-api-key:131
+
+# Real, public token contract addresses used as test fixture data for the 5 new EVM chains:
+# Circle USDC on Arbitrum and OP Mainnet, WETH on Zora, WGHO on Lens Chain.
+143168b998972192e7ce401e1339c49ce26434a6:packages/server/tests/evmChains.test.ts:generic-api-key:48
+143168b998972192e7ce401e1339c49ce26434a6:packages/server/tests/evmChains.test.ts:generic-api-key:61
+143168b998972192e7ce401e1339c49ce26434a6:packages/server/tests/evmChains.test.ts:generic-api-key:87

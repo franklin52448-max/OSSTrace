@@ -2039,13 +2039,16 @@ export default function AeroShards({
         const dt = state.last ? Math.min((now - state.last) / 1000, 0.05) : 0;
         state.last = now;
         const reduced = prefersReduced();
-        state.clock += dt;
+        const moving = !s.paused && !reduced;
+        // state.clock itself drives the per-shard flutter/blink wobble further down (not just the
+        // travel/roll/twist/drift below) -- freezing only those and letting clock run unconditionally
+        // left a faint but real residual motion visible with the switch on.
+        if (moving) state.clock += dt;
         if (state.introAt < 0) state.introAt = state.clock;
         if (state.shards.length !== s.count) {
           state.shards = createShards(s.count, 1337);
           state.order = [];
         }
-        const moving = !s.paused && !reduced;
         if (moving) {
           for (let level = 0; level < LEVELS; level += 1) {
             state.travel[level] = (state.travel[level] + (dt * s.speed * 0.09) / paths[level].length) % 1;

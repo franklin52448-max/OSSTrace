@@ -38,7 +38,7 @@ test("ChainSelect: offers BNB Chain alongside Ethereum and Solana, with BNB's ma
   const { r, button, options, picked } = await openPicker();
   assert.deepEqual(
     options.map((o) => o.textContent),
-    ["Ethereum", "Solana", "BNB Chain"],
+    ["Ethereum", "Solana", "BNB Chain", "Robinhood Chain"],
   );
   const bnb = options[2]!;
   assert.equal(bnb.querySelector("path")?.getAttribute("fill"), "#F0B90B");

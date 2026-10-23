@@ -48,7 +48,7 @@ export default function HomeFeatures() {
         <FeatureRow
           name="Explorer"
           title="Look up any address"
-          lead="Paste an Ethereum, BNB Chain or Solana address to see what it holds in USD, who it deals with most and every transfer it made, on one page."
+          lead="Paste an Ethereum, BNB Chain, Robinhood Chain or Solana address to see what it holds in USD, who it deals with most and every transfer it made, on one page."
           points={[
             "Ethereum data comes from Blockscout and Solana from public RPC, with no API key needed. Nothing is estimated.",
             "Holdings are priced with DefiLlama. Tokens without a price, often airdropped spam, are left out of the total but still counted.",
@@ -325,14 +325,14 @@ type BrandMark = {
 
 /**
  * Chains nobody has built an adapter for yet, as a tight row of their marks in brand colours.
- * Marks: Bitcoin and Robinhood from Simple Icons (CC0-1.0); Tron and Monad from Web3 Icons (MIT, see
- * vendor/README.md).
+ * Marks: Bitcoin from Simple Icons (CC0-1.0); Tron and Monad from Web3 Icons (MIT, see
+ * vendor/README.md). (Robinhood Chain left this row when it became a supported chain; its mark now
+ * lives in ChainSelect.tsx.)
  */
 const WANTED_CHAINS: readonly BrandMark[] = [
   { name: "Bitcoin", disc: "#ffffff", scale: 1, paths: [{ fill: "#F7931A", d: "M23.638 14.904c-1.602 6.43-8.113 10.34-14.542 8.736C2.67 22.05-1.244 15.525.362 9.105 1.962 2.67 8.475-1.243 14.9.358c6.43 1.605 10.342 8.115 8.738 14.548v-.002zm-6.35-4.613c.24-1.59-.974-2.45-2.64-3.03l.54-2.153-1.315-.33-.525 2.107c-.345-.087-.705-.167-1.064-.25l.526-2.127-1.32-.33-.54 2.165c-.285-.067-.565-.132-.84-.2l-1.815-.45-.35 1.407s.975.225.955.236c.535.136.63.486.615.766l-1.477 5.92c-.075.166-.24.406-.614.314.015.02-.96-.24-.96-.24l-.66 1.51 1.71.426.93.242-.54 2.19 1.32.327.54-2.17c.36.1.705.19 1.05.273l-.51 2.154 1.32.33.545-2.19c2.24.427 3.93.257 4.64-1.774.57-1.637-.03-2.58-1.217-3.196.854-.193 1.5-.76 1.68-1.93h.01zm-3.01 4.22c-.404 1.64-3.157.75-4.05.53l.72-2.9c.896.23 3.757.67 3.33 2.37zm.41-4.24c-.37 1.49-2.662.735-3.405.55l.654-2.64c.744.18 3.137.524 2.75 2.084v.006z" }] },
   { name: "Tron", disc: "#FF060A", scale: 0.66, paths: [{ fill: "#ffffff", evenOdd: true, d: "M4.42 3.186a.57.57 0 0 1 .552-.17L16.876 5.93a.5.5 0 0 1 .197.092l2.422 1.767a.565.565 0 0 1 .133.773l-8.332 12.191a.563.563 0 0 1-.998-.13L4.306 3.753a.57.57 0 0 1 .114-.566M6.383 6.23l4.16 11.712.684-6.069zm5.958 5.838-.695 6.175 5.884-8.61zm5.72-3.93-3.793 1.78 2.542-2.691zm-2.396-1.343L6.41 4.531l5.426 6.318z" }] },
   { name: "Monad", disc: "#836EF9", scale: 0.68, paths: [{ fill: "#ffffff", d: "M12 3c-2.599 0-9 6.4-9 9s6.401 9 9 9 9-6.401 9-9-6.401-9-9-9m-1.402 14.146c-1.097-.298-4.043-5.453-3.744-6.549s5.453-4.042 6.549-3.743c1.095.298 4.042 5.453 3.743 6.549-.298 1.095-5.453 4.042-6.549 3.743" }] },
-  { name: "Robinhood Chain", disc: "#CCFF00", scale: 0.6, paths: [{ fill: "#000000", d: "M2.84 24h.53c.096 0 .192-.048.224-.128C7.591 13.696 11.94 8.656 14.67 5.638c.112-.128.064-.225-.096-.225h-4.88a.55.55 0 0 0-.45.225L5.746 9.972c-.514.642-.642 1.236-.642 2.086v4.43c-1.14 3.194-1.862 5.361-2.392 7.32-.032.125.016.192.129.192M20.447.646c-.754-.802-4.157-.834-5.73-.224a3 3 0 0 0-.786.465 41 41 0 0 0-3.323 3.178c-.112.113-.064.225.097.225h5.409c.497 0 .786.289.786.786v6.1c0 .16.128.208.225.064l3.258-4.254c.53-.69.69-.898.835-1.861.192-1.413.08-3.58-.77-4.479m-6.982 16.18 2.231-3.676a.7.7 0 0 0 .064-.29V6.73c0-.16-.112-.225-.224-.097-3.355 3.74-5.971 7.672-8.395 12.407-.06.12.016.225.16.177l5.009-1.54c.565-.174.882-.402 1.155-.852" }] },
 ];
 
 /**

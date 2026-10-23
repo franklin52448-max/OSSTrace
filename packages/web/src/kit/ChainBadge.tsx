@@ -3,7 +3,8 @@ import { cn } from "./cn.ts";
 
 /** A chain's short code. Usually its native symbol -- but Robinhood Chain's native unit is "ETH"
  *  too, and a badge reading "ETH" would make its rows indistinguishable from Ethereum's. */
-const SHORT: Record<Chain, string> = { ...NATIVE_SYMBOLS, robinhood: "RH" };
+export const CHAIN_SHORT: Record<Chain, string> = { ...NATIVE_SYMBOLS, robinhood: "RH" };
+const SHORT = CHAIN_SHORT;
 
 /** Text badge for a chain (no third-party logos). */
 export function ChainBadge({ chain, className, long }: { chain: Chain; className?: string; long?: boolean }) {

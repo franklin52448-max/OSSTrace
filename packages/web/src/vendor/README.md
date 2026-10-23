@@ -30,7 +30,9 @@ copied in, not a dependency:
 
 - Bitcoin and Robinhood: [Simple Icons](https://simpleicons.org) 16.35.0, **CC0-1.0** (the same
   set `src/ChainSelect.tsx` uses for Ethereum and Solana). `ChainSelect.tsx`'s BNB Chain mark is the
-  same Simple Icons Binance path the label row below already uses, filled in BNB's brand yellow.
+  same Simple Icons Binance path the label row below already uses, filled in BNB's brand yellow, and
+  its Robinhood Chain mark is this same Robinhood path on the same lime disc (Robinhood Chain moved
+  from the "Add a chain" row to the picker once it was supported).
 - Tron and Monad: [Web3 Icons](https://web3icons.io) (`@web3icons/core` 4.0.58, branded network
   icons) by 0xa3k5, **MIT**, which allows this as long as the credit is kept.
 

@@ -1,10 +1,11 @@
-import { NATIVE_SYMBOLS, type AlertRule, type AlertTarget, type Chain, type Entity } from "@osstrace/contract";
+import type { AlertRule, AlertTarget, Chain, Entity } from "@osstrace/contract";
 import { Building2 } from "lucide-react";
 import { useAddressInfo } from "../kit/address.ts";
 import { cn } from "../kit/cn.ts";
 import { Chip, type ChipTone } from "../kit/Chip.tsx";
 import { addressDisplayName, formatUsd, shortAddress } from "../kit/format.ts";
 import { ChainIcon } from "../ChainSelect.tsx";
+import { CHAIN_SHORT } from "../kit/ChainBadge.tsx";
 
 export const DIRECTION_LABEL: Record<AlertRule["direction"], string> = { in: "Incoming", out: "Outgoing", both: "Both directions" };
 
@@ -72,7 +73,8 @@ export function ruleChipSpecs(
   const out: ChipSpec[] = [];
   for (const t of rule.targets) {
     if (t.type === "entity") out.push({ id: `e:${t.entityId}`, k: "Entity", value: entities?.find((e) => e.id === t.entityId)?.name ?? "deleted", tone: "neutral", kind: "target", target: t });
-    else out.push({ id: `a:${t.chain}:${t.address}`, k: NATIVE_SYMBOLS[t.chain], value: shortAddress(t.address, 6, 4), tone: "neutral", kind: "target", target: t });
+    // `k` is a chain code, not an amount's unit: Robinhood Chain's native "ETH" would read as Ethereum.
+    else out.push({ id: `a:${t.chain}:${t.address}`, k: CHAIN_SHORT[t.chain], value: shortAddress(t.address, 6, 4), tone: "neutral", kind: "target", target: t });
   }
   if (rule.direction !== "both") out.push({ id: "dir", k: rule.direction === "in" ? "Inflow" : "Outflow", tone: rule.direction, kind: "direction" });
   const min = typeof rule.minUsd === "number" ? rule.minUsd : rule.minUsd == null || rule.minUsd.trim() === "" ? null : Number(rule.minUsd.replace(/,/g, ""));

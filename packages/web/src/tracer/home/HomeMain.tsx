@@ -46,7 +46,7 @@ export function HomeMain(p: {
           <SearchResults q={q} onPick={p.onPick} grouped />
         </div>
       ) : (
-        <p className="mt-2 text-xs text-faint">Paste an Ethereum, BNB Chain or Solana address, or type the name of one of your labels or entities.</p>
+        <p className="mt-2 text-xs text-faint">Paste an Ethereum, BNB Chain, Robinhood Chain or Solana address, or type the name of one of your labels or entities.</p>
       )}
       {p.busy ? <p className="mt-2 text-xs text-muted" role="status">{p.busyText}</p> : null}
 

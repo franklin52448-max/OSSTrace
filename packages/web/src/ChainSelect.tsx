@@ -11,6 +11,7 @@ export const CHAIN_OPTIONS: readonly { value: Chain; label: string }[] = [
   { value: "ethereum", label: CHAIN_NAMES.ethereum },
   { value: "solana", label: CHAIN_NAMES.solana },
   { value: "bnb", label: CHAIN_NAMES.bnb },
+  { value: "robinhood", label: CHAIN_NAMES.robinhood },
 ];
 
 /** The chains the older standalone feature services (pathfinder, cases...) were built for. Their

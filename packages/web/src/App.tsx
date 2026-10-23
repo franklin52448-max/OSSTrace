@@ -262,7 +262,8 @@ function GlobalSearch({ initial, small }: { initial: Route["target"]; small?: bo
     const trimmed = address.trim();
     if (!trimmed) return;
     // Guess the chain from the address shape so pasting "just works", but a 0x address with BNB Chain
-    // picked stays on BNB: the shape alone can't tell Ethereum from BNB, only the picker can.
+    // or Robinhood Chain picked stays there: the shape alone can't tell EVM chains apart, only the
+    // picker can.
     const target: Chain = chainForAddress(trimmed, chain) ?? chain;
     setChain(target);
     window.location.hash = addressHref(target, trimmed);
@@ -276,7 +277,7 @@ function GlobalSearch({ initial, small }: { initial: Route["target"]; small?: bo
         small={small}
         value={address}
         onChange={(e) => setAddress(e.target.value)}
-        placeholder={chain === "solana" ? "Search Solana address" : chain === "bnb" ? "Search BNB Chain address (0x…)" : "Search address (0x…)"}
+        placeholder={chain === "solana" ? "Search Solana address" : chain === "ethereum" ? "Search address (0x…)" : `Search ${CHAIN_NAMES[chain]} address (0x…)`}
         className="hash"
         spellCheck={false}
       />
@@ -341,7 +342,7 @@ function Home() {
             On-chain intelligence, in the open.
           </Text>
           <Text tone="secondary" center className="mx-auto mt-4 max-w-xl [text-shadow:0_1px_12px_var(--color-ground),0_0_4px_var(--color-ground)]">
-            Look up any Ethereum, BNB Chain or Solana address — real balances, real transfers, and labels that actually cite where they
+            Look up any Ethereum, BNB Chain, Robinhood Chain or Solana address — real balances, real transfers, and labels that actually cite where they
             came from. Nothing guessed, nothing dressed up as certain when it isn't. More chains coming soon.
           </Text>
           <div className="mx-auto mt-8 w-full rounded-[20px] border border-line bg-panel/80 p-3 text-left shadow-card backdrop-blur-md">

@@ -1,4 +1,5 @@
-import type { Chain, SyncStatus, VisualizerState } from "@osstrace/contract";
+import { CHAIN_NAMES, type SyncStatus, type VisualizerState } from "@osstrace/contract";
+import { CHAIN_OPTIONS } from "../ChainSelect.tsx";
 import { Ban, ChevronDown, GitBranch, Save, Share2, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button, IconButton } from "../kit/Button.tsx";
@@ -160,9 +161,11 @@ export function ViewPanel(p: ViewPanelProps) {
                   </div>
                 )}
               </FilterChip>
-              <FilterChip label="Chain" value={f.chains?.length ? f.chains.join(", ") : undefined} active={!!f.chains?.length}>
+              <FilterChip label="Chain" value={f.chains?.length ? f.chains.map((c) => CHAIN_NAMES[c]).join(", ") : undefined} active={!!f.chains?.length}>
                 <div className="flex flex-col gap-1">
-                  {(["ethereum", "solana"] as Chain[]).map((c) => {
+                  {/* Every chain the picker offers, not a hard-coded two: a BNB or Robinhood Chain row
+                      could otherwise be in the graph with no way to filter to (or out) its chain. */}
+                  {CHAIN_OPTIONS.map(({ value: c }) => {
                     const on = f.chains?.includes(c) ?? false;
                     return (
                       <label key={c} className="flex cursor-pointer items-center gap-2 text-[13px]">
@@ -173,7 +176,7 @@ export function ViewPanel(p: ViewPanelProps) {
                             else s.add(c);
                             p.onFilter({ chains: s.size ? [...s] : null });
                           }} />
-                        <span className="capitalize">{c}</span>
+                        <span>{CHAIN_NAMES[c]}</span>
                       </label>
                     );
                   })}

@@ -52,8 +52,10 @@ export function VizInspector({ rows, isBase, selected, onSelect, onClose }: { ro
 
 function Details({ t, isBase, onClose }: { t: Transfer; isBase: (a: AddressInfo) => boolean; onClose: () => void }) {
   const dir = transferDirection(t, isBase);
-  // Ethereum/Solana keep the explorers this view has always linked; BNB uses BscScan (explorers.ts).
-  const explorer = t.chain === "ethereum" ? `https://eth.blockscout.com/tx/${t.txHash}` : t.chain === "bnb" ? explorerTxUrl("bnb", t.txHash) : `https://explorer.solana.com/tx/${t.txHash}`;
+  // Ethereum/Solana keep the explorers this view has always linked; every other chain uses its own
+  // (explorers.ts) -- never a fall-through to Solana's, which a third ternary arm would have been.
+  const explorer =
+    t.chain === "ethereum" ? `https://eth.blockscout.com/tx/${t.txHash}` : t.chain === "solana" ? `https://explorer.solana.com/tx/${t.txHash}` : explorerTxUrl(t.chain, t.txHash);
   return (
     <section aria-label="Transfer details" className="kit-overlay flex-[2_1_0] overflow-auto">
       <header className="flex h-10 items-center gap-2 border-b border-border bg-surface-2 px-3">

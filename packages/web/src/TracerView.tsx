@@ -4,6 +4,7 @@ import { Checkbox } from "./prism/components.tsx";
 import { ChainSelect, LEGACY_SERVICE_CHAINS } from "./ChainSelect.tsx";
 import { Loading, Notice, PageHeader } from "./ui.tsx";
 import { formatTimestamp } from "./timeDisplay.ts";
+import { explorerTxUrl } from "./explorers.ts";
 
 const TRACER_URL = import.meta.env["VITE_TRACER_URL"] ?? "http://localhost:5303";
 const ADR_URL = "https://github.com/OpenTraceIntelligence/OSSTrace/blob/main/docs/adr/";
@@ -141,8 +142,9 @@ const DEAD_END_TEXT: Record<BridgeDeadEnd["reason"], string> = {
   "counterparty-address-unresolved": "the other side's address couldn't be resolved",
 };
 
+/** Explorer link for a transaction on its own chain (Solscan for Solana, Etherscan for Ethereum, etc.). */
 function txUrl(chain: ChainId, hash: string): string {
-  return chain === "ethereum" ? `https://etherscan.io/tx/${hash}` : `https://solscan.io/tx/${hash}`;
+  return explorerTxUrl(chain, hash);
 }
 
 function edgeAmountText(edge: TraceEdge): string {

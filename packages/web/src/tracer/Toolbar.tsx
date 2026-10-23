@@ -1,4 +1,4 @@
-import { Eye, GripVertical, Group, Maximize2, Minus, Plus, Redo2, Share2, Trash2, Undo2, Ungroup } from "lucide-react";
+import { Eye, GripVertical, Group, Link2, Maximize2, Minus, Plus, Redo2, Share2, Trash2, Undo2, Ungroup } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, IconButton } from "../kit/Button.tsx";
 import { Switch } from "../kit/Switch.tsx";
@@ -109,6 +109,11 @@ export function Toolbar(props: {
   onDelete: () => void;
   onAdd: () => void;
   group?: { mode: "group" | "ungroup"; disabledReason: string | null; onClick: () => void } | null;
+  onFindConnections: () => void;
+  finding: boolean;
+  indirectOn: boolean;
+  onIndirectOn: (v: boolean) => void;
+  indirectLocked: boolean;
   className?: string;
 }) {
   const p = props;
@@ -168,6 +173,17 @@ export function Toolbar(props: {
           <IconButton size="sm" label={`Undo${p.undoLabel ? `: ${p.undoLabel}` : ""} (${MOD}Z)`} disabled={!p.canUndo} onClick={p.onUndo}><Undo2 aria-hidden className="size-3.5" /></IconButton>
           <IconButton size="sm" label={`Redo${p.redoLabel ? `: ${p.redoLabel}` : ""} (${MOD}⇧Z)`} disabled={!p.canRedo} onClick={p.onRedo}><Redo2 aria-hidden className="size-3.5" /></IconButton>
           <IconButton size="sm" label="Remove selected (⌫)" disabled={!p.canDelete} onClick={p.onDelete} className={p.canDelete ? "text-danger hover:text-danger" : undefined}><Trash2 aria-hidden className="size-3.5" /></IconButton>
+          <Sep />
+          <Button variant="ghost" size="sm" disabled={p.finding} icon={<Link2 aria-hidden className="size-3.5" />} onClick={p.onFindConnections}>
+            {p.finding ? "Finding…" : "Find connections"}
+          </Button>
+          <span
+            className="flex items-center gap-1.5 pl-1.5 pr-1"
+            title={p.indirectLocked ? "Connect a wallet to search for indirect links (shared counterparties)" : "Also flag nodes that share a counterparty, even if they never transacted directly"}
+          >
+            <span className={cn("text-xs", p.indirectLocked ? "text-faint" : "text-muted")}>Indirect</span>
+            <Switch checked={p.indirectOn && !p.indirectLocked} disabled={p.indirectLocked} onCheckedChange={p.onIndirectOn} label="Also search for indirect (shared-counterparty) links" />
+          </span>
           <Sep />
           <Button variant="primary" size="sm" className="ml-0.5" icon={<Plus aria-hidden className="size-3.5" />} onClick={p.onAdd}>
             Add

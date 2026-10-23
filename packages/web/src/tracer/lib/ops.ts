@@ -260,3 +260,20 @@ export function sizeEdit(node: TraceNode, width: number | null, height: number |
 /** Is this transfer edge already on the canvas? (deterministic id) */
 export const hasTransfer = (traceId: string, doc: Pick<TraceDoc, "edges">, chain: Chain, transferId: string) =>
   doc.edges.some((e) => e.id === transferEdgeId(traceId, chain, transferId));
+
+/** Every unordered pair of address nodes on the same chain -- "Find connections" only compares
+ * same-chain pairs (cross-chain bridge detection is a separate, not-yet-built feature). */
+export function pairsToCompare(nodes: readonly TraceNode[]): [TraceNode, TraceNode][] {
+  const addr = nodes.filter((n) => n.kind === "address" && n.chain && n.address);
+  const pairs: [TraceNode, TraceNode][] = [];
+  for (let i = 0; i < addr.length; i++) for (let j = i + 1; j < addr.length; j++) if (addr[i]!.chain === addr[j]!.chain) pairs.push([addr[i]!, addr[j]!]);
+  return pairs;
+}
+
+/** Keys two nodes' counterparty sets both contain, excluding the nodes themselves -- a lead (both
+ * touched the same third party), never proof of a direct relationship between the two nodes. */
+export function sharedCounterparties(setA: ReadonlyMap<string, string>, setB: ReadonlyMap<string, string>, selfKeys: ReadonlySet<string>): { key: string; address: string }[] {
+  const out: { key: string; address: string }[] = [];
+  for (const [key, address] of setA) if (setB.has(key) && !selfKeys.has(key)) out.push({ key, address });
+  return out;
+}

@@ -2,6 +2,7 @@ import {
   addressNodeId,
   entityNodeId,
   type AggregateSummaryResponse,
+  type Counterparty,
   type Settings,
   type TraceEdge,
   type TraceNode,
@@ -16,8 +17,9 @@ import { explorerAddressUrl, explorerName } from "../explorers.ts";
 import { api } from "../kit/api.ts";
 import { Button } from "../kit/Button.tsx";
 import { ErrorNotice } from "../kit/QueryState.tsx";
+import { useServerSession } from "../serverSession.ts";
 import { useSafeToast } from "../panels/parts.tsx";
-import type { CounterpartyRow } from "../panels/model.ts";
+import { subjectKey, type CounterpartyRow } from "../panels/model.ts";
 import { refreshTraceEdge, useAggregateSummary } from "./api.ts";
 import { ContextMenu, type MenuItem } from "./canvas/ContextMenu.tsx";
 import { NODE_COLORS, nodeTitle } from "./canvas/NodeCard.tsx";
@@ -38,7 +40,9 @@ import {
   makeAddressNode,
   makeEntityNode,
   moveOps,
+  pairsToCompare,
   removeEdit,
+  sharedCounterparties,
   sizeEdit,
   summaryFromTransferEdges,
   type Edit,
@@ -216,6 +220,83 @@ export function TracerPage({ id, readOnly: readOnlyProp = false }: { id: string;
     [readOnly, store, toast, snap.lastError],
   );
   const onResizeEnd = useCallback((node: TraceNode, w: number) => void run(sizeEdit(node, w, null)), [run]);
+
+  // ---------- find connections ----------
+  const session = useServerSession();
+  const canIndirect = session.status === "signed-in";
+  const [indirectOn, setIndirectOn] = useState(false);
+  const [finding, setFinding] = useState(false);
+  const [indirectResults, setIndirectResults] = useState<{ a: TraceNode; b: TraceNode; shared: { key: string; address: string }[] }[] | null>(null);
+
+  const findConnections = useCallback(async () => {
+    if (!doc) return;
+    const addrNodes = doc.nodes.filter((n) => n.kind === "address");
+    if (addrNodes.length < 2) {
+      toast.info("Add at least 2 address nodes to search for connections.");
+      return;
+    }
+    const pairs = pairsToCompare(doc.nodes);
+    if (pairs.length === 0) {
+      toast.info("These nodes are on different chains, nothing to compare directly.");
+      return;
+    }
+
+    setFinding(true);
+    setIndirectResults(null);
+    try {
+      // Direct: a real transfer straight between the two nodes, found via the same counterparty-
+      // filtered /transfers query the Inspector already uses -- not a bulk history pull, one small
+      // query per pair, reusing whatever's already cached within its staleTime.
+      const found: Transfer[] = [];
+      for (const [a, b] of pairs) {
+        try {
+          const res = await api<{ transfers: Transfer[] }>("/transfers", {
+            query: { base: [subjectKey(a.chain!, a.address!)], counterparties: [subjectKey(b.chain!, b.address!)], flow: "all", sortDir: "desc", limit: 200 },
+          });
+          found.push(...res.transfers);
+        } catch {
+          // one pair failing (rate limit, a provider hiccup) shouldn't abort the whole search
+        }
+      }
+      let madeEdge = false;
+      if (found.length) {
+        const centroid = { x: addrNodes.reduce((s, n) => s + n.currentPosition.x, 0) / addrNodes.length, y: addrNodes.reduce((s, n) => s + n.currentPosition.y, 0) / addrNodes.length };
+        const edit = addTransfersEdit({ traceId: id, doc, transfers: found, positionFor: () => centroid });
+        madeEdge = await run(edit);
+      }
+
+      // Indirect: both nodes share a counterparty, even one not on the canvas -- a lead, not proof
+      // of a relationship, so it's never drawn as a real edge. Signed-in only (ADR 0024's pattern).
+      let indirectFound: NonNullable<typeof indirectResults> = [];
+      if (indirectOn && canIndirect) {
+        const cpSets = new Map<string, Map<string, string>>();
+        for (const n of addrNodes) {
+          const set = new Map<string, string>();
+          for (const flow of ["in", "out"] as const) {
+            try {
+              const res = await api<{ counterparties: Counterparty[] }>(`/address/${n.chain}/${encodeURIComponent(n.address!)}/counterparties`, { query: { flow, limit: 100 } });
+              for (const c of res.counterparties) set.set(subjectKey(c.address.chain, c.address.address), c.address.address);
+            } catch {
+              // ignore -- partial indirect results are still useful
+            }
+          }
+          cpSets.set(n.id, set);
+        }
+        for (const [a, b] of pairs) {
+          const setA = cpSets.get(a.id)!;
+          const setB = cpSets.get(b.id)!;
+          const selfKeys = new Set([subjectKey(a.chain!, a.address!), subjectKey(b.chain!, b.address!)]);
+          const shared = sharedCounterparties(setA, setB, selfKeys);
+          if (shared.length) indirectFound.push({ a, b, shared });
+        }
+        setIndirectResults(indirectFound);
+      }
+
+      if (!madeEdge && found.length === 0 && indirectFound.length === 0) toast.info("No connections found between these nodes.");
+    } finally {
+      setFinding(false);
+    }
+  }, [doc, id, run, toast, indirectOn, canIndirect]);
 
   const addTarget = (t: AddTarget) => {
     if (!doc) return;
@@ -557,7 +638,39 @@ export function TracerPage({ id, readOnly: readOnlyProp = false }: { id: string;
         onDelete={removeSelected}
         onAdd={() => setAddOpen(true)}
         group={groupCtl}
+        onFindConnections={() => void findConnections()}
+        finding={finding}
+        indirectOn={indirectOn}
+        onIndirectOn={setIndirectOn}
+        indirectLocked={!canIndirect}
       />
+      {indirectResults ? (
+        <div className="pointer-events-auto absolute bottom-16 left-1/2 z-20 w-[min(92vw,420px)] -translate-x-1/2 rounded-[14px] border border-line bg-panel/95 p-3 shadow-card backdrop-blur-md">
+          <div className="mb-1 flex items-center justify-between">
+            <p className="text-[13px] font-semibold">
+              {indirectResults.length ? `${indirectResults.length} possible indirect link${indirectResults.length === 1 ? "" : "s"}` : "No indirect links found"}
+            </p>
+            <button type="button" onClick={() => setIndirectResults(null)} className="text-xs text-faint hover:text-muted">
+              Dismiss
+            </button>
+          </div>
+          {indirectResults.length ? (
+            <ul className="max-h-48 space-y-2 overflow-y-auto text-[12px]">
+              {indirectResults.map((r, i) => (
+                <li key={i} className="rounded-sm border border-dashed border-line px-2 py-1.5">
+                  <span className="font-medium">{nodeTitle(r.a).title}</span> <span className="text-faint">⇢ shared ⇢</span> <span className="font-medium">{nodeTitle(r.b).title}</span>
+                  <p className="mt-0.5 text-faint">
+                    Not a direct transfer — both sent to or received from: {r.shared.slice(0, 3).map((s) => s.address).join(", ")}
+                    {r.shared.length > 3 ? ` (+${r.shared.length - 3} more)` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[12px] text-faint">These nodes share no common counterparty either.</p>
+          )}
+        </div>
+      ) : null}
 
       {menu ? <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.node)} onClose={() => setMenu(null)} label="Node actions" /> : null}
       {!readOnly ? <AddNodeDialog open={addOpen} onOpenChange={setAddOpen} onPick={addTarget} /> : null}

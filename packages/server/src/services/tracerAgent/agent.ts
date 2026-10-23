@@ -167,6 +167,8 @@ export async function runAgentTurn(args: {
   const deadline = Date.now() + TURN_BUDGET_MS;
   const messages: ChatMessage[] = [{ role: "system", content: systemPrompt(doc.kind, userId !== null) }, ...args.history, { role: "user", content: args.message }];
   const toolCalls: AgentToolCall[] = [];
+  /** Calls refused before they ran (bad arguments, unknown tool), by name + arguments. */
+  const refused = new Map<string, string>();
   let llmAnswered = false;
   for (let round = 0; round < MAX_ROUNDS; round++) {
     let out;
@@ -186,19 +188,44 @@ export async function runAgentTurn(args: {
     for (const call of out.toolCalls) {
       let result: Record<string, unknown>;
       let callArgs: Record<string, unknown> = {};
+      const sig = `${call.function.name}\u0000${canonicalArgs(call.function.arguments)}`;
+      const before = refused.get(sig);
       if (toolCalls.length >= MAX_TOOL_CALLS || Date.now() > deadline - 3000) {
         result = { ok: false, error: "Step limit for this message reached -- not run. Summarize what was done so far." };
+      } else if (before !== undefined) {
+        // Seen live: a model resent the exact call its arguments had just been refused for, six times,
+        // spending the user's whole message on one validation error. A refusal of the arguments
+        // themselves can't come out differently on a retry, so say so instead of repeating it.
+        result = { ok: false, error: `Not run: this exact call was already refused this message (${before}). Change the arguments, or tell the user what went wrong.` };
+        toolCalls.push({ tool: call.function.name.slice(0, 64), args: {}, result });
       } else {
         const r = await runTool({ ctx, userId, doc, deadline }, call.function.name, call.function.arguments);
         result = r.result;
         callArgs = r.args;
         toolCalls.push({ tool: call.function.name.slice(0, 64), args: callArgs, result });
+        const err = (result as { ok?: boolean; error?: unknown }).error;
+        if (result.ok === false && typeof err === "string" && REFUSED_BEFORE_RUNNING.test(err)) refused.set(sig, err);
       }
       // Every requested call gets an answer, or the provider rejects the next request.
       messages.push({ role: "tool", tool_call_id: call.id, content: clip(result) });
     }
   }
   return { reply: honestStop(toolCalls, `Stopped after ${MAX_ROUNDS} steps for this message.`), toolCalls, llmAnswered };
+}
+
+/** runTool's errors for a call refused before any tool code ran -- the same input always gets them. */
+const REFUSED_BEFORE_RUNNING = /^(Invalid arguments|Arguments were not valid JSON|Unknown tool)/;
+
+/** Tool arguments as one comparable string: key order and whitespace don't make a call different. */
+function canonicalArgs(raw: string): string {
+  try {
+    const v: unknown = JSON.parse(raw.trim() === "" ? "{}" : raw);
+    const sort = (x: unknown): unknown =>
+      Array.isArray(x) ? x.map(sort) : x && typeof x === "object" ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, sort((x as Record<string, unknown>)[k])])) : x;
+    return JSON.stringify(sort(v));
+  } catch {
+    return raw;
+  }
 }
 
 /** A reply written from what actually ran, when the model didn't get to write one. */

@@ -747,6 +747,23 @@ describe("tracer agent", () => {
     expect(res.toolCalls).toHaveLength(6);
   });
 
+  it("a call resent exactly as it was just refused isn't run again; the model is told it can't come out differently", async () => {
+    const bad = { name: "expand_node", args: { chain: "ethereum", address: ETH_A, hops: 9 } };
+    await setup([
+      { tools: [bad] },
+      { tools: [{ name: "expand_node", args: { hops: 9, address: ETH_A, chain: "ethereum" } }] }, // same call, keys reordered
+      { tools: [{ name: "expand_node", args: { chain: "ethereum", address: ETH_A, hops: 3 } }] },
+      { content: "expanded 3 hops (the most there is)" },
+    ]);
+    t.eth.add([ethTransfer(ETH_A, ETH_B, base + 1)]);
+    const anon = new Browser(t.app);
+    const res = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "expand A 9 hops", doc: emptyScratch() })).json() as TracerAgentChatResponse;
+    const errors = res.toolCalls.map((x) => (x.result as { error?: string }).error ?? "ok");
+    expect(errors[0]).toMatch(/^Invalid arguments -- hops/);
+    expect(errors[1]).toMatch(/^Not run: this exact call was already refused this message \(Invalid arguments -- hops/);
+    expect(errors[2]).toBe("ok"); // changed arguments run normally
+  });
+
   it("provider failure: 502 with no upstream text, and the anon message is refunded", async () => {
     await setup([{ status: 500, body: { error: { message: "internal upstream detail" } } }, { content: "recovered" }]);
     const anon = new Browser(t.app);

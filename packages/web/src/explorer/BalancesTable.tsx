@@ -1,7 +1,8 @@
 import type { Chain } from "@osstrace/contract";
 import { Coins } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useBalances } from "../kit/address.ts";
+import { cn } from "../kit/cn.ts";
 import { usePrefs } from "../settings/prefs.ts";
 import { formatTime, formatUsd, shortAddress } from "../kit/format.ts";
 import { EmptyState, ErrorNotice, SkeletonRows } from "../kit/QueryState.tsx";
@@ -9,16 +10,20 @@ import { Table, Td, Th, THead, Tr } from "../kit/Table.tsx";
 import { TokenAmount } from "../kit/TokenAmount.tsx";
 import { TokenLogo } from "../kit/TokenLogo.tsx";
 import { UsdValue } from "../kit/UsdValue.tsx";
+import { nextBalanceSort, sortBalances, type BalanceSortDir, type BalanceSortKey } from "./balanceSort.ts";
 
 export function BalancesTable({ chain, address }: { chain: Chain; address: string }) {
   const q = useBalances(chain, address);
   const { timezone } = usePrefs();
   const [showUnpriced, setShowUnpriced] = useState(false);
   const [view, setView] = useState<"portfolio" | "chain">("portfolio");
+  const [sort, setSort] = useState<{ key: BalanceSortKey; dir: BalanceSortDir }>({ key: "value", dir: "desc" });
+  const sortBy = (key: BalanceSortKey) => setSort((s) => nextBalanceSort(s, key));
   const all = q.data?.balances ?? [];
   const unpriced = all.filter((b) => b.usd == null).length;
   // Unpriced tokens (often airdropped spam) are hidden by default but counted and one click away; nothing is dropped silently.
-  const rows = showUnpriced ? all : all.filter((b) => b.usd != null);
+  const unsorted = showUnpriced ? all : all.filter((b) => b.usd != null);
+  const rows = useMemo(() => sortBalances(unsorted, sort.key, sort.dir), [unsorted, sort.key, sort.dir]);
   return (
     <section aria-labelledby="balances-h" className="kit-panel">
       <div className="kit-panel-head pl-0">
@@ -81,10 +86,26 @@ export function BalancesTable({ chain, address }: { chain: Chain; address: strin
           <Table label="Token balances">
             <THead>
               <tr>
-                <Th>Asset</Th>
-                <Th num>Holdings</Th>
-                <Th num>Price</Th>
-                <Th num>Value</Th>
+                {(
+                  [
+                    ["asset", "Asset", false],
+                    ["holdings", "Holdings", true],
+                    ["price", "Price", true],
+                    ["value", "Value", true],
+                  ] as const
+                ).map(([key, label, num]) => (
+                  <th
+                    key={key}
+                    scope="col"
+                    className={cn("kit-colhead h-8 whitespace-nowrap border-b border-border px-3 first:pl-4 last:pr-4", num ? "text-right" : "text-left")}
+                    aria-sort={sort.key === key ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+                  >
+                    <button type="button" className="hover:text-text" onClick={() => sortBy(key)}>
+                      {label}
+                      {sort.key === key ? (sort.dir === "asc" ? " ↑" : " ↓") : ""}
+                    </button>
+                  </th>
+                ))}
               </tr>
             </THead>
             <tbody>

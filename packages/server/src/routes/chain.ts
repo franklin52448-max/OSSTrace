@@ -109,7 +109,11 @@ export function registerChainRoutes(app: FastifyInstance, ctx: Ctx) {
     // A label hit carries the name, so it replaces an address hit for the same (chain, address).
     const labelled = new Set(labels.map((l) => `${l.chain}:${l.address}`));
     const deduped = hits.filter((h) => !(h.type === "address" && labelled.has(`${h.chain}:${h.address}`)));
-    return { hits: deduped.slice(0, limit) };
+    // `limit` caps the label/entity matches only. A pasted address's own hits (one per EVM chain, a
+    // fixed set that grows with every chain added -- soon more than the default limit) always come
+    // back whole, and never crowd that address's own label out of the answer.
+    const direct = deduped.filter((h) => h.type === "address");
+    return { hits: [...direct, ...deduped.filter((h) => h.type !== "address").slice(0, limit)] };
   });
 
   // Anon (signed-out) access: real data, no account needed (ADR 0024). Depth is capped for anon callers

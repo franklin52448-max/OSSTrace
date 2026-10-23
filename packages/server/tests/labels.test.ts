@@ -102,6 +102,10 @@ describe("labels, entities, tags", () => {
     ]);
     expect(dupHits.every((h: { address: string }) => h.address === ETH_A)).toBe(true);
     expect(dupHits.at(-1)).toMatchObject({ type: "label", chain: "ethereum", address: ETH_A, name: "Hot 1" });
+    // `limit` caps label/entity matches, never the pasted address's own per-chain hits -- so however
+    // many EVM chains there are (more than any limit), they can't push that address's label out.
+    const capped = (await a.get(`/api/search?q=${ETH_A.toLowerCase()}&limit=1`)).json().hits;
+    expect(capped.map((h: { type: string; chain: string }) => `${h.type}:${h.chain}`)).toEqual(dupHits.map((h: { type: string; chain: string }) => `${h.type}:${h.chain}`));
     // Unlabelled address: an address hit with info, one per EVM chain (Ethereum first).
     const addrHit = (await a.get(`/api/search?q=${ETH_B}`)).json().hits;
     expect(addrHit).toEqual([

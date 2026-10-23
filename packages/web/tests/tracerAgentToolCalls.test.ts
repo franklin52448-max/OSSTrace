@@ -89,6 +89,7 @@ test("describeToolCall words only what each real result says", () => {
   assert.equal(say("add_node", { ok: false, error: "That isn't a valid address." }), "failed: That isn't a valid address.");
   assert.equal(say("find_connections", { ok: true, connections: [], edgesAdded: 0, pairsFailed: 1 }), "read: No direct connections found, 1 pair couldn't be checked");
   assert.equal(say("find_connections", { ok: true, connections: [{}, {}], edgesAdded: 2, indirectLeads: [{}] }), "applied: Found 2 direct connections, drew 2 edges, 1 possible indirect link (shared counterparties, not drawn)");
+  assert.equal(say("find_connections", { ok: true, connections: [{}], edgesAdded: 1, transfersNotDrawnTraceFull: 2 }), "applied: Found 1 direct connection, drew 1 edge, 2 transfers not drawn (the trace is full)");
   assert.equal(say("expand_node", { ok: true, rootNodeId: a.id, nodesAdded: 3, edgesAdded: 3, note: "Stopped short: some nodes were not expanded" }), "applied: Expanded 0x1111…1111: 3 nodes, 3 edges added (partial: some nodes couldn't be expanded)");
   assert.equal(say("list_transfers", { ok: true, transfers: [{}, {}], sortedBy: "usd desc" }), "read: Looked at 2 transfers, sorted by usd desc");
   assert.equal(say("remove_node", { ok: true, removedNodeId: a.id, edgesRemoved: 2 }), "applied: Removed a node and 2 edges");

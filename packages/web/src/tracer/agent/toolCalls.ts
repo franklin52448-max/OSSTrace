@@ -140,6 +140,8 @@ export function describeToolCall(call: AgentToolCall, doc: TraceDoc | null): Age
       const leads = Array.isArray(r["indirectLeads"]) ? r["indirectLeads"].length : 0;
       const parts = [conns ? `Found ${plural(conns, "direct connection")}` : "No direct connections found"];
       if (edges) parts.push(`drew ${plural(edges, "edge")}`);
+      const undrawn = num(r["transfersNotDrawnTraceFull"]) ?? 0;
+      if (undrawn) parts.push(`${plural(undrawn, "transfer")} not drawn (the trace is full)`);
       if (leads) parts.push(`${plural(leads, "possible indirect link")} (shared counterparties, not drawn)`);
       const failed = (num(r["pairsFailed"]) ?? 0) + (num(r["pairsSkippedForTime"]) ?? 0);
       if (failed) parts.push(`${plural(failed, "pair")} couldn't be checked`);

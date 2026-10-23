@@ -101,14 +101,14 @@ export function registerChainRoutes(app: FastifyInstance, ctx: Ctx) {
     return { hits: deduped.slice(0, limit) };
   });
 
+  // Anon (signed-out) access: real data, no account needed (ADR 0024). Depth is capped for anon callers
+  // (see syncAll's `anon` option / ANON_TX_CAP) -- connecting a wallet removes the cap, not the gate.
   app.get<{ Params: { chain: string; address: string } }>("/api/address/:chain/:address", async (req) => {
-    const u = requireUser(req);
     const a = parseAddress(req.params.chain, req.params.address);
-    return LabelIndex.load(db, u.id, [a]).info(a.chain, a.address);
+    return LabelIndex.load(db, req.user?.id ?? null, [a]).info(a.chain, a.address);
   });
 
   app.get<{ Params: { chain: string; address: string } }>("/api/address/:chain/:address/balances", async (req) => {
-    const u = requireUser(req);
     const a = parseAddress(req.params.chain, req.params.address);
     const budget = budgetMs(20_000);
     const raw = await ctx.providers[a.chain].fetchBalances(a.address, budget);
@@ -141,7 +141,7 @@ export function registerChainRoutes(app: FastifyInstance, ctx: Ctx) {
     balances.sort((x, y) => (y.usd ?? -1) - (x.usd ?? -1) || (x.tokenId === "native" ? -1 : y.tokenId === "native" ? 1 : 0));
     const priced = balances.filter((b) => b.usd !== null);
     const res: BalancesResponse = {
-      address: LabelIndex.load(db, u.id, [a]).info(a.chain, a.address),
+      address: LabelIndex.load(db, req.user?.id ?? null, [a]).info(a.chain, a.address),
       balances: balances.slice(0, BALANCES_CAP),
       truncated: balances.length > BALANCES_CAP,
       totalTokenCount: balances.length,
@@ -152,18 +152,17 @@ export function registerChainRoutes(app: FastifyInstance, ctx: Ctx) {
   });
 
   app.get<{ Params: { chain: string; address: string } }>("/api/address/:chain/:address/counterparties", async (req) => {
-    const u = requireUser(req);
+    const userId = req.user?.id ?? null;
     const a = parseAddress(req.params.chain, req.params.address);
     const q = parse(cpQuery, req.query);
     const w = windowOf(q);
-    const sync = await syncAll(ctx, [a], w.from, { maxRounds: w.from === null ? 1 : undefined });
-    const counterparties = counterpartiesFor(ctx, u.id, a, { flow: q.flow, limit: q.limit, from: w.from, to: w.to, usdGte: q.usdGte });
+    const sync = await syncAll(ctx, [a], w.from, { maxRounds: w.from === null ? 1 : undefined, anon: !userId });
+    const counterparties = counterpartiesFor(ctx, userId, a, { flow: q.flow, limit: q.limit, from: w.from, to: w.to, usdGte: q.usdGte });
     return { counterparties, sync };
   });
 
   app.get("/api/transfers", async (req) => {
-    const u = requireUser(req);
     const q = parse(transfersQuery, req.query);
-    return queryTransfers(ctx, u.id, q);
+    return queryTransfers(ctx, req.user?.id ?? null, q);
   });
 }

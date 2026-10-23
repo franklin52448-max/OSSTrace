@@ -96,6 +96,10 @@ export type SyncStatus = {
   coveredFrom: string | null;
   provider: string;
   message?: string;
+  /** True when an anonymous (signed-out) caller hit the ~100k-transaction anon depth cap for one of the
+   * queried addresses -- sync stopped deepening there on purpose, not because the provider failed.
+   * Connecting a wallet removes the cap entirely. See ADR 0024. */
+  anonCapped?: boolean;
 };
 
 export type TransfersQuery = {

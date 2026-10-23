@@ -11,9 +11,11 @@ import type { Param } from "../db/index.ts";
 export type AddrKey = { chain: Chain; address: string };
 
 /** `chain:address`, bare address (chain detected), or `entity:<id>` (expands to the user's entity addresses). */
-export function parseAddrRef(ctx: Ctx, userId: string, ref: string, fallbackChain?: Chain): AddrKey[] {
+export function parseAddrRef(ctx: Ctx, userId: string | null, ref: string, fallbackChain?: Chain): AddrKey[] {
   const s = ref.trim();
   if (s.startsWith("entity:")) {
+    // Entities are private per-account data (ADR: anon mode) -- an anon caller has none, by construction.
+    if (!userId) throw badRequest("Sign in to use a saved entity");
     const id = s.slice(7);
     return ctx.db.all<AddrKey>("SELECT chain, address FROM labels WHERE user_id = ? AND entity_id = ?", userId, id);
   }
@@ -30,21 +32,51 @@ export function parseAddress(chainParam: string, address: string): AddrKey {
   return { chain: chainParam, address: normalizeAddress(chainParam, address) };
 }
 
-/** Sync several addresses with one shared budget; provider errors surface only if nothing can be served. */
+/** Anon (signed-out) depth cap, per address (ADR 0024): real access, just not unbounded -- keeps a
+ * busy exchange wallet from costing this server RPC budget on behalf of someone with no account at
+ * all. Connecting a wallet removes it entirely; it's enforced here (not just a frontend hint) so it
+ * can't be bypassed by calling the API directly. */
+export const ANON_TX_CAP = 100_000;
+
+function countStored(ctx: Ctx, a: AddrKey): number {
+  // FROM_IS/TO_IS each expand their "?" placeholder twice (addr OR owner) -- one bound param per "?".
+  const row = ctx.db.get<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM transfers t WHERE t.chain = ? AND (${FROM_IS("?")} OR ${TO_IS("?")})`,
+    a.chain,
+    a.address,
+    a.address,
+    a.address,
+    a.address,
+  )!;
+  return Number(row.n);
+}
+
+/** Sync several addresses with one shared budget; provider errors surface only if nothing can be served.
+ * `anon: true` enforces ANON_TX_CAP per address -- an address already at/over the cap is skipped
+ * entirely (no further provider calls spent on it) and the merged result is flagged `anonCapped`. */
 export async function syncAll(
   ctx: Ctx,
   addrs: AddrKey[],
   windowFrom: number | null,
-  opts: { maxRounds?: number | undefined; budgetMs?: number | undefined } = {},
+  opts: { maxRounds?: number | undefined; budgetMs?: number | undefined; anon?: boolean | undefined } = {},
 ): Promise<SyncStatus> {
   const uniq = [...new Map(addrs.map((a) => [`${a.chain}:${a.address}`, a])).values()].slice(0, 25);
   if (uniq.length === 0) return { state: "ready", coveredFrom: null, provider: "none" };
   const budget = budgetMs(opts.budgetMs ?? 12_000);
-  const results = await Promise.allSettled(uniq.map((a) => ctx.sync.ensureSynced(a.chain, a.address, { windowFrom, budget, maxRounds: opts.maxRounds })));
+  let anonCapped = false;
+  const toSync = opts.anon
+    ? uniq.filter((a) => {
+        const capped = countStored(ctx, a) >= ANON_TX_CAP;
+        if (capped) anonCapped = true;
+        return !capped;
+      })
+    : uniq;
+  if (toSync.length === 0) return { state: "partial", coveredFrom: null, provider: "none", anonCapped: true };
+  const results = await Promise.allSettled(toSync.map((a) => ctx.sync.ensureSynced(a.chain, a.address, { windowFrom, budget, maxRounds: opts.maxRounds })));
   const ok = results.filter((r): r is PromiseFulfilledResult<SyncStatus> => r.status === "fulfilled").map((r) => r.value);
   if (ok.length === 0) throw (results[0] as PromiseRejectedResult).reason;
   const failed = results.length - ok.length;
-  const merged = mergeSync(ok);
+  const merged = { ...mergeSync(ok), ...(anonCapped ? { anonCapped: true } : {}) };
   if (failed > 0) return { ...merged, state: "error", message: [merged.message, `${failed} address(es) could not be loaded from the provider`].filter(Boolean).join("; ") };
   return merged;
 }
@@ -105,7 +137,7 @@ export function windowOf(q: { timeLast?: string | undefined; timeGte?: string | 
   return { from, to: lte };
 }
 
-export async function queryTransfers(ctx: Ctx, userId: string, q: TransferQuery): Promise<TransfersResponse> {
+export async function queryTransfers(ctx: Ctx, userId: string | null, q: TransferQuery): Promise<TransfersResponse> {
   const base = q.base.flatMap((b) => parseAddrRef(ctx, userId, b, q.chain)).filter((a) => !q.chain || a.chain === q.chain);
   const cps = q.counterparties.flatMap((b) => parseAddrRef(ctx, userId, b, q.chain));
   if (q.base.length === 0) throw badRequest("At least one base address is required (token-wide queries are not supported in v1)");
@@ -116,7 +148,7 @@ export async function queryTransfers(ctx: Ctx, userId: string, q: TransferQuery)
   let windowFrom = from;
   if (windowFrom === null && cursor && q.sortKey === "time" && q.sortDir === "desc") windowFrom = cursor.v - 1;
   const sync = base.length
-    ? await syncAll(ctx, base, windowFrom, { maxRounds: windowFrom === null ? 0 : undefined })
+    ? await syncAll(ctx, base, windowFrom, { maxRounds: windowFrom === null ? 0 : undefined, anon: !userId })
     : { state: "ready" as const, coveredFrom: null, provider: "none" };
 
   // inSet appends its params as it renders, so predicates are built in SQL text order.
@@ -175,7 +207,7 @@ export async function queryTransfers(ctx: Ctx, userId: string, q: TransferQuery)
 /** Counterparties of one address from the cache, grouped by owner wallet (else address), per flow. */
 export function counterpartiesFor(
   ctx: Ctx,
-  userId: string,
+  userId: string | null,
   a: AddrKey,
   opts: { flow: "in" | "out" | "all"; limit: number; from: number | null; to: number | null; usdGte?: number | undefined },
 ): Counterparty[] {

@@ -37,17 +37,22 @@ type SolscanTransferResponse = {
   errors?: { message?: string } | string;
 };
 
-/** One Solscan transfer record -> this project's own RawTransfer shape. Ordinal disambiguates
- * same-signature rows (Solscan returns one row per transfer, not per transaction, so a tx moving
- * two tokens already appears as two rows -- id still needs a counter to stay unique per tx). */
-export function normalizeSolscanTransfer(t: SolscanTransfer, ordinal: number): RawTransfer | null {
+/** One Solscan transfer record -> this project's own RawTransfer shape. `id`'s suffix is derived
+ * from the row's own fields (token/amount/from/to), not a call-specific position -- Solscan
+ * returns one row per transfer, not per transaction (a tx moving two tokens already appears as
+ * two rows, so a plain trans_id isn't unique on its own), and this same row can legitimately be
+ * discovered by more than one caller (a page of general history, or a targeted from=/to= fetch for
+ * a specific counterparty) that must agree on the same id so the DB's own ON CONFLICT DO NOTHING
+ * dedupes it -- a position-based counter that varies by which call found it first does not. */
+export function normalizeSolscanTransfer(t: SolscanTransfer): RawTransfer | null {
   if (!t.trans_id || !t.from_address || !t.to_address || t.block_time == null) return null;
   const amountRaw = typeof t.amount === "number" ? Math.trunc(t.amount).toString() : t.amount;
   if (!/^\d+$/.test(amountRaw)) return null;
   const native = t.token_address === SOLSCAN_NATIVE_SOL_PLACEHOLDER;
+  const suffix = `${t.token_address}_${amountRaw}_${t.from_address}_${t.to_address}`;
   return {
     chain: "solana",
-    id: `${t.trans_id}_${ordinal}`,
+    id: `${t.trans_id}_${suffix}`,
     txHash: t.trans_id,
     blockNumber: t.block_id,
     blockTime: t.block_time,
@@ -94,10 +99,10 @@ export async function fetchSolscanTransfersBetween(http: HttpClient, apiKey: str
   const byId = new Map<string, SolscanTransfer>();
   for (const r of [...fromRows, ...toRows]) byId.set(`${r.trans_id}:${r.token_address}:${r.amount}:${r.from_address}:${r.to_address}`, r);
   const transfers: RawTransfer[] = [];
-  [...byId.values()].forEach((r, i) => {
-    const t = normalizeSolscanTransfer(r, i);
+  for (const r of byId.values()) {
+    const t = normalizeSolscanTransfer(r);
     if (t) transfers.push(t);
-  });
+  }
   return transfers;
 }
 
@@ -114,10 +119,10 @@ export async function fetchSolscanPage(http: HttpClient, apiKey: string, address
   }
   const rows = data.data ?? [];
   const transfers: RawTransfer[] = [];
-  rows.forEach((r, i) => {
-    const t = normalizeSolscanTransfer(r, i);
+  for (const r of rows) {
+    const t = normalizeSolscanTransfer(r);
     if (t) transfers.push(t);
-  });
+  }
   const times = rows.map((r) => r.block_time).filter((t): t is number => typeof t === "number");
   const exhausted = rows.length < PAGE_SIZE;
   return {

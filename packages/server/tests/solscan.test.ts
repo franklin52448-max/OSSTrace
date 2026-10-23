@@ -25,7 +25,6 @@ describe("normalizeSolscanTransfer (real shape, confirmed against the live API)"
         amount: 2832943659601,
         flow: "in",
       },
-      0,
     );
     expect(out).toMatchObject({
       chain: "solana",
@@ -54,23 +53,25 @@ describe("normalizeSolscanTransfer (real shape, confirmed against the live API)"
         amount: 54336,
         flow: "in",
       },
-      0,
     );
     expect(out).toMatchObject({ tokenId: "native", tokenSymbol: "SOL", tokenStandard: "native", priceCoin: "coingecko:solana" });
   });
 
   it("drops a row with no usable amount rather than guessing", () => {
-    const out = normalizeSolscanTransfer(
-      { trans_id: "x", block_id: 1, block_time: 1, activity_type: "ACTIVITY_SPL_TRANSFER", from_address: "a", to_address: "b", token_address: "m", token_decimals: 6, amount: "not-a-number", flow: "in" },
-      0,
-    );
+    const out = normalizeSolscanTransfer({ trans_id: "x", block_id: 1, block_time: 1, activity_type: "ACTIVITY_SPL_TRANSFER", from_address: "a", to_address: "b", token_address: "m", token_decimals: 6, amount: "not-a-number", flow: "in" });
     expect(out).toBeNull();
   });
 
-  it("ordinal disambiguates two rows from the same transaction", () => {
+  it("the id is derived from the row's own fields, not call position -- two different legs of the same tx get different, stable ids", () => {
+    const leg1 = { trans_id: "same-sig", block_id: 1, block_time: 1, activity_type: "ACTIVITY_SPL_TRANSFER", from_address: "a", to_address: "b", token_address: "m", token_decimals: 6, amount: 1, flow: "in" as const };
+    const leg2 = { ...leg1, token_address: "n" };
+    expect(normalizeSolscanTransfer(leg1)!.id).toBe("same-sig_m_1_a_b");
+    expect(normalizeSolscanTransfer(leg2)!.id).toBe("same-sig_n_1_a_b");
+  });
+
+  it("the same row normalized twice (e.g. discovered by two different callers) gets the identical id, so the DB's own dedupe catches it", () => {
     const row = { trans_id: "same-sig", block_id: 1, block_time: 1, activity_type: "ACTIVITY_SPL_TRANSFER", from_address: "a", to_address: "b", token_address: "m", token_decimals: 6, amount: 1, flow: "in" as const };
-    expect(normalizeSolscanTransfer(row, 0)!.id).toBe("same-sig_0");
-    expect(normalizeSolscanTransfer(row, 1)!.id).toBe("same-sig_1");
+    expect(normalizeSolscanTransfer(row)!.id).toBe(normalizeSolscanTransfer({ ...row })!.id);
   });
 });
 

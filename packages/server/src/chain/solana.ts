@@ -326,7 +326,12 @@ export class SolanaRpcProvider implements ChainProvider {
         try {
           results.set(
             c.s,
-            await this.rpc<SolTx | null>("getTransaction", [c.s, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0, commitment: "finalized" }], budget),
+            // Generously high on purpose, not the "obvious" 0: Solana's versioned-transaction
+            // scheme keeps adding new version numbers over time (a real version-1 transaction hit
+            // this live, rejected outright by maxSupportedTransactionVersion: 0) -- same lesson
+            // already learned once in packages/chains/solana/src/adapter.ts, just not carried over
+            // when this server's own Solana provider was written.
+            await this.rpc<SolTx | null>("getTransaction", [c.s, { encoding: "jsonParsed", maxSupportedTransactionVersion: 255, commitment: "finalized" }], budget),
           );
         } catch (e) {
           failure = e;

@@ -48,6 +48,10 @@ const MAX_DECIMALS = 255;
 const TOKEN_BALANCE_PAGES = 10;
 /** `alchemy_getTokenMetadata` requests per JSON-RPC batch. */
 const METADATA_BATCH = 100;
+/** ERC-20 `decimals()` selector, read on-chain when Alchemy has no decimals for a token. */
+const DECIMALS_SELECTOR = "0x313ce567";
+/** Most contracts whose `decimals()` is read per page (one JSON-RPC batch). */
+const DECIMALS_BATCH = 100;
 
 const cs = (h: string | undefined | null) => (h && /^0x[0-9a-fA-F]{40}$/.test(h) ? toChecksumAddress(h) : null);
 const hexInt = (h: string | null | undefined): bigint | null => (typeof h === "string" && /^0x[0-9a-fA-F]{1,64}$/.test(h) ? BigInt(h) : null);
@@ -161,6 +165,8 @@ export class AlchemyProvider implements ChainProvider {
   private verified: Promise<void> | null = null;
   /** Set once an enhanced call has succeeded, so `ping` stops spending compute units re-proving it. */
   private enhancedOk = false;
+  /** ERC-20 decimals read on-chain via `decimals()` (only successful reads are kept). */
+  private readonly decimalsCache = new Map<string, number>();
 
   constructor(opts: AlchemyOptions & { fetchImpl?: typeof fetch | undefined }) {
     this.chain = opts.chain;
@@ -293,12 +299,47 @@ export class AlchemyProvider implements ChainProvider {
     const oldestBlock = blocks.length ? Number(blocks.reduce((m, b) => (b < m ? b : m))) : cur?.b ?? 0;
     const pageKey = typeof result.pageKey === "string" && result.pageKey ? result.pageKey : null;
     const next: Cursor | null = pageKey ? { k: pageKey, b: oldestBlock } : null;
+    const transfers = normalizeAlchemyTransfers(items, this.native);
+    await this.fillMissingDecimals(transfers, budget);
     return {
-      transfers: normalizeAlchemyTransfers(items, this.native),
+      transfers,
       nextCursor: next ? JSON.stringify(next) : null,
       oldestTime: times.length ? Math.min(...times) : null,
       newestTime: times.length ? Math.max(...times) : null,
     };
+  }
+
+  /**
+   * Alchemy has no decimals for some real, priced ERC-20s (`rawContract.decimal: null`, and
+   * `alchemy_getTokenMetadata` answers `decimals: null` too -- seen on BNB Chain's MYX token, whose
+   * contract's own `decimals()` says 18). Stored like that, the amount would be the unscaled base-unit
+   * integer, and a USD price times it is off by 10^decimals (a ~$80 swap read as $1.27e19). This reads
+   * `decimals()` from the token contract itself, in one batched `eth_call`, for each such token on the
+   * page. Best effort: a token whose call reverts or fails keeps `tokenDecimals: null` (sync then
+   * leaves it unpriced rather than price an unscaled amount); a failed batch never fails the page.
+   */
+  private async fillMissingDecimals(transfers: RawTransfer[], budget: Budget) {
+    const missing = transfers.filter((t) => t.tokenStandard === "erc20" && t.tokenDecimals === null);
+    if (missing.length === 0) return;
+    const unknown = [...new Set(missing.map((t) => t.tokenId))].filter((c) => !this.decimalsCache.has(c)).slice(0, DECIMALS_BATCH);
+    if (unknown.length > 0) {
+      try {
+        const res = await this.post<RpcReply<string>[]>(
+          unknown.map((c, j) => ({ jsonrpc: "2.0", id: j, method: "eth_call", params: [{ to: c, data: DECIMALS_SELECTOR }, "latest"] })),
+          budget,
+          { timeoutMs: 10_000, maxRetries: 1 },
+        );
+        // Pair by id, never by position (LESSONS.md).
+        for (const r of Array.isArray(res) ? res : []) {
+          const c = typeof r?.id === "number" ? unknown[r.id] : undefined;
+          const d = c && !r.error ? decimalsOf(r.result) : null;
+          if (c && d !== null) this.decimalsCache.set(c, d);
+        }
+      } catch {
+        /* decimals stay unknown for this page; the rows are still real transfers */
+      }
+    }
+    for (const t of missing) t.tokenDecimals = this.decimalsCache.get(t.tokenId) ?? null;
   }
 
   /** Both directions' pages combined. A transfer the address sent to itself matches both queries;

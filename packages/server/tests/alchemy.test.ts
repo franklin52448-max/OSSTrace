@@ -224,6 +224,48 @@ describe("AlchemyProvider transfer history", () => {
     await expect(p.fetchBalances(A, budgetMs(5000))).rejects.toThrow(/chain id 1/);
     expect(dataCalls).toBe(0);
   });
+
+  // Real Alchemy answer (BNB, 2026-10-23): MYX comes back with `rawContract.decimal: null` (and
+  // alchemy_getTokenMetadata says `decimals: null` too), though the contract's own decimals() is 18.
+  // Stored unscaled, that one ~$80 swap priced at $1.27e19 in the Tracer's counterparty table.
+  const MYX = "0xD82544bf0dfe8385eF8FA34D67e6e4940CC63e16";
+  const NO_DECIMALS = "0x1de460f363AF910f51726DEf188F9004276Bf4bc";
+  const TX3 = "0x6b0b114648b379498f19e9640605660d1fb6a4a075c84bd1efc1a9aedaa46f84";
+  const myxRow = { ...erc20Row, blockNum: "0x7b5c7c8", uniqueId: `${TX3}:log:387`, hash: TX3, value: null, asset: "MYX", rawContract: { value: "0xb0260c1b8697a8738", address: MYX.toLowerCase(), decimal: null } };
+  const word = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
+
+  it("reads decimals() on-chain for a token Alchemy has no decimals for, once per token, paired by id", async () => {
+    const calls: Call[] = [];
+    const noDecRow = { ...myxRow, uniqueId: `${TX3}:log:388`, asset: "X", rawContract: { ...myxRow.rawContract, address: NO_DECIMALS.toLowerCase() } };
+    const p = make(
+      alchemy((body) => {
+        if (!Array.isArray(body)) return ok({ transfers: [myxRow, noDecRow, erc20Row] });
+        // Answer out of order: MYX's decimals() is 18; the other contract reverts.
+        return body
+          .map((b: any) => (b.params[0].to === MYX ? { jsonrpc: "2.0", id: b.id, result: word(18) } : { jsonrpc: "2.0", id: b.id, error: { code: 3, message: "execution reverted" } }))
+          .reverse();
+      }, calls),
+    );
+    const page = await p.fetchStreamPage(A, "incoming", null, budgetMs(5000));
+    const batch = calls.find((c) => Array.isArray(c)) as { method: string; params: any[] }[];
+    // Only the tokens missing decimals are asked about (WBNB already came with 0x12).
+    expect(batch.map((b) => [b.method, b.params[0].to, b.params[0].data])).toEqual([
+      ["eth_call", MYX, "0x313ce567"],
+      ["eth_call", toChecksumAddress(NO_DECIMALS), "0x313ce567"],
+    ]);
+    expect(page.transfers.map((t) => [t.tokenSymbol, t.tokenDecimals])).toEqual([["MYX", 18], ["X", null], ["WBNB", 18]]);
+    // A second page with MYX again reuses the read; only the still-unknown token is asked again.
+    await p.fetchStreamPage(A, "outgoing", null, budgetMs(5000));
+    const second = calls.filter((c) => Array.isArray(c))[1] as { params: any[] }[];
+    expect(second.map((b) => b.params[0].to)).toEqual([toChecksumAddress(NO_DECIMALS)]);
+  });
+
+  it("a failed decimals() batch leaves the token's decimals unknown but never fails the page", async () => {
+    const p = make(alchemy((body) => (Array.isArray(body) ? "<html>bad gateway</html>" : ok({ transfers: [myxRow] }))));
+    const page = await p.fetchStreamPage(A, "incoming", null, budgetMs(5000));
+    expect(page.transfers).toHaveLength(1);
+    expect(page.transfers[0]).toMatchObject({ tokenId: MYX, tokenDecimals: null, amountRaw: "203085534594432927544" });
+  });
 });
 
 describe("AlchemyProvider balances", () => {

@@ -304,7 +304,7 @@ export class SyncService {
   /** Fill USD for this address's unpriced transfers from historical prices. */
   async priceAddress(chain: Chain, address: string, budget?: Budget) {
     const rows = this.db.all<TransferRow>(
-      `SELECT t.chain, t.id, t.block_time, t.token_id, t.token_standard, t.amount, t.token_symbol FROM transfers t
+      `SELECT t.chain, t.id, t.block_time, t.token_id, t.token_standard, t.token_decimals, t.amount, t.token_symbol FROM transfers t
        WHERE t.chain = ? AND t.price_checked_at IS NULL AND (${FROM_IS("?")} OR ${TO_IS("?")})
        ORDER BY t.block_time DESC LIMIT 400`,
       chain,
@@ -314,7 +314,9 @@ export class SyncService {
       address,
     );
     if (rows.length === 0) return;
-    const pts = rows.map((r) => ({ r, coin: TransferStore.coinFor(r) }));
+    // Unknown decimals means `amount` is the unscaled base-unit integer: a price times it would be off
+    // by 10^decimals. Such a row is marked checked and left unpriced, same as the balances route does.
+    const pts = rows.map((r) => ({ r, coin: r.token_decimals === null ? null : TransferStore.coinFor(r) }));
     const prices = await this.prices.historical(
       pts.filter((p) => p.coin).map((p) => ({ coin: p.coin!, time: Number(p.r.block_time) })),
       budget,

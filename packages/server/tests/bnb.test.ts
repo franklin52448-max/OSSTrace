@@ -107,3 +107,42 @@ describe("BNB as a first-class chain through the API", () => {
     expect(() => t.ctx.db.run("INSERT INTO labels (id, user_id, chain, address, name, created_at, updated_at) SELECT 'x', user_id, 'bitcoin', 'a', 'n', 'now', 'now' FROM labels LIMIT 1")).toThrow(/CHECK/);
   });
 });
+
+// Found in live QA (BNB, 2026-10-23): Alchemy had no decimals for MYX, the row was stored with
+// token_decimals NULL and its unscaled base-unit amount, and the pricing pass multiplied that by
+// MYX's price -- an ~$80 swap stored as $1.27e19, topping every counterparty table it touched.
+describe("transfers with unknown token decimals are never priced", () => {
+  let t: TestApp;
+  beforeEach(async () => (t = await makeApp()));
+  afterEach(async () => t.close());
+  const MYX = "0xD82544bf0dfe8385eF8FA34D67e6e4940CC63e16";
+
+  it("sync leaves a decimals-less ERC-20 transfer unpriced (and checked); known-decimals rows still price", async () => {
+    const base = Math.floor(Date.now() / 1000) - 3600;
+    const unknown = ethTransfer(ETH_A, ETH_B, base, { chain: "bnb", tokenId: MYX, tokenSymbol: "MYX", tokenName: null, tokenDecimals: null, tokenStandard: "erc20", amountRaw: "203085534594432927544", priceCoin: `bsc:${MYX}` });
+    const known = ethTransfer(ETH_A, ETH_B, base + 1, { chain: "bnb", tokenId: MYX, tokenSymbol: "MYX", tokenName: null, tokenDecimals: 18, tokenStandard: "erc20", amountRaw: "203085534594432927544", priceCoin: `bsc:${MYX}` });
+    t.ctx.store.upsert([unknown, known]);
+    await t.ctx.sync.priceAddress("bnb", ETH_A);
+    const rows = t.ctx.db.all<{ id: string; usd: number | null; price_checked_at: string | null }>("SELECT id, usd, price_checked_at FROM transfers WHERE chain = 'bnb' ORDER BY block_time");
+    expect(rows[0]).toMatchObject({ id: unknown.id, usd: null });
+    expect(rows[0]!.price_checked_at).not.toBeNull();
+    expect(rows[1]!.usd).toBeCloseTo(203.085534594432927544 * 2000, 6); // test prices: 2000 USD per coin
+    const cps = (await t.app.inject(`/api/address/bnb/${ETH_A}/counterparties?flow=out`)).json();
+    expect(cps.counterparties[0].usd).toBeLessThan(1e6);
+  });
+
+  it("migration 014 clears usd already stored on such rows and leaves every other row's usd alone", async () => {
+    const base = Math.floor(Date.now() / 1000) - 3600;
+    const bad = ethTransfer(ETH_A, ETH_B, base, { chain: "bnb", tokenId: MYX, tokenSymbol: "MYX", tokenDecimals: null, tokenStandard: "erc20", amountRaw: "203085534594432927544", priceCoin: `bsc:${MYX}` });
+    const good = ethTransfer(ETH_A, ETH_B, base + 1, { chain: "bnb", tokenSymbol: "BNB", priceCoin: "coingecko:binancecoin" });
+    t.ctx.store.upsert([bad, good]);
+    // As the pre-fix pricing pass stored them.
+    t.ctx.db.run("UPDATE transfers SET usd = 1.2670168777392e19, price_source = 'defillama', price_checked_at = 'x' WHERE id = ?", bad.id);
+    t.ctx.db.run("UPDATE transfers SET usd = 2000, price_source = 'defillama', price_checked_at = 'x' WHERE id = ?", good.id);
+    t.ctx.db.run("DELETE FROM schema_migrations WHERE version = '014_unprice_unknown_decimals'");
+    expect(t.ctx.db.migrate()).toEqual(["014_unprice_unknown_decimals"]);
+    const usd = (id: string) => t.ctx.db.get<{ usd: number | null; price_source: string | null }>("SELECT usd, price_source FROM transfers WHERE id = ?", id);
+    expect(usd(bad.id)).toEqual({ usd: null, price_source: null });
+    expect(usd(good.id)).toEqual({ usd: 2000, price_source: "defillama" });
+  });
+});

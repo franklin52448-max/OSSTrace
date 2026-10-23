@@ -547,7 +547,7 @@ describe("tracer agent", () => {
     const r1 = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "expand A", doc: scratchWith(498) })).json() as TracerAgentChatResponse;
     // Root A and its bigger counterparty B fit (499, 500); C doesn't. Not an error: A and B are on the canvas.
     expect(r1.toolCalls[0]!.result).toMatchObject({ ok: true, nodesAdded: 1, edgesAdded: 1, notAddedTraceFull: 1 });
-    expect((r1.toolCalls[0]!.result as { note: string }).note).toMatch(/500-node limit/);
+    expect((r1.toolCalls[0]!.result as { note: string }).note).toMatch(/size limit \(500 nodes/);
     expect(r1.doc.nodes).toHaveLength(500);
     expect(r1.doc.nodes.some((n) => n.id === addressNodeId("scratch", "ethereum", ETH_B))).toBe(true);
 
@@ -556,6 +556,35 @@ describe("tracer agent", () => {
     expect((r2.toolCalls[0]!.result as { error: string }).error).toMatch(/room for 1 more node/);
     expect(r2.doc.nodes).toHaveLength(499); // refused as a whole: B wasn't left behind
     expect(r2.ops).toEqual([]);
+  });
+
+  it("the agent never grows a scratch canvas past the 1000 edges the server accepts back, so the next message still goes through", async () => {
+    const nodes = scratchWith(46).nodes;
+    const now = new Date().toISOString();
+    const edges: TraceEdge[] = [];
+    for (let i = 0; i < nodes.length && edges.length < 999; i++)
+      for (let j = i + 1; j < nodes.length && edges.length < 999; j++)
+        edges.push({ id: aggregateEdgeId("scratch", nodes[i]!.id, nodes[j]!.id), kind: "aggregate", fromNodeID: nodes[i]!.id, toNodeID: nodes[j]!.id, createdAt: now, aggregate: { cachedUSDIn: 0, cachedTransactionCountIn: 0, cachedUSDOut: 0, cachedTransactionCountOut: 0, cachedAt: now } });
+    await setup([
+      { tools: [{ name: "find_connections", args: { addresses: [`ethereum:${ETH_A}`, `ethereum:${ETH_B}`] } }] },
+      { content: "drew what fit" },
+      { tools: [{ name: "expand_node", args: { chain: "ethereum", address: ETH_A, hops: 1 } }] },
+      { content: "expanded what fit" },
+    ]);
+    t.eth.add([ethTransfer(ETH_A, ETH_B, base + 1), ethTransfer(ETH_A, ETH_B, base + 2), ethTransfer(ETH_B, ETH_A, base + 3), ethTransfer(ETH_A, ETH_C, base + 4)]);
+    const anon = new Browser(t.app);
+    const r1 = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "connect A and B", doc: { ...scratchWith(0), nodes, edges } })).json() as TracerAgentChatResponse;
+    expect(r1.toolCalls[0]!.result).toMatchObject({ ok: true, edgesAdded: 1, transfersNotDrawnTraceFull: 2, connections: [{ transfers: 3 }] });
+    expect((r1.toolCalls[0]!.result as { note: string }).note).toMatch(/1000-edge limit/);
+    expect(r1.doc.edges).toHaveLength(1000);
+
+    const r2 = await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "now expand A", doc: r1.doc });
+    expect(r2.statusCode, r2.body.slice(0, 200)).toBe(200); // not "doc.edges: Array must contain at most 1000 element(s)"
+    const res2 = r2.json() as TracerAgentChatResponse;
+    // C would need a new edge: not added, and said so. B already has its edge to A.
+    expect(res2.toolCalls[0]!.result).toMatchObject({ ok: true, nodesAdded: 0, edgesAdded: 0, notAddedTraceFull: 1 });
+    expect(res2.doc.edges).toHaveLength(1000);
+    expect(res2.doc.nodes.some((n) => n.id === addressNodeId("scratch", "ethereum", ETH_C))).toBe(false);
   });
 
   it("rename / annotate / remove act on this doc's real node ids only", async () => {

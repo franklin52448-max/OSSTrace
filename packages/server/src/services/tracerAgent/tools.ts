@@ -16,6 +16,7 @@ import {
   normalizeAddress,
   pairsToCompare,
   sharedCounterparties,
+  transferEdgeId,
   type AddressInfo,
   type Chain,
   type TraceDoc,
@@ -85,6 +86,9 @@ const MAX_NODES_PER_EXPAND = 50;
 /** find_connections compares at most this many nodes (45 pairs). */
 const MAX_CONNECT_NODES = 10;
 const MAX_DOC_NODES = 500; // anonTraceDoc's own bound
+/** anonTraceDoc's edge bound. A scratch canvas comes back with every message, so an agent edit that
+ *  takes it past this makes the browser's next message (and Share) a 400 -- never grow past it. */
+const MAX_DOC_EDGES = 1000;
 const MAX_LIST = 50;
 
 // ---------- small helpers ----------
@@ -308,7 +312,7 @@ const findConnections = defineTool({
     if (pairs.length === 0) return { ok: true, mode, nodesAdded: added, pairsCompared: 0, connections: [], note: "These nodes are on different chains -- only same-chain pairs are compared." };
 
     // Direct: the same counterparty-filtered transfer query the canvas runs, one pair at a time.
-    const found: Transfer[] = [];
+    const perPair: Transfer[][] = [];
     const connections: { a: string; b: string; transfers: number; usd: number }[] = [];
     let failedPairs = 0;
     let skippedForTime = 0;
@@ -327,20 +331,38 @@ const findConnections = defineTool({
           sortDir: "desc",
           limit: 200,
         });
-        found.push(...res.transfers);
+        perPair.push(res.transfers);
         if (res.transfers.length) connections.push({ a: a.id, b: b.id, transfers: res.transfers.length, usd: res.transfers.reduce((s, t) => s + (t.usd ?? 0), 0) });
       } catch {
         failedPairs++; // one pair's provider hiccup shouldn't abort the rest, same as the canvas
       }
     }
     let edgesAdded = 0;
-    if (found.length) {
+    let notDrawnTraceFull = 0;
+    if (perPair.some((ts) => ts.length)) {
       const d = env.doc.read();
-      const addr = d.nodes.filter((n) => n.kind === "address");
-      const centroid = { x: addr.reduce((s, n) => s + n.currentPosition.x, 0) / addr.length, y: addr.reduce((s, n) => s + n.currentPosition.y, 0) / addr.length };
-      const edit = addTransfersEdit({ traceId: env.doc.traceId, doc: d, transfers: found, positionFor: () => centroid });
-      edgesAdded = edit.doOps.filter((o) => o.type === "create_edge").length;
-      env.doc.commit(edit.doOps);
+      // Only transfers not drawn yet compete for the trace's remaining edge room, taken round-robin
+      // across pairs: if the limit cuts the batch short, every connection found still gets an edge.
+      const have = new Set(d.edges.map((e) => e.id));
+      const fresh = perPair.map((ts) =>
+        ts.filter((t) => {
+          const id = transferEdgeId(env.doc.traceId, t.chain, t.id);
+          if (have.has(id)) return false;
+          have.add(id);
+          return true;
+        }),
+      );
+      const queue: Transfer[] = [];
+      for (let i = 0; fresh.some((ts) => i < ts.length); i++) for (const ts of fresh) if (i < ts.length) queue.push(ts[i]!);
+      const take = queue.slice(0, Math.max(0, MAX_DOC_EDGES - d.edges.length));
+      notDrawnTraceFull = queue.length - take.length;
+      if (take.length) {
+        const addr = d.nodes.filter((n) => n.kind === "address");
+        const centroid = { x: addr.reduce((s, n) => s + n.currentPosition.x, 0) / addr.length, y: addr.reduce((s, n) => s + n.currentPosition.y, 0) / addr.length };
+        const edit = addTransfersEdit({ traceId: env.doc.traceId, doc: d, transfers: take, positionFor: () => centroid });
+        edgesAdded = edit.doOps.filter((o) => o.type === "create_edge").length;
+        env.doc.commit(edit.doOps);
+      }
     }
 
     // Indirect: shared counterparties (signed-in only) -- reported, never drawn.
@@ -372,9 +394,11 @@ const findConnections = defineTool({
       ...(skippedForTime ? { pairsSkippedForTime: skippedForTime } : {}),
       connections,
       edgesAdded,
+      ...(notDrawnTraceFull ? { transfersNotDrawnTraceFull: notDrawnTraceFull } : {}),
       ...(mode === "indirect" ? { indirectLeads: leads } : {}),
-      note:
-        connections.length === 0
+      note: notDrawnTraceFull
+        ? `${notDrawnTraceFull} of the transfers found were not drawn: the trace reached its ${MAX_DOC_EDGES}-edge limit. The connections list above is complete; the canvas shows only part of it.`
+        : connections.length === 0
           ? failedPairs || skippedForTime
             ? "No direct transfers found among the pairs that could be checked -- some pairs could not be checked, so this is not a proven negative."
             : "No direct transfers between any of these pairs in the history loaded so far."
@@ -452,10 +476,13 @@ const expandNode = defineTool({
             continue;
           }
           const ck = { chain: cp.info.chain, address: cp.info.address };
-          // A full trace stops new nodes, not the call: what was already added stays, and is reported
+          // A full trace stops new nodes and edges, not the call: what was already added stays, and is reported
           // as a partial expansion instead of an error claiming nothing happened.
           const d0 = env.doc.read();
-          if (d0.nodes.length >= MAX_DOC_NODES && !d0.nodes.some((x) => x.id === addressNodeId(env.doc.traceId, ck.chain, ck.address))) {
+          const cpId = addressNodeId(env.doc.traceId, ck.chain, ck.address);
+          const newNode = !d0.nodes.some((x) => x.id === cpId);
+          const newEdge = edgesBetween(d0, n.id, cpId).length === 0;
+          if ((newNode && d0.nodes.length >= MAX_DOC_NODES) || (newEdge && d0.edges.length >= MAX_DOC_EDGES)) {
             skippedTraceFull++;
             counterpartiesNotAdded++;
             continue;
@@ -488,7 +515,7 @@ const expandNode = defineTool({
       counterpartiesNotAdded,
       ...(skippedTraceFull ? { notAddedTraceFull: skippedTraceFull } : {}),
       note: skippedTraceFull
-        ? `Stopped short: the trace reached its ${MAX_DOC_NODES}-node limit, so ${skippedTraceFull} counterpart${skippedTraceFull === 1 ? "y was" : "ies were"} not added -- the picture is partial. Remove nodes to make room.`
+        ? `Stopped short: the trace reached its size limit (${MAX_DOC_NODES} nodes, ${MAX_DOC_EDGES} edges), so ${skippedTraceFull} counterpart${skippedTraceFull === 1 ? "y was" : "ies were"} not added -- the picture is partial. Remove nodes to make room.`
         : budgetExhausted || unavailable.length
           ? "Stopped short: some nodes were not expanded (lookup budget or provider errors) -- the picture is partial, not complete."
           : "Aggregate edges carry real totals from the transfer history loaded so far.",

@@ -5,8 +5,8 @@ import type { ReactNode } from "react";
 import { Wordmark } from "./Wordmark.tsx";
 
 const REPO_URL = "https://github.com/OpenTraceIntelligence/OSSTrace";
-/** The project's X (Twitter) account. Left empty until there is one; the footer just leaves it out. */
-const X_URL = "";
+/** The project's X (Twitter) account. */
+const X_URL = "https://x.com/OSSTrace";
 
 const PRODUCT_LINKS: readonly { label: string; href: string }[] = [
   { label: "Explorer", href: "#" },

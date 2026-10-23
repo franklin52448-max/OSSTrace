@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CHAIN_NAMES, NATIVE_SYMBOLS, type BountyDeposit, type BountyWallets, type Chain, type DepositChain } from "@osstrace/contract";
 import { serverApiCall } from "./serverSession.ts";
 import { Loading, Notice } from "./ui.tsx";
+import { assetDescription, assetLabel, fundingTotals } from "./bountyBoard.ts";
 import { ChainIcon, ChainSelect } from "./ChainSelect.tsx";
 import {
   connectEthereum,
@@ -21,11 +22,9 @@ import {
   sendEthereumToken,
   sendSolanaNative,
   sendSolanaToken,
-  sumDecimalAmounts,
   switchEvmNetwork,
 } from "./wallets.ts";
 
-type DepositAsset = BountyDeposit["asset"];
 type Deposit = BountyDeposit;
 type Wallets = BountyWallets;
 
@@ -65,17 +64,6 @@ function short(value: string, head = 6, tail = 4): string {
   return value.length > head + tail + 1 ? `${value.slice(0, head)}…${value.slice(-tail)}` : value;
 }
 
-/** Robinhood Chain's native unit is ETH too, so its label says which ETH: the totals chips sit side
- *  by side, and "1 ETH" next to "1 ETH" would read as one asset. */
-function assetLabel(chain: DepositChain, asset: DepositAsset): string {
-  if (asset !== "native") return short(asset.contract, 6, 4);
-  return chain === "robinhood" ? `${NATIVE_SYMBOL[chain]} (Robinhood Chain)` : NATIVE_SYMBOL[chain];
-}
-
-function assetKey(chain: DepositChain, asset: DepositAsset): string {
-  return `${chain}:${asset === "native" ? "native" : asset.contract}`;
-}
-
 export default function DepositPanel({ bountyId, signedIn }: { bountyId: string; signedIn: boolean }) {
   const [wallets, setWallets] = useState<Wallets | null>(null);
   const [deposits, setDeposits] = useState<Deposit[] | null>(null);
@@ -97,13 +85,8 @@ export default function DepositPanel({ bountyId, signedIn }: { bountyId: string;
 
   const configuredChains = wallets ? DEPOSIT_CHAINS.filter((c) => wallets[c]) : [];
 
-  const totals = new Map<string, { chain: DepositChain; asset: DepositAsset; amounts: string[] }>();
-  for (const d of deposits ?? []) {
-    const key = assetKey(d.chain, d.asset);
-    const entry = totals.get(key) ?? { chain: d.chain, asset: d.asset, amounts: [] };
-    entry.amounts.push(d.amount);
-    totals.set(key, entry);
-  }
+  // Summed per asset, never across assets (ADR 0020) -- the same totals the board's list shows.
+  const totals = fundingTotals(deposits ?? []);
 
   return (
     <section className="card overflow-hidden">
@@ -138,9 +121,9 @@ export default function DepositPanel({ bountyId, signedIn }: { bountyId: string;
         ) : (
           <>
             <div className="flex flex-wrap gap-2">
-              {[...totals.values()].map((t) => (
-                <span key={assetKey(t.chain, t.asset)} className="chip border border-signal/35 bg-signal/10 text-signal">
-                  <span className="num">{sumDecimalAmounts(t.amounts)}</span> {assetLabel(t.chain, t.asset)}
+              {totals.map((t) => (
+                <span key={t.key} title={`Verified on-chain: ${assetDescription(t.chain, t.asset)}`} className="chip border border-signal/35 bg-signal/10 text-signal">
+                  <span className="num">{t.total}</span> {assetLabel(t.chain, t.asset)}
                 </span>
               ))}
             </div>

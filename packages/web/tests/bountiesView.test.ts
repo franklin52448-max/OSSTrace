@@ -135,6 +135,8 @@ async function openRow(title: string): Promise<void> {
 async function backToBoard(): Promise<void> {
   await click(getButton("← All bounties"));
   await waitFor(() => !text().includes("← All bounties"), "the board");
+  // Going back re-fetches the list (so new deposits show in its funding totals): wait for it to land.
+  await waitFor(() => [...document.querySelectorAll("button")].some((b) => text(b).trim() === "Refresh"), "the board's refresh to finish");
 }
 
 async function openBounty(bounty: typeof ALPHA): Promise<void> {
@@ -144,6 +146,27 @@ async function openBounty(bounty: typeof ALPHA): Promise<void> {
   await fill(getByPlaceholder("Your reward offer"), bounty.reward);
   await click(getButton("Open bounty"));
   await waitFor(() => row(bounty.title), `"${bounty.title}" on the board`);
+}
+
+/** Picks a status in the board's "Filter by status" control (its buttons read e.g. "Claimed 1"). */
+async function showStatus(label: "Open" | "Claimed" | "Cancelled" | "All"): Promise<void> {
+  const group = await waitFor(() => document.querySelector('[role="group"][aria-label="Filter by status"]'), "the status filter");
+  const button = [...group.querySelectorAll("button")].find((b) => text(b).trim().startsWith(`${label} `));
+  if (!button) throw new Error(`no "${label}" status filter`);
+  await click(button);
+  assert.equal(button.getAttribute("aria-pressed"), "true");
+}
+
+/** The board's rows, top to bottom, narrowed to the given titles (other tests' bounties share this server). */
+function rowOrder(titles: string[]): string[] {
+  return [...document.querySelectorAll("button")].map((b) => titles.find((t) => text(b).trim().startsWith(t))).filter((t): t is string => !!t);
+}
+
+/** A direct, real API call as whoever is currently logged in -- used to set up state the UI test then reads. */
+async function api<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${server.url}${path}`, body === undefined ? {} : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
+  return (await res.json()) as T;
 }
 
 async function submitPr(prUrl: string, note: string): Promise<void> {
@@ -197,6 +220,10 @@ test("open two bounties, submit PRs, the opener (not a moderator -- there is no 
   await waitFor(() => text().includes("Claimed by"), "the claimed banner");
   assert.ok(!text().includes("Mark claimed"), "nothing left to claim");
   await backToBoard();
+  // Alpha is claimed now, so it's out of the default "Open" view; the "Claimed" view lists it.
+  await waitFor(() => !row(ALPHA.title), "Alpha leaving the Open view");
+  await showStatus("Claimed");
+  assert.deepEqual(rowOrder([ALPHA.title, BETA.title]), [ALPHA.title]);
 
   // Anyone reopening it sees the recorded outcome of every submission: one accepted, the rest rejected.
   await logInAs("solver");
@@ -212,6 +239,7 @@ test("open two bounties, submit PRs, the opener (not a moderator -- there is no 
 
   // 4. The opener cancels Beta (the reason is asked for with the browser's prompt dialog).
   await logInAs("opener");
+  await showStatus("Open");
   await openRow(BETA.title);
   const prompts: string[] = [];
   const originalPrompt = window.prompt;
@@ -228,6 +256,9 @@ test("open two bounties, submit PRs, the opener (not a moderator -- there is no 
   assert.deepEqual(prompts, ["Reason for cancelling (shown on the bounty)?"]);
   await backToBoard();
 
+  // The board opens on open bounties only: neither resolved one is listed until the filter widens.
+  await waitFor(() => !row(ALPHA.title) && !row(BETA.title), "both resolved bounties hidden under the default Open filter");
+  await showStatus("All");
   // The board shows both outcomes, and the API agrees.
   assert.match(text(await waitFor(() => row(ALPHA.title), "Alpha's row")).trim(), /Claimed$/);
   assert.match(text(await waitFor(() => row(BETA.title), "Beta's row")).trim(), /Cancelled$/);
@@ -326,6 +357,18 @@ test("Funding: pasting an already-verified real tx reference records it, sums pe
 
   const b = (await (await fetch(`${server.url}/api/bounties/${bountyId}`)).json()) as { deposits: unknown[] };
   assert.equal(b.deposits.length, 1, "still only one deposit despite the repeated submission");
+
+  // Back on the board, the row carries the verified total -- next to, never instead of, the
+  // opener's own free-text reward claim.
+  await backToBoard();
+  const listed = await waitFor(() => {
+    const r = row("Funding paste-flow check");
+    return r && text(r).includes("Funded") ? r : null;
+  }, "the row's verified funding total");
+  const funded = listed.querySelector('[aria-label="Verified funding"]');
+  assert.ok(funded, "the funding chip row");
+  assert.equal(text(funded).trim(), "Funded 2.5 SOL");
+  assert.ok(text(listed).includes("backer-funded"), "the free-text reward is still shown as written");
 });
 
 test("Funding: a reference the verifier rejects shows the real server message and is never recorded", async () => {
@@ -368,4 +411,68 @@ test("Funding: Bitcoin is paste-only -- picking it in the paste form asks for a 
   await fill(getByPlaceholder("Transaction ID (txid)"), "ab".repeat(32));
   await click(getButton("Verify & record"));
   await waitFor(() => text().includes("0.0025 BTC"), "the recorded Bitcoin deposit's total");
+});
+
+// --- Filter / sort (the list's own controls) -----------------------------------------------------
+
+/** A Solana RPC answer for a real-shaped native transfer of `lamports` from `payer` to the configured wallet. */
+function solTransfer(payer: string, lamports: number): unknown {
+  return {
+    transaction: { message: { accountKeys: [payer, SOL_WALLET], instructions: [] } },
+    meta: { err: null, preBalances: [10_000_000_000, 1_000_000_000], postBalances: [10_000_000_000 - lamports, 1_000_000_000 + lamports] },
+  };
+}
+
+test("Sort by funded amount: ranks by verified SOL deposits only (never the free-text reward), and the status filter narrows the list", async () => {
+  const SMALL = "Sort check: small SOL";
+  const BIG = "Sort check: big SOL";
+  const NONE = "Sort check: unfunded";
+  const titles = [SMALL, BIG, NONE];
+
+  await logInAs("sort-opener");
+  const ids: Record<string, string> = {};
+  // Opened oldest -> newest, with the unfunded one's reward text reading as the "largest" number.
+  for (const [title, reward] of [
+    [SMALL, "5 SOL"],
+    [BIG, "1 SOL"],
+    [NONE, "1,000,000 SOL"],
+  ] as const) {
+    ids[title] = (await api<{ id: string }>("/api/bounties", { title, description: ALPHA.description, reward })).id;
+  }
+
+  // Real deposits through the real route: 0.5 SOL to SMALL; 1.5 + 1 SOL (two deposits) to BIG.
+  await logInAs("sort-depositor");
+  const payer = solanaKeypair("sort-depositor").address;
+  for (const [title, lamports, sig] of [
+    [SMALL, 500_000_000, "B"],
+    [BIG, 1_500_000_000, "C"],
+    [BIG, 1_000_000_000, "D"],
+  ] as const) {
+    depositMocks.solTx = solTransfer(payer, lamports);
+    await api(`/api/bounties/${ids[title]}/deposits`, { chain: "solana", txRef: sig.repeat(64) });
+  }
+
+  await render(createElement(BountiesView));
+  await waitFor(() => row(NONE), "the board");
+  assert.deepEqual(rowOrder(titles), [NONE, BIG, SMALL], "newest first by default");
+  assert.equal(text(row(BIG)!.querySelector('[aria-label="Verified funding"]')!).trim(), "Funded 2.5 SOL", "two deposits summed");
+  assert.equal(row(NONE)!.querySelector('[aria-label="Verified funding"]'), null, "no funding chip without a verified deposit");
+
+  const sort = getControl<HTMLSelectElement>("Sort bounties");
+  await choose(sort, "funded:solana:native");
+  assert.deepEqual(rowOrder(titles), [BIG, SMALL, NONE], "2.5 SOL, then 0.5 SOL, then the unfunded one -- whatever its reward text says");
+  assert.ok([...sort.options].some((o) => o.value === "funded:solana:native" && text(o).trim() === "Most funded in SOL on Solana"));
+  await choose(sort, "oldest");
+  assert.deepEqual(rowOrder(titles), [SMALL, BIG, NONE]);
+
+  // The opener cancels the small one; the default Open view drops it, Cancelled shows only it.
+  await logInAs("sort-opener");
+  await api(`/api/bounties/${ids[SMALL]}/cancel`, { reason: "folded into the big one" });
+  await click(getButton("Refresh"));
+  await waitFor(() => !row(SMALL), "the cancelled bounty leaving the Open view");
+  assert.deepEqual(rowOrder(titles), [BIG, NONE]);
+  await showStatus("Cancelled");
+  assert.deepEqual(rowOrder(titles), [SMALL]);
+  assert.match(text(row(SMALL)!).trim(), /Cancelled$/);
+  assert.deepEqual(consoleErrors, []);
 });

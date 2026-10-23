@@ -36,21 +36,10 @@ export interface WalletSendResult {
   fromAddress: string;
 }
 
-/**
- * A human-typed decimal amount ("0.05", "1001") parsed into its exact raw integer at a given
- * number of decimals — entirely in BigInt, never `Number`/floating point, so a deposit amount is
- * never silently rounded the way IEEE-754 would round e.g. 0.1 + 0.2. Mirrors the inverse of
- * `@osstrace/chain-ethereum`'s `formatUnits` on the read side.
- */
-export function parseDecimalAmount(amountHuman: string, decimals: number): bigint {
-  const trimmed = amountHuman.trim();
-  if (trimmed.startsWith("-")) throw new Error("amount must not be negative");
-  if (!/^\d*\.?\d*$/.test(trimmed) || trimmed === "" || trimmed === ".") throw new Error("not a valid amount");
-  const [whole = "0", frac = ""] = trimmed.split(".");
-  if (frac.length > decimals) throw new Error(`this asset only has ${decimals} decimal place${decimals === 1 ? "" : "s"}`);
-  const digits = `${whole}${frac.padEnd(decimals, "0")}`.replace(/^0+(?=\d)/, "");
-  return BigInt(digits === "" ? "0" : digits);
-}
+// Exact BigInt decimal parsing/summing lives in decimalAmount.ts (no chain-SDK imports, so the
+// bounty board's list can use it without loading this module) -- re-exported for existing callers.
+import { parseDecimalAmount } from "./decimalAmount.ts";
+export { parseDecimalAmount, sumDecimalAmounts } from "./decimalAmount.ts";
 
 // --- Ethereum (EIP-1193) -------------------------------------------------------------------
 
@@ -197,18 +186,4 @@ export async function sendSolanaToken(
   await withBlockhash(connection, transaction, fromPubkey);
   const { signature } = await provider.signAndSendTransaction(transaction);
   return { txRef: signature, fromAddress: from };
-}
-
-/**
- * Adds already-formatted decimal-string amounts (as `Deposit.amount` comes from the API) without
- * ever going through floating point — used only to show a per-asset running total on the board.
- * Decimals are inferred per call from however many fractional digits the real amounts carry.
- */
-export function sumDecimalAmounts(amounts: string[]): string {
-  const decimals = Math.max(0, ...amounts.map((a) => (a.split(".")[1] ?? "").length));
-  const total = amounts.reduce((sum, a) => sum + parseDecimalAmount(a, decimals), 0n);
-  const s = total.toString().padStart(decimals + 1, "0");
-  const whole = s.slice(0, s.length - decimals) || "0";
-  const frac = decimals > 0 ? s.slice(s.length - decimals).replace(/0+$/, "") : "";
-  return frac ? `${whole}.${frac}` : whole;
 }

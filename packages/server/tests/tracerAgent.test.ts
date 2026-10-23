@@ -643,6 +643,33 @@ describe("tracer agent", () => {
     expect(res.toolCalls[0]!.result).toMatchObject({ ok: true, nodesAdded: 3, edgesAdded: 4, notExpanded: { depthCap: 1, budgetExhausted: 0 } });
   });
 
+  it("list_transfers on a never-synced address with no time window loads more than the newest page, and an empty partial answer says it isn't proof", async () => {
+    await setup([
+      {
+        tools: [
+          { name: "list_transfers", args: { chain: "ethereum", address: ETH_A, flow: "in", limit: 1 } },
+          { name: "list_transfers", args: { chain: "ethereum", address: evm(1), flow: "in", limit: 1 } },
+        ],
+      },
+      { content: "ok" },
+    ]);
+    // A received 3 transfers, then sent 12: the newest page (5) is all outgoing.
+    t.eth.add([...[1, 2, 3].map((i) => ethTransfer(ETH_B, ETH_A, base + i)), ...Array.from({ length: 12 }, (_, i) => ethTransfer(ETH_A, ETH_C, base + 100 + i))]);
+    // evm(1) received once, long before 40 outgoing transfers: further back than the agent's capped backfill reaches.
+    t.eth.add([ethTransfer(evm(3), evm(1), base - 5000), ...Array.from({ length: 40 }, (_, i) => ethTransfer(evm(1), evm(2), base + 200 + i))]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "find the last transaction sent to A" })).json() as TracerAgentChatResponse;
+    const found = res.toolCalls[0]!.result as { transfers: { from: string; direction: string; time: string }[] };
+    expect(found.transfers).toHaveLength(1); // not "0 transfers": the real incoming transfer is found
+    expect(found.transfers[0]).toMatchObject({ from: `ethereum:${ETH_B}`, direction: "in", time: new Date((base + 3) * 1000).toISOString() });
+    const none = res.toolCalls[1]!.result as { transfers: unknown[]; sync: { state: string }; note: string };
+    expect(none.transfers).toHaveLength(0);
+    expect(none.sync.state).not.toBe("ready");
+    expect(none.note).toMatch(/NOT proof there are none/);
+    expect(none.note).toMatch(/loaded back to \d{4}-\d{2}-\d{2}/);
+  });
+
   it("rename / annotate / remove act on this doc's real node ids only", async () => {
     await setup([
       { tools: [{ name: "get_doc_state", args: {} }] },

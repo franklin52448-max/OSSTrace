@@ -90,6 +90,8 @@ const MAX_DOC_NODES = 500; // anonTraceDoc's own bound
  *  takes it past this makes the browser's next message (and Share) a 400 -- never grow past it. */
 const MAX_DOC_EDGES = 1000;
 const MAX_LIST = 50;
+/** Extra history pages list_transfers loads before an all-time query (one with no time window). */
+const LIST_BACKFILL_ROUNDS = 3;
 
 // ---------- small helpers ----------
 const CARD_W = 254;
@@ -571,6 +573,21 @@ const listTransfers = defineTool({
     const timeGte = q.timeGte ? timeBound(q.timeGte, false) : undefined;
     const timeLte = q.timeLte ? timeBound(q.timeLte, true) : undefined;
     const cp = q.counterparty ? addrArg(q.chain, q.counterparty) : null;
+    const w = windowOf({ timeLast: q.timeLast, timeGte, timeLte });
+    // An all-time query is served from the local cache: queryTransfers refreshes only the newest page
+    // for it, by design, so that a passing Explorer view never sets off a deep sync. A question put to
+    // the agent ("the last transfer *sent to* X") is about the address as it is now, and for an address
+    // nobody has looked at yet that newest page can easily hold no match at all (all outgoing, say) --
+    // which came back as a confident "0 transfers". So the agent loads a few more pages first, inside
+    // a fixed budget; a time-windowed query already backfills toward its window in queryTransfers.
+    const syncMs = Math.min(10_000, env.deadline - Date.now() - 8000);
+    if (w.from === null && syncMs > 2000) {
+      try {
+        await syncAll(env.ctx, [a], null, { maxRounds: LIST_BACKFILL_ROUNDS, budgetMs: syncMs, anon: !env.userId });
+      } catch {
+        /* queryTransfers below reports the provider state */
+      }
+    }
     let tokens: string[] = [];
     let symbolNote: string | null = null;
     if (q.asset) {
@@ -580,11 +597,12 @@ const listTransfers = defineTool({
       else {
         // A symbol: resolve it to the real token ids this address has moved. Symbols aren't unique
         // and anyone can deploy a token called "USDC", so every match is used and the model is told.
-        const w = windowOf({ timeLast: q.timeLast, timeGte, timeLte });
-        try {
-          await syncAll(env.ctx, [a], w.from, { anon: !env.userId, maxRounds: w.from === null ? 0 : undefined });
-        } catch {
-          /* queryTransfers below reports the provider state */
+        if (w.from !== null) {
+          try {
+            await syncAll(env.ctx, [a], w.from, { anon: !env.userId });
+          } catch {
+            /* queryTransfers below reports the provider state */
+          }
         }
         const rows = env.ctx.db.all<{ token_id: string }>(
           `SELECT DISTINCT token_id FROM transfers WHERE chain = ? AND UPPER(token_symbol) = UPPER(?)
@@ -616,6 +634,14 @@ const listTransfers = defineTool({
       ...(q.usdGte !== undefined ? { usdGte: q.usdGte } : {}),
       ...(q.usdLte !== undefined ? { usdLte: q.usdLte } : {}),
     });
+    const back = res.sync.coveredFrom ? ` (loaded back to ${res.sync.coveredFrom.slice(0, 10)})` : "";
+    const partialNote =
+      res.sync.state === "ready"
+        ? null
+        : res.transfers.length === 0
+          ? `No matching transfers in the history loaded so far${back}. Older history isn't loaded yet, so this is NOT proof there are none -- tell the user that, not "none".`
+          : `History for this address is not fully loaded${back} -- results cover only what's loaded so far.` +
+            (q.sortBy === "time" && q.sortDir === "asc" ? " The oldest transfer here is the oldest *loaded*, not necessarily the first ever (e.g. not necessarily the original funder)." : "");
     return {
       ok: true,
       address: key(a),
@@ -626,7 +652,7 @@ const listTransfers = defineTool({
       more: res.nextCursor !== null,
       sync: { state: res.sync.state, coveredFrom: res.sync.coveredFrom, ...(res.sync.anonCapped ? { anonCapped: true } : {}) },
       ...(symbolNote ? { warning: symbolNote } : {}),
-      ...(res.sync.state !== "ready" ? { note: "History for this address is not fully loaded -- results cover only what's loaded so far." } : {}),
+      ...(partialNote ? { note: partialNote } : {}),
     };
   },
 });

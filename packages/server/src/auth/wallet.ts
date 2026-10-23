@@ -37,15 +37,41 @@ function sweep(now: number) {
   for (const [k, v] of pending) if (v.expiresAt <= now) pending.delete(k);
 }
 
-/** Creates (overwriting any prior pending one) a single-use, 5-minute challenge for this wallet. */
-export function createChallenge(chain: WalletChain, address: string): string {
+/** `host` is the signing dApp's own domain (the already-CORS/CSRF-validated request Origin, with the
+ * scheme stripped) -- it's EIP-4361's `domain` field, which MetaMask/other wallets' phishing and
+ * message-trust heuristics check against the site that's actually asking. A plain, non-standard
+ * message (what this used to send) renders as a generic "unusual request" in some wallets even for
+ * a perfectly legitimate sign-in; a spec-correct SIWE message gets their dedicated sign-in UI instead. */
+function buildEthereumMessage(host: string, address: string, uri: string, nonce: string, issuedAt: string): string {
+  return (
+    `${host} wants you to sign in with your Ethereum account:\n` +
+    `${address}\n\n` +
+    `Sign in to OSSTrace.\n\n` +
+    `URI: ${uri}\n` +
+    `Version: 1\n` +
+    `Chain ID: 1\n` +
+    `Nonce: ${nonce}\n` +
+    `Issued At: ${issuedAt}`
+  );
+}
+
+/** Creates (overwriting any prior pending one) a single-use, 5-minute challenge for this wallet.
+ * `origin` is this request's already-validated Origin (e.g. "https://opensourcetrace.org") -- used
+ * as EIP-4361's domain/uri for Ethereum. Solana has no equivalent wallet-trust benefit from message
+ * formatting alone (see wallet.ts's module comment / the auth commit this came from for why), so its
+ * message keeps its prior plain-text shape. */
+export function createChallenge(chain: WalletChain, address: string, origin: string): string {
   const normalized = normalizeAddress(chain, address);
   const nonce = randomBytes(16).toString("hex");
+  const issuedAt = nowIso();
+  const host = origin.replace(/^https?:\/\//, "");
   const message =
-    `OSSTrace wants you to sign in with your ${chain === "solana" ? "Solana" : "Ethereum"} wallet.\n\n` +
-    `Address: ${address}\n` +
-    `Nonce: ${nonce}\n` +
-    `Issued: ${nowIso()}`;
+    chain === "ethereum"
+      ? buildEthereumMessage(host, address, origin, nonce, issuedAt)
+      : `OSSTrace wants you to sign in with your Solana wallet.\n\n` +
+        `Address: ${address}\n` +
+        `Nonce: ${nonce}\n` +
+        `Issued: ${issuedAt}`;
   const now = Date.now();
   sweep(now);
   pending.set(key(chain, normalized), { message, expiresAt: now + CHALLENGE_TTL_MS });

@@ -34,7 +34,18 @@ export function registerAuth(app: FastifyInstance, ctx: Ctx) {
     if (!config.testHooks) checkChallengeAllowed(db, req.ip);
     const body = parse(challengeBody, req.body);
     if (!isValidAddress(body.chain, body.address)) throw new ApiErr("bad_request", `That doesn't look like a ${body.chain} address`);
-    const message = createChallenge(body.chain, body.address);
+    // Already validated by the CSRF check in app.ts's onRequest hook (same Origin-or-Referer logic,
+    // repeated here since that hook only validates, it doesn't normalize req.headers.origin itself).
+    let origin = req.headers.origin;
+    if (!origin && req.headers.referer) {
+      try {
+        origin = new URL(req.headers.referer).origin;
+      } catch {
+        origin = undefined;
+      }
+    }
+    if (!origin) origin = `https://${req.headers.host}`;
+    const message = createChallenge(body.chain, body.address, origin);
     const res: ChallengeResponse = { message };
     return res;
   });

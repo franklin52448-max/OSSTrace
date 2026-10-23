@@ -52,6 +52,23 @@ describe("wallet auth API", () => {
     expect((await c.get("/api/auth/me")).json().user.walletAddress).toBe(address.toLowerCase());
   });
 
+  it("ethereum: the challenge message is a spec-correct EIP-4361 (SIWE) message, not a generic string -- this is", async () => {
+    // what gets MetaMask/other wallets' own "Sign-in request" UI instead of a generic, more
+    // suspicious-looking "unusual message" prompt.
+    const ethAddress = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+    const c = new Client(t.app);
+    const chal = await c.post("/api/auth/challenge", { chain: "ethereum", address: ethAddress });
+    const { message } = chal.json() as { message: string };
+    const host = new URL(ORIGIN).host;
+    expect(message.split("\n")[0]).toBe(`${host} wants you to sign in with your Ethereum account:`);
+    expect(message).toContain(`\n${ethAddress}\n\n`);
+    expect(message).toMatch(/\nURI: http:\/\/127\.0\.0\.1:5301\n/);
+    expect(message).toContain("\nVersion: 1\n");
+    expect(message).toContain("\nChain ID: 1\n");
+    expect(message).toMatch(/\nNonce: [0-9a-f]{32}\n/);
+    expect(message).toMatch(/\nIssued At: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
+  });
+
   it("signing in again with the same wallet returns the same user, not a new one", async () => {
     const c1 = new Client(t.app);
     const first = (await solanaLogin(c1, "carol")).res.json().user;

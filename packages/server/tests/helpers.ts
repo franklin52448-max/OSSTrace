@@ -117,6 +117,29 @@ export function llamaFetch(price = 2000, unknown: string[] = []): typeof fetch {
   }) as typeof fetch;
 }
 
+/**
+ * fetch stub for an Alchemy JSON-RPC endpoint, for checking how a chain's provider is wired: answers
+ * `eth_chainId` with `chainIdHex` and every `alchemy_getAssetTransfers` with one real-shaped native
+ * transfer into ETH_A. Every URL it was called with lands in `urls`.
+ */
+export function alchemyFetch(chainIdHex: string, urls: string[] = []): typeof fetch {
+  return (async (input: string | URL, init?: RequestInit) => {
+    urls.push(String(input));
+    const body = JSON.parse(String(init?.body ?? "{}"));
+    const reply = (result: unknown) => new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }), { status: 200 });
+    if (body.method === "eth_chainId") return reply(chainIdHex);
+    if (body.method === "alchemy_getAssetTransfers") {
+      const hash = `0x${"ab".repeat(32)}`;
+      return reply({
+        transfers: [
+          { blockNum: "0x10", uniqueId: `${hash}:external`, hash, from: ETH_B.toLowerCase(), to: ETH_A.toLowerCase(), value: 1, erc721TokenId: null, erc1155Metadata: null, tokenId: null, asset: "X", category: "external", rawContract: { value: "0xde0b6b3a7640000", address: null, decimal: "0x12" }, metadata: { blockTimestamp: "2026-10-23T12:00:00.000Z" } },
+        ],
+      });
+    }
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, error: { code: -32601, message: "not stubbed" } }), { status: 200 });
+  }) as typeof fetch;
+}
+
 export type TestApp = {
   app: FastifyInstance;
   ctx: Awaited<ReturnType<typeof buildApp>>["ctx"];

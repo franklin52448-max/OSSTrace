@@ -162,7 +162,7 @@ export class AlchemyProvider implements ChainProvider {
   /** Set once an enhanced call has succeeded, so `ping` stops spending compute units re-proving it. */
   private enhancedOk = false;
 
-  constructor(opts: AlchemyOptions & { fetchImpl?: typeof fetch }) {
+  constructor(opts: AlchemyOptions & { fetchImpl?: typeof fetch | undefined }) {
     this.chain = opts.chain;
     this.chainId = opts.chainId;
     this.rpcUrl = opts.rpcUrl;

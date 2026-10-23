@@ -1,7 +1,7 @@
 import cookie from "@fastify/cookie";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import type { Chain } from "@osstrace/contract";
-import { EtherscanBnbProvider } from "./chain/bnb.ts";
+import { AlchemyProvider } from "./chain/alchemy.ts";
 import { BlockscoutProvider } from "./chain/ethereum.ts";
 import { PriceService } from "./chain/prices.ts";
 import { TokenLogoService } from "./chain/tokenLogos.ts";
@@ -70,7 +70,9 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
     // identical /api/v2 shape, and the "robinhood" argument is what keeps its rows (and their token
     // prices) from being stored as Ethereum mainnet's.
     robinhood: o.providers?.robinhood ?? new BlockscoutProvider(config.robinhoodBlockscoutUrl, o.fetchImpl, "robinhood"),
-    bnb: o.providers?.bnb ?? new EtherscanBnbProvider({ apiUrl: config.etherscanUrl, apiKey: config.etherscanApiKey, rpcUrl: config.bnbRpcUrl }, o.fetchImpl),
+    // BNB Chain through Alchemy's enhanced API on its own RPC URL: Etherscan V2 (the only other hosted
+    // BSC indexer this used) refuses chain 56 on its free tier.
+    bnb: o.providers?.bnb ?? new AlchemyProvider({ chain: "bnb", chainId: 56, nativeSymbol: "BNB", nativeName: "BNB", rpcUrl: config.bnbRpcUrl, rpcEnv: "BNB_RPC_URL", fetchImpl: o.fetchImpl }),
     // Base too, read through Blockscout's hosted PRO API (which needs the free key -- see config.ts).
     base: o.providers?.base ?? new BlockscoutProvider(config.baseBlockscoutUrl, o.fetchImpl, "base", { apiKey: config.blockscoutApiKey }),
     solana:

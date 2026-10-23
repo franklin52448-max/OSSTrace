@@ -19,13 +19,14 @@ Listens on `127.0.0.1:5320` by default (`PORT`/`HOST`). A SQLite file at `./data
 prices via DefiLlama (`DEFILLAMA_URL`), Bitcoin bounty-deposit checks via a public Esplora
 explorer (`ESPLORA_URL`, Blockstream.info by default). See `src/config.ts` for every variable.
 
-**BNB Chain is the one chain that needs a key.** There's no free hosted indexer for BNB Smart Chain
-the way Blockscout is for Ethereum, so its history and token discovery come from Etherscan's
-multichain V2 API (`ETHERSCAN_API_KEY`, `chainid=56`, `src/chain/bnb.ts`); native balances,
-`balanceOf` reads and BNB deposit checks use BNB Chain's free public RPC (`BNB_RPC_URL`, default
-`https://bsc-dataseed.bnbchain.org`). Etherscan's **free** plan refuses chain 56 ("Free API access is
-not supported for this chain"), so with a free key BNB lookups report exactly that, as a provider
-error -- never as an empty wallet. A plan that covers BNB makes them work with no code change.
+**BNB Chain needs an Alchemy RPC URL.** There's no free hosted indexer for BNB Smart Chain the way
+Blockscout is for Ethereum (Etherscan's V2 API refuses chain 56 on its free plan), so its history,
+native balance and token balances come from Alchemy's enhanced JSON-RPC methods
+(`alchemy_getAssetTransfers`, `alchemy_getTokenBalances`, `alchemy_getTokenMetadata`;
+`src/chain/alchemy.ts`) on `BNB_RPC_URL` -- the same URL BNB deposit checks use for plain `eth_*`
+calls. The default (`https://bsc-dataseed.bnbchain.org`, no key) is enough for deposit checks; with
+it, BNB address lookups report that `BNB_RPC_URL` needs to be an Alchemy URL, as a provider error --
+never as an empty wallet. The provider checks `eth_chainId` is 56 before reading anything.
 
 **Robinhood Chain** (EVM chain id 4663) needs no key: it's read through the same Blockscout provider
 as Ethereum, pointed at the chain's own official instance (`ROBINHOOD_BLOCKSCOUT_URL`, default

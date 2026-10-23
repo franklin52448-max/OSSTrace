@@ -25,16 +25,11 @@ export type Config = {
    *  mode's Budget.preferIndexed); unset means that path just stays on the free RPC merge-cursor. */
   solscanApiKey: string | null;
   ethBlockscoutUrl: string;
-  /** Never logged. Etherscan's V2 API is multichain (one key, a `chainid` param per request), and it
-   *  is BNB Chain's history/token-discovery source (chain/bnb.ts) -- there's no free keyless indexer
-   *  for BNB the way Blockscout is for Ethereum. Null leaves BNB lookups reporting that it's missing,
-   *  never empty. Etherscan's plans decide which chains a key covers: as of 2026 its free tier
-   *  refuses BNB Smart Chain outright ("Free API access is not supported for this chain"). */
-  etherscanApiKey: string | null;
-  etherscanUrl: string;
-  /** Never logged. BNB Smart Chain JSON-RPC: native balance, token `balanceOf`, and bounty-deposit
-   *  verification. Unlike Ethereum, BNB Chain runs a free public RPC reliable enough to default to,
-   *  so this has the same zero-config-with-override shape as solanaRpcUrl. */
+  /** Never logged. BNB Smart Chain JSON-RPC: bounty-deposit verification over plain `eth_*` calls, and
+   *  -- when it's an Alchemy URL -- address history and balances through Alchemy's enhanced API
+   *  (chain/alchemy.ts; Etherscan's free tier refuses chain 56, so there's no free keyless BSC indexer
+   *  to read instead). The zero-config default is BNB Chain's own public RPC: deposits work on it,
+   *  address lookups report that an Alchemy URL is needed, never an empty wallet. */
   bnbRpcUrl: string;
   /** Robinhood Chain's own official Blockscout instance (robinhoodchain.blockscout.com) -- the same
    *  zero-key `/api/v2` shape as ethBlockscoutUrl, one instance per chain. Deliberately the per-chain
@@ -154,7 +149,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
 
   const solscanApiKey = env.SOLSCAN_API_KEY?.trim() || null;
-  const etherscanApiKey = env.ETHERSCAN_API_KEY?.trim() || null;
   const blockscoutApiKey = env.BLOCKSCOUT_API_KEY?.trim() || null;
 
   const origins = (env.ALLOWED_ORIGINS ?? "http://127.0.0.1:5301,http://localhost:5301")
@@ -179,8 +173,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ethRpcUrl,
     solscanApiKey,
     ethBlockscoutUrl: (env.ETH_BLOCKSCOUT_URL ?? "https://eth.blockscout.com").replace(/\/$/, ""),
-    etherscanApiKey,
-    etherscanUrl: env.ETHERSCAN_API_URL?.trim() || "https://api.etherscan.io/v2/api",
     bnbRpcUrl,
     robinhoodBlockscoutUrl: (env.ROBINHOOD_BLOCKSCOUT_URL ?? DEFAULT_ROBINHOOD_BLOCKSCOUT).replace(/\/$/, ""),
     robinhoodRpcUrl,

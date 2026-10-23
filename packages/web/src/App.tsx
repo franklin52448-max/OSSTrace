@@ -1,13 +1,13 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { ChainId } from "@osstrace/core";
 import { AlertsRoute } from "./alerts/index.ts";
+import { EXPLORERS } from "./explorers.ts";
 import { ExplorePage } from "./explorer/index.ts";
 import { LabelsRoute } from "./labels/index.ts";
 import { TracerRoute } from "./tracer/index.ts";
 import TracerView from "./TracerView.tsx";
 import { VisualizerRoute } from "./visualizer/index.ts";
 import BountiesView from "./BountiesView.tsx";
-import WorkbenchView from "./WorkbenchView.tsx";
 import PrivateLabelPanel from "./PrivateLabelPanel.tsx";
 import RiskPanel from "./RiskPanel.tsx";
 import AccountPanel from "./AccountPanel.tsx";
@@ -25,11 +25,9 @@ import { LiveBadge, useLiveTransactions } from "./LiveStream.tsx";
 import { CopyButton, SearchBar, Skeleton, Text, cx } from "./prism/components.tsx";
 import { IconChevronDown, IconExternalLink } from "./prism/icons.tsx";
 import type { AeroShardsProps } from "./vendor/AeroShards.tsx";
-import type { FerrofluidProps } from "./vendor/Ferrofluid.tsx";
 
-// The hero effects are big and only used on the home page, so they load in their own chunks.
+// The hero effect is big and only used on the home page, so it loads in its own chunk.
 const AeroShards = lazy(() => import("./vendor/AeroShards.tsx"));
-const Ferrofluid = lazy(() => import("./vendor/Ferrofluid.tsx"));
 
 const EXPLORER_URL = import.meta.env["VITE_EXPLORER_URL"] ?? "http://localhost:5300";
 
@@ -101,11 +99,6 @@ const CHAINS: readonly { value: ChainId; label: string }[] = [
 ];
 const isChain = (value: string): value is ChainId => CHAINS.some((c) => c.value === value);
 
-const EXPLORERS: Record<ChainId, { name: string; tx: string; address: string }> = {
-  ethereum: { name: "Etherscan", tx: "https://etherscan.io/tx/", address: "https://etherscan.io/address/" },
-  solana: { name: "Solscan", tx: "https://solscan.io/tx/", address: "https://solscan.io/account/" },
-};
-
 /* Routing ------------------------------------------------------------------------------------------
    The URL hash is the router (no router library): `#address/<chain>/<address>` is a Lookup report,
    `#graph/<chain>/<address>` opens the Visualizer on that address, and the other views are a bare
@@ -118,7 +111,7 @@ const EXPLORERS: Record<ChainId, { name: string; tx: string; address: string }> 
    notes this gets folded back into the canvas as a feature later, rather than staying a separate
    page for good. */
 
-type View = "lookup" | "graph" | "trace" | "pathfind" | "alerts" | "labels" | "bounties" | "workbench";
+type View = "lookup" | "graph" | "trace" | "pathfind" | "alerts" | "labels" | "bounties";
 interface Route {
   view: View;
   target: { chain: ChainId; address: string } | null;
@@ -132,7 +125,7 @@ function routeFromHash(): Route {
   if (head === "graph") return { view: "graph", target };
   if (head === "trace") return { view: "trace", target: null };
   if (head === "pathfind") return { view: "pathfind", target };
-  if (head === "alerts" || head === "labels" || head === "bounties" || head === "workbench") return { view: head, target: null };
+  if (head === "alerts" || head === "labels" || head === "bounties") return { view: head, target: null };
   return { view: "lookup", target: null };
 }
 
@@ -147,7 +140,6 @@ const NAV: readonly { id: View; label: string; href: string }[] = [
   { id: "alerts", label: "Alerts", href: "#alerts" },
   { id: "labels", label: "Labels", href: "#labels" },
   { id: "bounties", label: "Bounties", href: "#bounties" },
-  { id: "workbench", label: "Workbench", href: "#workbench" },
 ];
 
 /** The OSSTrace mark (also public/logo.svg), drawn in the text colour. */
@@ -252,8 +244,6 @@ export default function App() {
             <LabelsRoute />
           ) : route.view === "bounties" ? (
             <BountiesView />
-          ) : route.view === "workbench" ? (
-            <WorkbenchView />
           ) : route.view === "pathfind" ? (
             <TracerView key={targetKey} initial={route.target} />
           ) : route.target ? (
@@ -331,39 +321,24 @@ const HERO_SHARDS_NORD = {
   glow: 0.4,
 } satisfies AeroShardsProps;
 
-/** Fallback where WebGPU isn't available. From reactbits.dev/backgrounds/ferrofluid?preset=peaks&sharpness=4&fluidity=0.85&spikeHeight=0.45, in neutral chrome. */
-const HERO_FLUID = {
-  colors: ["#ffffff", "#d4d4d8", "#52525b"],
-  brightness: 1,
-  scale: 1.6,
-  tilt: 48,
-  turbulence: 1,
-  speed: 0.5,
-  magnetism: 1,
-  sharpness: 4,
-  fluidity: 0.85,
-  spikeHeight: 0.45,
-} satisfies FerrofluidProps;
-
-/** Aero Shards needs WebGPU; where it can't start, the WebGL2 ferrofluid takes its place. Only
- * ever used on the home page, which keeps its original dark look regardless of the site's live
- * theme (see HOME_PINNED_STYLE) -- so unlike a CSS-token-driven element, this reads a fixed mode
- * rather than the live theme, since its lighting model runs on the GPU, not through CSS vars.
+/** Only ever used on the home page, which keeps its original dark look regardless of the site's
+ * live theme (see HOME_PINNED_STYLE) -- so unlike a CSS-token-driven element, this reads a fixed
+ * mode rather than the live theme, since its lighting model runs on the GPU, not through CSS vars.
  * The one thing it DOES read from the live theme is which color variant to show (Nord gets its
- * own Frost-blue field) -- that's just picking a palette, not un-pinning the page's own darkness. */
+ * own Frost-blue field) -- that's just picking a palette, not un-pinning the page's own darkness.
+ * Needs WebGPU; where a visitor's browser can't start it (older browsers, or Brave/others that
+ * gate WebGPU behind a flag by default), nothing renders here rather than falling back to a
+ * different-looking background -- the shard field is the one look this hero has. */
 function HeroBackground() {
   const [webgpuFailed, setWebgpuFailed] = useState(false);
   const lightMode = false;
   const shards = useTheme().preset === "nord" ? HERO_SHARDS_NORD : HERO_SHARDS;
   // Reduce motion holds the field still (no fly-in either) and stops it reacting to the pointer.
   const still = useReduceMotion();
+  if (webgpuFailed) return null;
   return (
     <Suspense fallback={null}>
-      {webgpuFailed ? (
-        <Ferrofluid {...HERO_FLUID} lightMode={lightMode} paused={still} intro={!still} mouseInteraction={!still} />
-      ) : (
-        <AeroShards {...shards} lightMode={lightMode} paused={still} intro={!still} mouseInteraction={!still} onError={() => setWebgpuFailed(true)} />
-      )}
+      <AeroShards {...shards} lightMode={lightMode} paused={still} intro={!still} mouseInteraction={!still} onError={() => setWebgpuFailed(true)} />
     </Suspense>
   );
 }

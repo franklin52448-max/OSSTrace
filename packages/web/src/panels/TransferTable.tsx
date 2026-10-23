@@ -1,8 +1,10 @@
 import type { AddressInfo, Transfer } from "@osstrace/contract";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ExternalLink } from "lucide-react";
 import { useState } from "react";
+import { explorerName, explorerTxUrl } from "../explorers.ts";
 import { AddressChip } from "../kit/AddressChip.tsx";
 import { ChainBadge } from "../kit/ChainBadge.tsx";
+import { IconButton } from "../kit/Button.tsx";
 import { cn } from "../kit/cn.ts";
 import { TokenAmount } from "../kit/TokenAmount.tsx";
 import { UsdValue } from "../kit/UsdValue.tsx";
@@ -101,10 +103,15 @@ export function TransferTable({
                   <RowAction state={actions.stateOf(t)} label={`transfer ${t.txHash.slice(0, 10)}`} onAdd={() => actions.onAdd(t)} onRemove={actions.onRemove ? () => actions.onRemove!(t) : undefined} />
                 </td>
               ) : null}
-              <td className="kit-num h-9 overflow-hidden whitespace-nowrap px-2 text-xs text-muted">
+              <td className="kit-num group/time h-9 overflow-hidden whitespace-nowrap px-2 text-xs text-muted">
                 <span className="inline-flex items-center gap-1.5">
                   {showChain ? <ChainBadge chain={t.chain} /> : null}
                   <span title={t.blockTimestamp}>{relative ? formatRelative(t.blockTimestamp) : formatDateTime(t.blockTimestamp)}</span>
+                  <span className="opacity-0 focus-within:opacity-100 group-hover/time:opacity-100" onClick={(e) => e.stopPropagation()}>
+                    <IconButton size="sm" label={`View transaction on ${explorerName(t.chain)}`} onClick={() => window.open(explorerTxUrl(t.chain, t.txHash), "_blank", "noopener")}>
+                      <ExternalLink aria-hidden className="size-3.5" />
+                    </IconButton>
+                  </span>
                 </span>
               </td>
               <td className="h-9 max-w-0 px-2"><AddressChip info={t.from.ownerAddress ?? t.from} showHash={false} /></td>

@@ -33,7 +33,7 @@ export function SearchResults({ q, onPick, activeIndex, grouped = false }: { q: 
       if (seen.has(k)) continue;
       seen.add(k);
       const info: AddressInfo = h.type === "address" ? h.info : { address: h.address, chain: h.chain, label: { id: h.id, name: h.name, source: "user" } };
-      items.push({ key: k, group: h.type === "label" ? "label" : "address", target: { type: "address", chain: h.chain, address: h.address, info }, render: <span className="flex min-w-0 items-center gap-2"><ChainBadge chain={h.chain} /><AddressChip info={info} /></span> });
+      items.push({ key: k, group: h.type === "label" ? "label" : "address", target: { type: "address", chain: h.chain, address: h.address, info }, render: <span className="flex min-w-0 items-center gap-2"><ChainBadge chain={h.chain} /><AddressChip info={info} showActions={false} /></span> });
     }
   }
   if (direct && !items.some((i) => i.target.type === "address" && i.target.address.toLowerCase() === term.toLowerCase())) {

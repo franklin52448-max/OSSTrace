@@ -12,6 +12,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Copy, ExternalLink, Pencil, Plus, Scaling, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as RMouseEvent } from "react";
+import { explorerAddressUrl, explorerName } from "../explorers.ts";
 import { api } from "../kit/api.ts";
 import { Button } from "../kit/Button.tsx";
 import { ErrorNotice } from "../kit/QueryState.tsx";
@@ -400,6 +401,7 @@ export function TracerPage({ id, readOnly: readOnlyProp = false }: { id: string;
     const items: MenuItem[] = [];
     if (node.kind === "address" && node.chain && node.address) {
       items.push({ kind: "item", label: "Open address page", icon: <ExternalLink />, onSelect: () => window.open(`#address/${node.chain}/${encodeURIComponent(node.address!)}`, "_blank", "noopener") });
+      items.push({ kind: "item", label: `View on ${explorerName(node.chain!)}`, icon: <ExternalLink />, onSelect: () => window.open(explorerAddressUrl(node.chain!, node.address!), "_blank", "noopener") });
       items.push({ kind: "item", label: "Copy address", icon: <Copy />, onSelect: () => void navigator.clipboard?.writeText(node.address!).then(() => toast.success("Address copied"), () => toast.error("Clipboard is blocked")) });
     }
     if (readOnly) return items;

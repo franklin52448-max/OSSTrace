@@ -231,7 +231,17 @@ const userFacing = (e: unknown) => (e instanceof ApiErr || e instanceof Provider
 const chainSchema = z.enum(CHAINS as unknown as [Chain, ...Chain[]]);
 const chainJson = { type: "string", enum: [...CHAINS] };
 const nodeRef = z.string().min(1).max(160);
-const iso = z.string().max(40).regex(/^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:?\d{2})?)?$/, "must be an ISO-8601 date or timestamp");
+const iso = z.string().max(40).regex(/^\d{4}-\d{2}-\d{2}([T ][\d:.]+(Z|[+-]\d{2}:?\d{2})?)?$/, "must be an ISO-8601 date or timestamp");
+
+/** A time bound from the model as the instant it means. Date-only and zone-less forms are UTC
+ *  (Date.parse alone reads a zone-less time in the server's own time zone), a space separator is
+ *  read as "T", and a date-only *upper* bound covers that whole day: list_transfers says its bounds
+ *  are inclusive, and "timeLte: 2024-01-31" meaning 00:00 that day would drop all of the 31st. */
+function timeBound(s: string, end: boolean): string {
+  const t = s.trim().replace(" ", "T");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return end ? `${t}T23:59:59.999Z` : `${t}T00:00:00.000Z`;
+  return /(Z|[+-]\d{2}:?\d{2})$/.test(t) ? t : `${t}Z`;
+}
 
 const addNode = defineTool({
   name: "add_node",
@@ -485,8 +495,8 @@ const listTransfers = defineTool({
       sortDir: { type: "string", enum: ["asc", "desc"] },
       asset: { type: "string", description: "'native', a token contract/mint address, or a token symbol" },
       counterparty: { type: "string", description: "Only transfers with this address (same chain)" },
-      timeGte: { type: "string", description: "ISO-8601 date/time, inclusive" },
-      timeLte: { type: "string", description: "ISO-8601 date/time, inclusive" },
+      timeGte: { type: "string", description: "ISO-8601 date or date-time (UTC unless it has an offset), inclusive" },
+      timeLte: { type: "string", description: "ISO-8601 date or date-time (UTC unless it has an offset), inclusive: a bare date includes that whole day" },
       timeLast: { type: "string", enum: ["1h", "12h", "1d", "7d", "30d", "90d", "1y", "all"] },
       usdGte: { type: "number", minimum: 0 },
       usdLte: { type: "number", minimum: 0 },
@@ -514,6 +524,8 @@ const listTransfers = defineTool({
     .strict(),
   async run(env, q) {
     const a = addrArg(q.chain, q.address);
+    const timeGte = q.timeGte ? timeBound(q.timeGte, false) : undefined;
+    const timeLte = q.timeLte ? timeBound(q.timeLte, true) : undefined;
     const cp = q.counterparty ? addrArg(q.chain, q.counterparty) : null;
     let tokens: string[] = [];
     let symbolNote: string | null = null;
@@ -524,7 +536,7 @@ const listTransfers = defineTool({
       else {
         // A symbol: resolve it to the real token ids this address has moved. Symbols aren't unique
         // and anyone can deploy a token called "USDC", so every match is used and the model is told.
-        const w = windowOf({ timeLast: q.timeLast, timeGte: q.timeGte, timeLte: q.timeLte });
+        const w = windowOf({ timeLast: q.timeLast, timeGte, timeLte });
         try {
           await syncAll(env.ctx, [a], w.from, { anon: !env.userId, maxRounds: w.from === null ? 0 : undefined });
         } catch {
@@ -554,8 +566,8 @@ const listTransfers = defineTool({
       sortKey: q.sortBy,
       sortDir: q.sortDir,
       limit: q.limit,
-      ...(q.timeGte ? { timeGte: q.timeGte } : {}),
-      ...(q.timeLte ? { timeLte: q.timeLte } : {}),
+      ...(timeGte ? { timeGte } : {}),
+      ...(timeLte ? { timeLte } : {}),
       ...(q.timeLast ? { timeLast: q.timeLast } : {}),
       ...(q.usdGte !== undefined ? { usdGte: q.usdGte } : {}),
       ...(q.usdLte !== undefined ? { usdLte: q.usdLte } : {}),

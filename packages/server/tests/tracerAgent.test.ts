@@ -461,6 +461,35 @@ describe("tracer agent", () => {
     expect(((await c.get(`/api/traces/${id}`)).json() as Trace).nodes.some((n) => n.chain === "base")).toBe(false);
   });
 
+  it("list_transfers: a date-only timeLte includes that whole day, and zone-less times are UTC whatever the server's time zone", async () => {
+    const day = new Date((base - 86400) * 1000).toISOString().slice(0, 10);
+    const at = Date.parse(`${day}T23:30:00Z`) / 1000; // late in the day, so "until 00:00" would miss it
+    await setup([
+      {
+        tools: [
+          { name: "list_transfers", args: { chain: "ethereum", address: ETH_A, timeGte: day, timeLte: day } },
+          { name: "list_transfers", args: { chain: "ethereum", address: ETH_A, timeGte: `${day}T23:00:00`, timeLte: `${day} 23:45` } },
+          { name: "list_transfers", args: { chain: "ethereum", address: ETH_A, timeGte: `${day}T23:40:00Z` } },
+        ],
+      },
+      { content: "ok" },
+    ]);
+    t.eth.add([ethTransfer(ETH_B, ETH_A, at)]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const tz = process.env.TZ;
+    process.env.TZ = "America/New_York"; // a server not on UTC must not shift a zone-less bound by its own offset
+    let res: TracerAgentChatResponse;
+    try {
+      res = (await c.post("/api/tracer-agent/chat", { docId: id, message: `what came in on ${day}?` })).json() as TracerAgentChatResponse;
+    } finally {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+    }
+    const counts = res.toolCalls.map((x) => (x.result as { transfers?: unknown[]; error?: string }).transfers?.length ?? (x.result as { error?: string }).error);
+    expect(counts).toEqual([1, 1, 0]);
+  });
+
   it("rename / annotate / remove act on this doc's real node ids only", async () => {
     await setup([
       { tools: [{ name: "get_doc_state", args: {} }] },

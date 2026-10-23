@@ -12,9 +12,14 @@ to keep that true as the project grows, not to slow anyone down for its own sake
    [ADR 0004](docs/adr/0004-label-trust-tiers-and-private-labels.md) for why. Public sanctions
    lists, public post-incident reports, public protocol disclosures, and this project's own
    community-contribution pipeline are the legitimate ways to grow coverage.
-3. **This project is read-only / observational.** It watches chains; it never signs or sends a
-   transaction. A feature that needs wallet-signing or fund movement is a different kind of tool
-   and doesn't belong here.
+3. **This project never custodies or moves funds itself, and never sends a transaction on a
+   user's behalf.** Narrowed 2026-10-23 from "never signs or sends a transaction" — that was
+   written before wallet sign-in (Phantom/MetaMask) became the auth system: a user signing a
+   *message* to prove address ownership (no transaction, no funds, nothing sent) is now core to
+   the whole product and does belong here. The rule that's still absolute: the project itself never
+   holds, moves, or has custody of anyone's funds — bounty "deposits" are a user sending their own
+   funds, from their own wallet, to a public address, which this project only watches and verifies
+   on-chain, never touches directly (see ADR 0020).
 4. **No mock/fake/placeholder data presented as real**, ever — not even temporarily "to get the
    UI working." If something isn't built yet, say so in the feature's own README. A cosmetic
    stand-in that looks real is worse than an honest "not built yet."

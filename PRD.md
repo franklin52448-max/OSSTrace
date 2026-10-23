@@ -1,7 +1,12 @@
 # Product Requirements Document: OSSTrace
 
-**Status:** Early development, local-only, not yet pushed to GitHub
-**Last updated:** 2026-10-21
+**Status:** Written as the pre-launch plan while the project was still local-only. It's since been
+pushed, deployed, and iterated on live (github.com/OpenTraceIntelligence/OSSTrace,
+osstrace.com / opensourcetrace.org) — several specifics below (notably §8's accounts/auth design
+and §10's "GitHub home" open question) have since changed or been resolved; corrected inline
+rather than silently rewritten, since this document is also the record of what was originally
+planned. For current feature status, see README.md's own status table, which is kept live.
+**Last updated:** 2026-10-21 (original); auth/accounts section corrected 2026-10-23
 **Document owner:** the operator
 
 ---
@@ -31,8 +36,7 @@ The problem this solves has two layers:
 - **Read-only / observational, never custodial or transactional.** The project watches chains; it never signs or sends a transaction. A feature that requires wallet-signing or moving funds is explicitly out of scope — it's "a different kind of tool" (FEATURE_GUIDELINES.md).
 - **No mock, fake, or placeholder data presented as real, ever — not even temporarily.** If a capability isn't built, it is disclosed as not-built in the relevant README, never faked behind a working-looking UI.
 - **Not a replica of Arkham's name, branding, or UI.** Independent build of the same category of tool. Visual identity/branding is explicitly undecided and out of scope for this document (the operator is handling that separately).
-- **Self-attested wallet ownership and private per-user labels are designed but deliberately not being built yet** — they require real signature-proof security work and a real accounts system, each treated as its own future scope, not squeezed in now.
-- **No accounts/auth system exists yet**, and nothing requiring it (moderation, private labels, self-attestation) is in scope until that prerequisite is built.
+- *(Superseded 2026-10-23 — kept for historical record, see §8/§10):* this originally read "self-attested wallet ownership and private per-user labels are designed but deliberately not being built yet... require real signature-proof security work and a real accounts system" and "no accounts/auth system exists yet." An accounts/auth system now exists, built as wallet sign-in (Phantom/MetaMask signature proof) rather than the originally-planned email/password system — see §8 for what changed and why.
 
 ## 4. Target Users
 
@@ -53,7 +57,7 @@ OSSTrace is a **plugin-shaped monorepo**, organized so that every new capability
 
 The unifying design discipline: **every package carries its own `README.md`** stating what it is, how it plugs into the rest, and how to extend it — explicitly so no contributor (human or agent) has to read a single mega-README, or the rest of the codebase, before making a focused, safe change.
 
-## 6. Feature Inventory (Status as of 2026-10-21, from README.md)
+## 6. Feature Inventory (Status as of 2026-10-21, from README.md — since superseded; see README.md's own status table for what's current, this snapshot is kept for historical reference only)
 
 | Feature | Status |
 |---|:---:|
@@ -107,7 +111,7 @@ Three tiers are planned, two of which are intended to ship first:
 
 **Private labels** (implemented in `packages/features/private-labels/`, with a panel in the web UI): any signed-in user can label an address for themselves only, never shown to anyone else, with no source requirement since it's not a public claim. This explicitly mirrors Arkham's own private-by-default custom-label model, identified as reasonable prior art worth reusing rather than reinventing differently for no reason. A later "share" action could promote a private label into a public Community submission, which would then need a real source to pass review.
 
-**Shared prerequisite:** both Confirmed-tier moderation and private labels require a real accounts/auth system. That now exists (`packages/features/accounts/`, ADR 0006): self-hosted email + argon2id passwords, opaque server-side sessions, and `user` < `moderator` < `admin` roles. How moderation is granted is resolved there: the operator promotes the first admin from the command line (never over HTTP), and admins then grant `moderator` to others. Both the Community/Confirmed tiers and private labels are now built on top of this. Moderators can't review their own submissions.
+**Shared prerequisite, corrected 2026-10-23:** both Confirmed-tier moderation and private labels require a real accounts/auth system. The accounts system originally built here — self-hosted email + argon2id passwords, opaque server-side sessions, `user` < `moderator` < `admin` roles (`packages/features/accounts/`, ADR 0006) — was later replaced entirely by wallet sign-in (Phantom/MetaMask; `packages/server/src/auth/wallet.ts`): a user is now a `(chain, walletAddress)` pair, there is no password anywhere, and the `moderator`/`admin` role tiers no longer exist. The Confirmed-tier moderation workflow this section describes was built on top of the old accounts system and was removed along with it — there's no replacement moderation concept today. Private labels still exist and now authenticate via the wallet session instead of the old accounts one. ADR 0006 is kept as a historical record of a design that was tried and reversed, not current.
 
 ## 9. Success Criteria
 
@@ -124,11 +128,11 @@ No numeric targets (addresses labeled, chains supported, users served, uptime, l
 
 ## 10. Open Questions / What's Undecided
 
-- **GitHub home.** The project is currently 100% local; nothing has been pushed. The operator is setting up a dedicated GitHub account for this project (separate from other accounts) and will provide it later. Until then, there is no public repository, no public contribution pipeline, and no way for outside contributors to actually participate yet.
+- **GitHub home — resolved 2026-10-23.** Was: "the project is currently 100% local; nothing has been pushed." Now: github.com/OpenTraceIntelligence/OSSTrace, a dedicated account for this project, deployed to osstrace.com / opensourcetrace.org.
 - **Branding/visual identity.** Explicitly not decided in these documents. The operator is getting help from a friend on this separately. No logo, tagline, or visual identity should be invented or assumed by anyone working on this project in the meantime — the name "OSSTrace" is the only settled identity element.
-- **Moderation governance.** *How* moderator authority is granted is decided (ADR 0006: operator CLI creates the first admin; admins grant moderators). *Who* should be a moderator — written criteria, removal, conflicts of interest — is still open, and deferred until there's a contributor community to write that policy with.
-- **Accounts/auth hardening before public use.** The accounts system exists (ADR 0006), but email verification, password reset, login rate limiting and OAuth sign-in are deliberately deferred; the first two need outbound email, the third depends on the (undecided) deployment setup.
-- **Self-attestation (signature-proof wallet ownership).** Deliberately deferred as its own future security-design effort; no design work has started beyond naming it as tier 3 of the trust model.
+- **Moderation governance — moot as of 2026-10-23.** This question (how moderator authority is granted, who should hold it) assumed the accounts/moderation system in §8 would still exist; it doesn't. No role-based moderation exists today, so this question has no current subject.
+- **Accounts/auth hardening before public use — superseded 2026-10-23.** The email/password accounts system this referred to (ADR 0006) was replaced by wallet sign-in; see §8. Wallet auth has its own, different hardening surface (e.g. disambiguating which injected wallet provider responds when more than one extension is installed) not covered by this document.
+- **Self-attestation (signature-proof wallet ownership) — effectively done, by a different route than planned.** This was deferred specifically as its own future security-design effort, separate from accounts. What actually shipped instead is wallet sign-in as the *entire* auth system (not an add-on to email/password accounts): every user already proves control of their address by signature to use the product at all, which satisfies what this item was asking for, just via a different design path than originally scoped.
 - **Which future label sources are ingested next, and in what order.** ADR 0005 names categories (more sanctions lists — UK OFSI, EU, UN, Canada's SEMA; GitHub-published open exchange/protocol address lists; public security-firm incident reports from firms like CertiK/SlowMist/PeckShield) but does not commit to a specific next source or sequence.
 - **How to judge a borderline label source.** ADR 0005 flags that a future judgment call will be needed on whether some GitHub-published address list is itself an indirect copy of Arkham-originated data (out of bounds) versus genuinely independent and public (in bounds) — the test is stated (where the data originates, not where the file was found) but no process for applying it yet exists.
 - **Deployment story.** No hosting/deployment plan exists for either the Explorer API, the background indexer as a long-running process, or the web UI's static build — all currently run as local dev-mode processes/scripts only.

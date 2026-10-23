@@ -32,7 +32,12 @@ See [`packages/chains/README.md`](packages/chains/README.md) for the exact steps
 
 ## Adding a feature
 
-See [`packages/features/README.md`](packages/features/README.md).
+See [`packages/features/README.md`](packages/features/README.md) for the original
+standalone-service plugin pattern it describes. **As of ADR 0022 (2026-10-23), the live site's
+actual backend is one unified server, `packages/server`** — a new feature today is a new route
+module under `packages/server/src/routes/`, consumed by `packages/web`, not a new standalone
+package under `packages/features/`. See [`ARCHITECTURE.md`](ARCHITECTURE.md)'s Layout section for
+the current structure before starting.
 
 ## Adding or correcting label data
 

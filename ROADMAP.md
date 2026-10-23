@@ -36,8 +36,12 @@ folders, separate agents, same plugin architecture that made this possible in th
   - [x] Implement as its own plugin-shaped package, same pattern as everything else
         (`packages/features/accounts/`)
   - [x] Real tests, a README, and an ADR recording the design decision
-  - [ ] Before any public deployment: login rate limiting, email verification + password reset
-        (deferred in ADR 0006 — not needed by Wave 2, needed by real users)
+  - [ ] ~~Before any public deployment: login rate limiting, email verification + password reset
+        (deferred in ADR 0006 — not needed by Wave 2, needed by real users)~~ **Moot — this whole
+        system (and its `user`/`moderator`/`admin` role tiers) was replaced wholesale by wallet
+        sign-in (Phantom/MetaMask, `packages/server/src/auth/wallet.ts`): a user is a
+        `(chain, walletAddress)` pair, no password or email exists to rate-limit/verify/reset.
+        ADR 0006 stands as a historical record of a design that shipped and was later reversed.**
 - [ ] **More label sources** (ADR 0005 — grows the actual mission, doesn't block on anything)
   - [x] UK OFSI sanctions list ingestion script (same shape as `scripts/ingest-ofac-sdn.ts`) —
         `scripts/ingest-uk-sanctions.ts`; reads the UK Sanctions List, which replaced OFSI's
@@ -59,7 +63,10 @@ folders, separate agents, same plugin architecture that made this possible in th
       moderation workflow, wire a "confirmed" badge into the web UI — done in
       `packages/features/community-labels/` + the web UI's login, "Suggest a label" and Moderation
       tab; design in [ADR 0007](docs/adr/0007-community-label-submissions-and-review.md)
-      (ingested labels carry no `reviewStatus`; moderators can't review their own submissions)
+      (ingested labels carry no `reviewStatus`; moderators can't review their own submissions).
+      **Since un-built:** the Confirmed-tier moderation workflow and the web UI's Moderation tab
+      were both deleted when the `moderator` role went away with the old accounts system (see
+      Wave 1's accounts item above) — no replacement review concept exists today.
   - [ ] Before any public deployment: rate limiting on submissions (ADR 0007 "Deferred")
 - [x] **Private labels**: per-user, unshared, no source requirement (mirrors Arkham's own
       private-by-default model per ADR 0004) — `packages/features/private-labels/` (API +
@@ -142,22 +149,26 @@ folders, separate agents, same plugin architecture that made this possible in th
 **The idea:** a feature request shouldn't require the person who wants it to be able to build it.
 Any user — technical or not — opens a bounty: a written-up feature spec (what it does, how it
 should behave, what "done" looks like) and their own stated reward. A public board lists open
-bounties. Anyone submits a PR against one; a moderator records which submission wins.
+bounties. Anyone submits a PR against one; the bounty's own opener records which submission wins
+(not a moderator — see Wave 1's accounts item, that role no longer exists).
 
-- [x] **The board itself: live** (`packages/features/bounties/`,
-      [ADR 0009](docs/adr/0009-bounty-program-v1-is-tracking-only.md)) — open/list/get a bounty,
-      submit a PR against one, a moderator claims the winner, the opener or a moderator cancels.
-      A real web UI tab (`packages/web/src/BountiesView.tsx`). Real tests throughout.
+- [x] **The board itself: live** — moved from the original standalone `packages/features/bounties/`
+      to the unified server, `packages/server/src/routes/bounties.ts`
+      ([ADR 0009](docs/adr/0009-bounty-program-v1-is-tracking-only.md)) — open/list/get a bounty,
+      submit a PR against one. **Changed from the original design:** there's no `moderator` role
+      anymore (see Wave 1's accounts item), so the bounty's own **opener** claims the winner and
+      cancels, not a moderator. A real web UI tab (`packages/web/src/BountiesView.tsx`). Real tests
+      throughout.
   - [x] **The funding/custody question is resolved for v1 by scoping it out, not deferred
         forever.** ADR 0009: this system never holds or moves a reward — `reward` is the poster's
-        own free-text claim, and payout happens off-platform after a moderator records the claim.
+        own free-text claim, and payout happens off-platform after the opener records the claim.
         This directly avoids the custody conflict with `PRD.md`'s non-goal, rather than resolving
         it the way that non-goal would otherwise require (a real token + escrow design).
   - [ ] **A real token + escrow system, if this project ever builds one, is new scope** needing
         its own ADR — not an extension of ADR 0009. Still fully undecided: whether this ever
         happens, what token, and how a payout would be verified on-chain.
   - [ ] No rate limiting on opening bounties or submitting PRs; no automatic PR-status checking;
-        no structured dispute process beyond a moderator's judgment call on which submission wins.
+        no structured dispute process beyond the opener's own judgment call on which submission wins.
 - [x] **First bounty posted:** an AI agent that answers real on-chain questions in plain language
       by actually calling this project's own tools — not by guessing. Example: *"is wallet A
       connected to wallet B?"* / *"did wallet A send wallet B more than $100 in USDC within the

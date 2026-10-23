@@ -63,6 +63,13 @@ Trust, in this project, isn't a feeling — it's a structure, and the structure 
 
 Alongside that: **private labels**, mirroring the one piece of Arkham's own model worth borrowing honestly — a label you add that's visible only to you, with no sourcing requirement, because it's not a public claim. Both tiers need real user accounts, which don't exist yet either. This is written down as a real, sequenced plan, not a feature flag someone forgot to flip.
 
+*Update, 2026-10-23 — what actually happened since the paragraph above was written:* the "Confirmed"
+tier and its moderator role were built, then deleted. Self-attestation shipped, but not as its own
+bolt-on tier — it became the whole auth model instead: every user now proves control of their
+address by wallet signature just to use the product at all (Phantom/MetaMask sign-in replacing the
+originally-planned email/password accounts system). Private labels still exist, now authenticated
+via that wallet session. There's no moderation concept of any kind today.
+
 The throughline across all of it: a claim this project shows you should always be exactly as trustworthy as it looks, never more, never less.
 
 ## Who this is for
@@ -78,3 +85,13 @@ Ethereum and Solana chain adapters work against real mainnet RPC — real balanc
 The Visualizer, the Tracer, risk scoring, case management, accounts and auth, the label moderation workflow, and every chain beyond these first two: not built. Not hidden, not implied, not "coming soon" — just genuinely not built yet, tracked honestly in the README's own status table.
 
 It's early. That's fine to say plainly, because the two rules this project is built on don't need the project to be big to be true — they need it to be real. Today, it is.
+
+*Update, 2026-10-23:* "today" above describes the project's first day. It's no longer that day —
+the project has since launched publicly (github.com/OpenTraceIntelligence/OSSTrace,
+osstrace.com / opensourcetrace.org), and most of what this paragraph called "not built" — the
+Visualizer, Tracer, risk scoring, and an accounts/auth system — has since been built. Case
+management was built and then retired from the live site. The accounts/auth system that was built
+was later replaced entirely by wallet sign-in, and the label moderation workflow built alongside
+it was removed along with it. The two rules this section is really about — real sourcing, real
+extensibility — haven't changed; what's built on top of them has. See README.md's status table for
+what's current rather than treating this paragraph as live.

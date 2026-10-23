@@ -9,6 +9,10 @@ exists to make that true.
 
 ## Layout
 
+**Updated 2026-10-23 — this section described the architecture as originally planned (each feature
+as its own standalone service). That's no longer what the live site runs on; see the note below
+the tree.**
+
 ```
 osstrace/
 ├── packages/
@@ -16,16 +20,42 @@ osstrace/
 │   ├── chains/
 │   │   ├── ethereum/      implements ChainAdapter for Ethereum
 │   │   └── solana/        implements ChainAdapter for Solana
+│   ├── contract/          @osstrace/contract — shared types/schemas between packages/server and
+│   │                      packages/web (requests, responses, the Chain union, etc.)
+│   ├── server/            @osstrace/server (ADR 0022) — the ONE backend packages/web actually
+│   │                      talks to today: wallet sign-in (auth/wallet.ts), addresses/balances/
+│   │                      transfers, alerts, labels, traces, bounties — all routes under
+│   │                      routes/. Supersedes the standalone per-feature services below for
+│   │                      everything the live site uses.
 │   ├── features/
-│   │   ├── explorer/      the address/entity lookup API — consumes core + chains
-│   │   ├── accounts/      user accounts, sessions, roles (ADR 0006) — other features depend on it
-│   │   ├── private-labels/ per-user labels only their owner sees (ADR 0004) — consumes accounts
-│   │   ├── community-labels/  sourced label submissions + moderator review (ADR 0007)
-│   │   ├── case-management/   per-user private investigation cases (ADR 0011) — consumes accounts
-│   │   ├── visualizer/    one-hop transaction graph API — consumes core + chains
-│   │   ├── tracer/        multi-hop tracing (ADR 0008) — builds on visualizer's edge resolution
-│   │   └── risk-scoring/  sanctions-exposure risk score (ADR 0010) — builds on tracer + the label store
-│   └── web/                minimal React UI — consumes the Explorer + Visualizer APIs over HTTP
+│   │   ├── explorer/      the ORIGINAL standalone address-lookup service. The live site's
+│   │   │                  Explorer view now calls packages/server instead — this package may
+│   │   │                  still exist on disk and/or have real test coverage; check its own
+│   │   │                  README and this repo's current state before assuming it's dead code.
+│   │   ├── accounts/      the ORIGINAL email+password accounts/roles service (ADR 0006).
+│   │   │                  Replaced entirely by packages/server's wallet-based auth — nothing on
+│   │   │                  the live site uses this anymore.
+│   │   ├── private-labels/ ORIGINAL standalone private-labels service (ADR 0004) — consumed the
+│   │   │                  old accounts service above. May still be test-covered; check current
+│   │   │                  state before assuming dead.
+│   │   ├── community-labels/  ORIGINAL standalone label-submission + moderator-review service
+│   │   │                  (ADR 0007). The moderator-review half of this has no replacement
+│   │   │                  anywhere — role-based moderation doesn't exist in the current system.
+│   │   ├── case-management/   ORIGINAL standalone cases service (ADR 0011) — Case Management was
+│   │   │                  retired from the live site's nav/home page separately from this
+│   │   │                  session's changes.
+│   │   ├── visualizer/    ORIGINAL standalone one-hop graph service — the live site's Visualizer
+│   │   │                  is now packages/web/src/visualizer/, calling packages/server.
+│   │   ├── tracer/        ORIGINAL standalone multi-hop tracing service (ADR 0008) — the live
+│   │   │                  site's Tracer is now packages/web/src/tracer/, its own investigation
+│   │   │                  canvas, calling packages/server.
+│   │   └── risk-scoring/  ORIGINAL standalone risk-score service (ADR 0010) — the live site's
+│   │                      risk card comes through packages/web/src/RiskPanel.tsx instead.
+│   │   (a `packages/features/bounties/` also existed here; it's been deleted — bounties now
+│   │   lives entirely in packages/server/src/routes/bounties.ts.)
+│   └── web/                the real React UI — talks to packages/server over HTTP
+│                            (packages/web/src/kit/api.ts), not the Explorer/Visualizer APIs this
+│                            paragraph used to describe.
 ├── data/
 │   └── labels/            seed label data, each entry sourced and dated
 ├── scripts/
@@ -34,6 +64,17 @@ osstrace/
 │   └── ingest-safe-deployments.ts      Safe's official deployments → data/labels/safe-deployments.json
 └── docs/adr/               durable architecture decisions and why they were made
 ```
+
+**Why the change:** the project started as one independent standalone service per feature (the
+plugin-architecture bet described below). In practice, that meant every feature needed its own
+server process, its own port, and ran into real duplicated-auth and cross-origin wiring problems
+as features that depended on each other (private labels, moderation, cases — all needing
+accounts) multiplied. ADR 0022 consolidated the actual live backend into one unified server with
+one auth system (now wallet-based) and one set of routes, while keeping the same plugin discipline
+*within* that server (routes/, chain/, auth/ as clean boundaries) rather than across OS processes.
+The original standalone packages under `packages/features/` aren't necessarily deleted — some are
+kept specifically for their own real test coverage — but they are not what a visitor to the live
+site talks to.
 
 ## The core data model
 
@@ -81,24 +122,33 @@ configured) — callers can tell "there are no transactions" apart from "we coul
 
 ### Adding a new chain
 
+The steps below (1-2, 4) describe the original `ChainAdapter`/`packages/chains/` plugin boundary,
+which is still real and still how chain-specific logic is isolated. Step 3 is corrected for the
+unified server: the live site wires chains as a `Record<Chain, ChainProvider>` constructed in
+`packages/server/src/app.ts` (the `ChainProvider` interface itself is
+`packages/server/src/chain/types.ts`), not a registry inside a standalone Explorer service —
+confirm against those two files, this section wasn't re-verified in full detail, only the
+registration point.
+
 1. Create `packages/chains/<chain-name>/`.
 2. Implement `ChainAdapter` against real data for that chain — no mocked responses.
-3. Register it in `packages/features/explorer/src/registry.ts`.
+3. Wire it into `packages/server/src/app.ts`'s `providers` map (not
+   `packages/features/explorer/src/registry.ts`, which belonged to the retired standalone Explorer
+   service).
 4. Write a `README.md` in your chain folder: what RPC/API it talks to, what needs an API key (if
    anything), and what it can't do yet.
 
-Nothing outside your folder and the one-line registry entry needs to change.
-
 ## The Explorer feature
 
-`packages/features/explorer` is the first feature module. Given a chain + address, it:
-1. Asks the matching `ChainAdapter` for balance + recent transactions.
-2. Asks the core label store for any `Label`/`Entity`/`Tag` on that address.
-3. Returns both together.
+**Updated 2026-10-23:** this section described `packages/features/explorer`, the original
+standalone service, as "the first feature module." The live site's Explorer view
+(`packages/web/src/explorer/`) now calls the unified `packages/server` instead — same basic shape
+(chain + address → balance + recent transactions + any label/tag), different implementation. The
+standalone package may still exist and/or be test-covered; it is not what production traffic hits.
 
-Every later feature (Visualizer, Tracer, Risk Scoring, Case Management) is meant to follow the
-same shape: its own folder, consuming `core` + `chains`, never reaching into another feature's
-internals.
+Every later feature (Visualizer, Tracer, Risk Scoring, Case Management, Bounties, Alerts, Labels)
+follows the same consuming shape today, just as routes on `packages/server` rather than as their
+own standalone processes — see the Layout section above for why that changed (ADR 0022).
 
 ## Why not one shared "god" backend file
 

@@ -1,9 +1,15 @@
 // Real wallet-connect + on-chain deposits for a bounty's stated reward (ADR 0020). Nothing here
 // is trusted: every signature/hash this panel submits is independently re-verified server-side
 // via real RPC before it's recorded. This still isn't escrow -- see the ADR.
+//
+// Bitcoin is deposit-only and paste-a-txid-only (ADR 0020 addendum): there's no browser
+// wallet-connect standard for it, so it appears in the paste form, the wallet list and the
+// deposit list, never in "connect a wallet and send". It's handled with local types/icons here
+// rather than by widening the shared ChainId/ChainSelect/ChainIcon, which drive the app-wide
+// address/chain picker where Bitcoin isn't a supported chain at all.
 import { useCallback, useEffect, useState } from "react";
 import type { ChainId } from "@osstrace/core";
-import type { BountyDeposit, BountyWallets } from "@osstrace/contract";
+import type { BountyDeposit, BountyWallets, DepositChain } from "@osstrace/contract";
 import { serverApiCall } from "./serverSession.ts";
 import { Loading, Notice } from "./ui.tsx";
 import { ChainIcon, ChainSelect } from "./ChainSelect.tsx";
@@ -23,17 +29,36 @@ type DepositAsset = BountyDeposit["asset"];
 type Deposit = BountyDeposit;
 type Wallets = BountyWallets;
 
-const NATIVE_SYMBOL: Record<ChainId, string> = { ethereum: "ETH", solana: "SOL" };
+const NATIVE_SYMBOL: Record<DepositChain, string> = { ethereum: "ETH", solana: "SOL", bitcoin: "BTC" };
+const CHAIN_NAME: Record<DepositChain, string> = { solana: "Solana", ethereum: "Ethereum", bitcoin: "Bitcoin" };
+const TX_REF_PLACEHOLDER: Record<DepositChain, string> = { solana: "Transaction signature", ethereum: "Transaction hash (0x…)", bitcoin: "Transaction ID (txid)" };
+/** Display/selection order everywhere in this panel. */
+const DEPOSIT_CHAINS: readonly DepositChain[] = ["solana", "ethereum", "bitcoin"];
+
+/** The shared icon for the two app-wide chains; a plain orange "₿" disc for Bitcoin -- an honest
+ *  generic mark, not an attempt at the exact brand artwork. */
+function DepositChainIcon({ chain, size = 14 }: { chain: DepositChain; size?: number }) {
+  if (chain !== "bitcoin") return <ChainIcon chain={chain} size={size} />;
+  return (
+    <span
+      aria-hidden="true"
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.72) }}
+      className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#F7931A] font-bold leading-none text-white"
+    >
+      ₿
+    </span>
+  );
+}
 
 function short(value: string, head = 6, tail = 4): string {
   return value.length > head + tail + 1 ? `${value.slice(0, head)}…${value.slice(-tail)}` : value;
 }
 
-function assetLabel(chain: ChainId, asset: DepositAsset): string {
+function assetLabel(chain: DepositChain, asset: DepositAsset): string {
   return asset === "native" ? NATIVE_SYMBOL[chain] : short(asset.contract, 6, 4);
 }
 
-function assetKey(chain: ChainId, asset: DepositAsset): string {
+function assetKey(chain: DepositChain, asset: DepositAsset): string {
   return `${chain}:${asset === "native" ? "native" : asset.contract}`;
 }
 
@@ -56,9 +81,9 @@ export default function DepositPanel({ bountyId, signedIn }: { bountyId: string;
     void loadDeposits();
   }, [loadDeposits]);
 
-  const configuredChains = wallets ? (Object.keys(wallets) as ChainId[]).filter((c) => wallets[c]) : [];
+  const configuredChains = wallets ? DEPOSIT_CHAINS.filter((c) => wallets[c]) : [];
 
-  const totals = new Map<string, { chain: ChainId; asset: DepositAsset; amounts: string[] }>();
+  const totals = new Map<string, { chain: DepositChain; asset: DepositAsset; amounts: string[] }>();
   for (const d of deposits ?? []) {
     const key = assetKey(d.chain, d.asset);
     const entry = totals.get(key) ?? { chain: d.chain, asset: d.asset, amounts: [] };
@@ -85,7 +110,7 @@ export default function DepositPanel({ bountyId, signedIn }: { bountyId: string;
           <div className="space-y-1.5 text-xs text-ink-faint">
             {configuredChains.map((chain) => (
               <div key={chain} className="flex items-center gap-2">
-                <ChainIcon chain={chain} size={14} />
+                <DepositChainIcon chain={chain} />
                 Send to <span className="hash text-ink-dim">{wallets[chain]}</span>
               </div>
             ))}
@@ -109,7 +134,7 @@ export default function DepositPanel({ bountyId, signedIn }: { bountyId: string;
               {deposits.map((d) => (
                 <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
                   <div className="flex min-w-0 items-center gap-2">
-                    <ChainIcon chain={d.chain} size={14} />
+                    <DepositChainIcon chain={d.chain} />
                     <span className="num text-ink">
                       {d.amount} {assetLabel(d.chain, d.asset)}
                     </span>
@@ -133,7 +158,9 @@ export default function DepositPanel({ bountyId, signedIn }: { bountyId: string;
 type AssetMode = "native" | "token";
 
 function FundForm({ bountyId, wallets, onRecorded }: { bountyId: string; wallets: Wallets; onRecorded: () => void }) {
+  // Only Solana/Ethereum can be sent from a connected browser wallet; Bitcoin is paste-only.
   const configured = (["solana", "ethereum"] as const).filter((c) => wallets[c]);
+  const pasteConfigured = DEPOSIT_CHAINS.filter((c) => wallets[c]);
   const [chain, setChain] = useState<ChainId>(configured[0] ?? "solana");
   const [assetMode, setAssetMode] = useState<AssetMode>("native");
   const [contract, setContract] = useState("");
@@ -142,7 +169,7 @@ function FundForm({ bountyId, wallets, onRecorded }: { bountyId: string; wallets
   const [busy, setBusy] = useState<"idle" | "connecting" | "sending" | "recording">("idle");
   const [error, setError] = useState<string | null>(null);
 
-  const [pasteChain, setPasteChain] = useState<ChainId>(configured[0] ?? "solana");
+  const [pasteChain, setPasteChain] = useState<DepositChain>(pasteConfigured[0] ?? "solana");
   const [pasteRef, setPasteRef] = useState("");
   const [pasteBusy, setPasteBusy] = useState(false);
   const [pasteError, setPasteError] = useState<string | null>(null);
@@ -218,57 +245,73 @@ function FundForm({ bountyId, wallets, onRecorded }: { bountyId: string; wallets
 
   return (
     <div className="space-y-5 border-t border-line pt-4">
-      <form onSubmit={connectAndSend} className="space-y-3">
-        <h3 className="text-sm font-medium text-ink">Connect a wallet and send</h3>
-        <div className="flex flex-wrap items-center gap-2">
-          <ChainSelect
-            value={chain}
-            onChange={(c) => {
-              setChain(c);
-              setAssetMode("native");
-              setContract("");
-            }}
-            small
-          />
-          <select value={assetMode} onChange={(e) => setAssetMode(e.target.value as AssetMode)} className="ctl h-9 text-sm">
-            <option value="native">{NATIVE_SYMBOL[chain]} (native)</option>
-            <option value="token">{chain === "solana" ? "SPL token" : "ERC-20 token"}</option>
-          </select>
-        </div>
-        {assetMode === "token" && (
-          <input
-            value={contract}
-            onChange={(e) => setContract(e.target.value)}
-            placeholder={chain === "solana" ? "Token mint address" : "Token contract address (0x…)"}
-            required
-            className="ctl hash w-full"
-          />
-        )}
-        <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount" required inputMode="decimal" className="ctl w-full" />
-        {chain === "solana" && (
-          <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Memo (optional, shown as a cross-check — not required)" maxLength={200} className="ctl w-full" />
-        )}
-        <p className="text-xs text-ink-faint">
-          Your wallet shows the real amount and destination before you approve — review it there. The signature is sent here and independently re-checked on-chain before anything is recorded.
-        </p>
-        {error && <Notice tone="danger">{error}</Notice>}
-        <button type="submit" disabled={sending} className="btn-accent">
-          {busy === "connecting" ? "Connecting wallet…" : busy === "sending" ? "Waiting for the wallet…" : busy === "recording" ? "Recording…" : "Connect & send"}
-        </button>
-      </form>
+      {configured.length > 0 && (
+        <form onSubmit={connectAndSend} className="space-y-3">
+          <h3 className="text-sm font-medium text-ink">Connect a wallet and send</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <ChainSelect
+              value={chain}
+              onChange={(c) => {
+                setChain(c);
+                setAssetMode("native");
+                setContract("");
+              }}
+              small
+            />
+            <select value={assetMode} onChange={(e) => setAssetMode(e.target.value as AssetMode)} className="ctl h-9 text-sm">
+              <option value="native">{NATIVE_SYMBOL[chain]} (native)</option>
+              <option value="token">{chain === "solana" ? "SPL token" : "ERC-20 token"}</option>
+            </select>
+          </div>
+          {assetMode === "token" && (
+            <input
+              value={contract}
+              onChange={(e) => setContract(e.target.value)}
+              placeholder={chain === "solana" ? "Token mint address" : "Token contract address (0x…)"}
+              required
+              className="ctl hash w-full"
+            />
+          )}
+          <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount" required inputMode="decimal" className="ctl w-full" />
+          {chain === "solana" && (
+            <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Memo (optional, shown as a cross-check — not required)" maxLength={200} className="ctl w-full" />
+          )}
+          <p className="text-xs text-ink-faint">
+            Your wallet shows the real amount and destination before you approve — review it there. The signature is sent here and independently re-checked on-chain before anything is recorded.
+          </p>
+          {error && <Notice tone="danger">{error}</Notice>}
+          <button type="submit" disabled={sending} className="btn-accent">
+            {busy === "connecting" ? "Connecting wallet…" : busy === "sending" ? "Waiting for the wallet…" : busy === "recording" ? "Recording…" : "Connect & send"}
+          </button>
+        </form>
+      )}
 
-      <form onSubmit={submitPasted} className="space-y-3 border-t border-line pt-4">
+      <form onSubmit={submitPasted} className={configured.length > 0 ? "space-y-3 border-t border-line pt-4" : "space-y-3"}>
         <h3 className="text-sm font-medium text-ink">Already sent it? Paste the reference</h3>
         <div className="flex flex-wrap items-center gap-2">
-          <ChainSelect value={pasteChain} onChange={setPasteChain} small />
+          <div className="flex items-center gap-2">
+            <DepositChainIcon chain={pasteChain} size={16} />
+            <select aria-label="Payment chain" value={pasteChain} onChange={(e) => setPasteChain(e.target.value as DepositChain)} className="ctl h-9 text-sm">
+              {pasteConfigured.map((c) => (
+                <option key={c} value={c}>
+                  {CHAIN_NAME[c]}
+                </option>
+              ))}
+            </select>
+          </div>
           <input
             value={pasteRef}
             onChange={(e) => setPasteRef(e.target.value)}
-            placeholder={pasteChain === "solana" ? "Transaction signature" : "Transaction hash (0x…)"}
+            placeholder={TX_REF_PLACEHOLDER[pasteChain]}
             required
             className="ctl hash min-w-0 flex-1"
           />
         </div>
+        {pasteChain === "bitcoin" && (
+          <p className="text-xs text-ink-faint">
+            Bitcoin can't be sent from this page — send from any wallet or exchange, then paste the txid here once it has at least one confirmation. Unlike SOL/ETH, a Bitcoin payment isn't matched to your signed-in wallet.
+          </p>
+        )}
         {pasteError && <Notice tone="danger">{pasteError}</Notice>}
         <button type="submit" disabled={pasteBusy} className="btn-outline">
           {pasteBusy ? "Verifying…" : "Verify & record"}

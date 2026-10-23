@@ -242,9 +242,16 @@ export type AlertLimits = { maxRules: number; maxTargetsPerRule: number; pollInt
 // is no separate moderator role now that accounts are wallet-based.
 export type BountyStatus = "open" | "claimed" | "cancelled";
 export type BountyAsset = "native" | { contract: string };
+/** The chains a bounty deposit can be verified on. Deliberately wider than the app-wide `Chain`
+ *  (which drives address lookup/tracing everywhere else): Bitcoin is accepted ONLY as a deposit
+ *  payment, verified by txid against the configured wallet -- OSSTrace doesn't index, label or
+ *  trace Bitcoin addresses, so it must never leak into `Chain`. A Bitcoin deposit has no
+ *  sender-ownership check (no BTC wallet-connect standard to sign in with, no single clean
+ *  "sender" per tx) -- its `fromAddress` is display-only, see server chain/deposits.ts. */
+export type DepositChain = Chain | "bitcoin";
 export type BountyDeposit = {
   id: string;
-  chain: Chain;
+  chain: DepositChain;
   asset: BountyAsset;
   amount: string;
   txRef: string;
@@ -274,15 +281,17 @@ export type Bounty = {
   deposits: BountyDeposit[];
 };
 export type CreateBounty = { title: string; description: string; reward: string };
-export type BountyWallets = { ethereum?: string; solana?: string };
+export type BountyWallets = { ethereum?: string; solana?: string; bitcoin?: string };
 // GET /api/bounties/wallets -> BountyWallets (public config; a chain missing means it's not configured)
 // GET /api/bounties -> Bounty[] (no auth -- "anyone can browse"); GET /api/bounties/:id -> Bounty
 // POST /api/bounties (CreateBounty) -> Bounty
 // POST /api/bounties/:id/submissions {prUrl, note?} -> BountySubmission (bounty must be "open")
 // POST /api/bounties/:id/claim {submissionId} -> Bounty (opener only)
 // POST /api/bounties/:id/cancel {reason} -> Bounty (opener only)
-// POST /api/bounties/:id/deposits {chain, txRef} -> BountyDeposit (any signed-in user; the real
-//   on-chain payment is independently verified server-side, not trusted from the request)
+// POST /api/bounties/:id/deposits {chain: DepositChain, txRef} -> BountyDeposit (any signed-in user; the
+//   real on-chain payment is independently verified server-side, not trusted from the request. For
+//   ethereum/solana the caller's own signed-in wallet must be the tx's sender; for bitcoin (paste-a-txid
+//   only) there is no sender check -- any signed-in user can record a verified payment to the wallet)
 
 export type HealthResponse = { ok: true; version: string; chains: ChainStatus[]; /** false when ALLOW_SIGNUP=false; clients treat undefined as true */ allowSignup?: boolean };
 // GET /api/health -> HealthResponse (no auth)

@@ -25,10 +25,14 @@ export type Config = {
    *  mode's Budget.preferIndexed); unset means that path just stays on the free RPC merge-cursor. */
   solscanApiKey: string | null;
   ethBlockscoutUrl: string;
+  /** Bitcoin bounty-deposit verification source (an Esplora-API block explorer, no key needed) --
+   *  Blockstream.info by default; mempool.space speaks the same API and can be swapped in via
+   *  ESPLORA_URL. Bitcoin is deposit-only here: nothing else in this server reads Bitcoin. */
+  esploraUrl: string;
   defillamaUrl: string;
   jupiterTokensUrl: string;
   /** Public wallet addresses bounty depositors pay into -- never a key this server holds (ADR 0020). */
-  depositWallets: { ethereum?: string; solana?: string };
+  depositWallets: { ethereum?: string; solana?: string; bitcoin?: string };
   /** Assets a bounty deposit may be verified in, beyond each chain's own native currency (always
    *  allowed) -- defaults to real USDC/USDT, extendable per-deployment via
    *  DEPOSIT_ALLOWED_TOKENS_ETHEREUM/_SOLANA (comma-separated, added to the defaults, never replacing
@@ -103,11 +107,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ethRpcUrl,
     solscanApiKey,
     ethBlockscoutUrl: (env.ETH_BLOCKSCOUT_URL ?? "https://eth.blockscout.com").replace(/\/$/, ""),
+    esploraUrl: (env.ESPLORA_URL ?? "https://blockstream.info").replace(/\/$/, ""),
     defillamaUrl: (env.DEFILLAMA_URL ?? "https://coins.llama.fi").replace(/\/$/, ""),
     jupiterTokensUrl: (env.JUPITER_TOKENS_URL ?? "https://lite-api.jup.ag/tokens/v2").replace(/\/$/, ""),
     depositWallets: {
       ...(env.DEPOSIT_WALLET_ETHEREUM ? { ethereum: env.DEPOSIT_WALLET_ETHEREUM.trim() } : {}),
       ...(env.DEPOSIT_WALLET_SOLANA ? { solana: env.DEPOSIT_WALLET_SOLANA.trim() } : {}),
+      ...(env.DEPOSIT_WALLET_BITCOIN ? { bitcoin: env.DEPOSIT_WALLET_BITCOIN.trim() } : {}),
     },
     depositAllowedTokens: {
       ethereum: new Set([

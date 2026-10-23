@@ -5,7 +5,7 @@ import nacl from "tweetnacl";
 import bs58 from "bs58";
 import { act, createElement, type ComponentType } from "react";
 import { window } from "./harness/env.ts";
-import { fill, getByPlaceholder } from "./harness/forms.ts";
+import { choose, fill, getByPlaceholder, getControl } from "./harness/forms.ts";
 import { cleanup, click, consoleErrors, getButton, render, text, waitFor } from "./harness/render.ts";
 import { startNewServer, type RunningNewServer } from "./harness/newServer.ts";
 
@@ -39,12 +39,13 @@ after(() => {
   globalThis.fetch = realFetch;
 });
 
-/** The outbound fetch the SERVER (not the test) uses to reach Solana RPC / Blockscout for deposit verification. */
-const depositMocks: { solTx?: unknown; bsTx?: unknown; bsTransfers?: unknown } = {};
+/** The outbound fetch the SERVER (not the test) uses to reach Solana RPC / Blockscout / Esplora for deposit verification. */
+const depositMocks: { solTx?: unknown; bsTx?: unknown; bsTransfers?: unknown; btcTx?: unknown } = {};
 function mockOutboundFetch(): typeof fetch {
   return (async (input: string | URL, init?: RequestInit) => {
     const url = String(input);
     if (init?.method === "POST") return new Response(JSON.stringify({ result: depositMocks.solTx ?? null }), { status: 200, headers: { "content-type": "application/json" } });
+    if (url.includes("/api/tx/")) return depositMocks.btcTx ? new Response(JSON.stringify(depositMocks.btcTx), { status: 200 }) : new Response("Transaction not found", { status: 404 });
     if (url.includes("/token-transfers")) return new Response(JSON.stringify(depositMocks.bsTransfers ?? { items: [] }), { status: 200 });
     if (url.includes("/api/v2/transactions/")) return new Response(JSON.stringify(depositMocks.bsTx ?? { status: null, value: "0", to: null, from: null }), { status: 200 });
     return new Response("not found", { status: 404 });
@@ -53,6 +54,7 @@ function mockOutboundFetch(): typeof fetch {
 
 const SOL_WALLET = "11111111111111111111111111111111";
 const ETH_WALLET = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+const BTC_WALLET = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
 
 function solanaKeypair(seed: string): { address: string; secretKey: Uint8Array } {
   const kp = nacl.sign.keyPair.fromSeed(createHash("sha256").update(seed).digest());
@@ -93,7 +95,7 @@ before(async () => {
     // testHooks: true also skips the per-IP wallet-verify throttle (routes/auth.ts) -- this file
     // does many real logins from one IP, which a real deployment's abuse guard would otherwise
     // (correctly) rate-limit.
-    configOverrides: { depositWallets: { ethereum: ETH_WALLET, solana: SOL_WALLET }, testHooks: true },
+    configOverrides: { depositWallets: { ethereum: ETH_WALLET, solana: SOL_WALLET, bitcoin: BTC_WALLET }, testHooks: true },
     fetchImpl: mockOutboundFetch(),
   });
   process.env["VITE_SERVER_URL"] = server.url;
@@ -110,6 +112,7 @@ beforeEach(() => {
   depositMocks.solTx = undefined;
   depositMocks.bsTx = undefined;
   depositMocks.bsTransfers = undefined;
+  depositMocks.btcTx = undefined;
 });
 afterEach(async () => {
   await cleanup(); // unmount first -- nothing left subscribed to warn about an un-act()-ed state change
@@ -269,6 +272,7 @@ test("Funding: shows the configured receiving wallets to everyone, with no depos
   await openRow("Funding display check");
   await waitFor(() => text().includes(SOL_WALLET), "the configured Solana wallet");
   assert.ok(text().includes(ETH_WALLET), "the configured Ethereum wallet is shown too");
+  assert.ok(text().includes(BTC_WALLET), "and the configured Bitcoin wallet");
   assert.ok(text().includes("No deposits recorded yet"));
   await backToBoard();
 });
@@ -339,4 +343,27 @@ test("Funding: a reference the verifier rejects shows the real server message an
   await click(getButton("Verify & record"));
   await waitFor(() => text().includes("doesn't pay the configured deposit wallet"), "the real wrong_wallet message");
   assert.ok(text().includes("No deposits recorded yet"), "nothing was recorded");
+});
+
+test("Funding: Bitcoin is paste-only -- picking it in the paste form asks for a txid and records a verified payment without any sender match", async () => {
+  await render(createElement(BountiesView));
+  await logInAs("funding-btc-opener");
+  await openBounty({ title: "Funding bitcoin check", description: ALPHA.description, reward: "backer-funded" });
+  depositMocks.btcTx = {
+    status: { confirmed: true },
+    vin: [{ prevout: { scriptpubkey_address: "bc1qsomeoneelsesinput0000000000000000000000" } }],
+    vout: [{ scriptpubkey_address: BTC_WALLET, value: 250_000 }],
+  };
+
+  // A Solana-account user, whose own wallet has nothing to do with the BTC payment.
+  await logInAs("funding-btc-depositor");
+  await openRow("Funding bitcoin check");
+  await click(await waitFor(() => (text().includes("Back this bounty") ? getButton("Back this bounty") : null), "the Back this bounty button"));
+  const chainPicker = getControl<HTMLSelectElement>("Payment chain");
+  assert.deepEqual([...chainPicker.options].map((o) => o.value), ["solana", "ethereum", "bitcoin"]);
+  await choose(chainPicker, "bitcoin");
+  assert.ok(text().includes("Bitcoin can't be sent from this page"), "the paste-only explanation");
+  await fill(getByPlaceholder("Transaction ID (txid)"), "ab".repeat(32));
+  await click(getButton("Verify & record"));
+  await waitFor(() => text().includes("0.0025 BTC"), "the recorded Bitcoin deposit's total");
 });

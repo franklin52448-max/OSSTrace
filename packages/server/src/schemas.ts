@@ -10,6 +10,9 @@ export function parse<S extends z.ZodTypeAny>(schema: S, data: unknown): z.outpu
 }
 
 export const chain = z.enum(["solana", "ethereum"]);
+/** Bounty deposits only (contract's `DepositChain`): Bitcoin is accepted as a deposit payment but is
+ *  never an address/trace/label chain, so it must not widen the shared `chain` enum above. */
+export const depositChain = z.enum(["solana", "ethereum", "bitcoin"]);
 const num = z.number().finite();
 const coord = num.min(-1e7).max(1e7);
 const iso = z.string().min(10).max(40).regex(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/, "must be an ISO-8601 UTC timestamp");

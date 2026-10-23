@@ -115,3 +115,23 @@ asset alongside the opener's own free-text `reward`; it never overwrites or pars
   program, its own ADR, its own security review before any mainnet deployment.
 - **A third chain** → its own verification function here, same pattern, cited real event/program
   identifiers, no generic "any chain" abstraction invented ahead of actually needing one.
+
+## Addendum (2026-10-23): Bitcoin, deposit-only
+
+Bitcoin is the "third chain" above, added for bounty deposits only — it is not an address
+lookup/trace/label chain anywhere else in the app (the shared `Chain` type stays Solana/Ethereum;
+deposits use a separate, wider `DepositChain`). `DEPOSIT_WALLET_BITCOIN` is the receiving address;
+`verifyBitcoinDeposit` in `packages/server/src/chain/deposits.ts` checks a pasted txid against a
+public Esplora-API explorer (`ESPLORA_URL`, Blockstream.info by default, no key): the tx must be
+confirmed in a block and have at least one output paying the configured address, and the amount is
+the sum of those outputs. There's no asset allowlist because base-layer Bitcoin has no fungible-token
+standard to fake a deposit with.
+
+The one deliberate difference from Solana/Ethereum: **no sender-ownership check.** There's no
+Bitcoin wallet-connect standard to sign in with, and a Bitcoin transaction has no single
+recoverable sender (many inputs, no ecrecover-style authority). So any signed-in user, on any
+chain's account, can record a verified BTC payment, and its `fromAddress` (the first input's
+previous-output address, when the explorer resolves it) is display-only. The cost is that someone
+watching the public wallet could attach another person's BTC payment to a bounty of their choosing;
+the one-tx-one-bounty rule in §4 still holds, so a payment can't be counted twice. The web UI only
+offers Bitcoin in the "paste the reference" form, never the connect-and-send one.

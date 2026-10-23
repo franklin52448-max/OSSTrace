@@ -1,20 +1,20 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { Bounty, BountyDeposit, BountySubmission } from "@osstrace/contract";
+import type { Bounty, BountyDeposit, BountySubmission, BountyWallets, DepositChain } from "@osstrace/contract";
 import { requireUser, type Ctx } from "../context.ts";
 import { HttpClient, budgetMs } from "../lib/http.ts";
-import { verifyEthereumDeposit, verifySolanaDeposit } from "../chain/deposits.ts";
+import { verifyBitcoinDeposit, verifyEthereumDeposit, verifySolanaDeposit, type DepositVerification } from "../chain/deposits.ts";
 import { normalizeAddress } from "../auth/wallet.ts";
 import { ApiErr, badRequest, conflict, forbidden, notFound } from "../lib/errors.ts";
 import { nowIso } from "../lib/time.ts";
-import { chain, parse } from "../schemas.ts";
+import { depositChain, parse } from "../schemas.ts";
 
 const createBody = z.object({ title: z.string().trim().min(1).max(200), description: z.string().trim().min(1).max(20_000), reward: z.string().trim().min(1).max(300) }).strict();
 const submitBody = z.object({ prUrl: z.string().trim().min(1).max(500).regex(/^https?:\/\/\S+$/, "prUrl must be a full http(s) URL"), note: z.string().trim().max(2000).default("") }).strict();
 const claimBody = z.object({ submissionId: z.string().min(1).max(64) }).strict();
 const cancelBody = z.object({ reason: z.string().trim().min(1).max(2000) }).strict();
-const depositBody = z.object({ chain, txRef: z.string().trim().min(1).max(200) }).strict();
+const depositBody = z.object({ chain: depositChain, txRef: z.string().trim().min(1).max(200) }).strict();
 
 type BountyRow = {
   id: string;
@@ -33,7 +33,7 @@ type BountyRow = {
   cancellation_reason: string | null;
 };
 type SubmissionRow = { id: string; bounty_id: string; submitted_by: string; pr_url: string; note: string; submitted_at: string; outcome: "pending" | "accepted" | "rejected" };
-type DepositRow = { id: string; bounty_id: string; chain: "ethereum" | "solana"; asset_contract: string | null; amount: string; tx_ref: string; from_address: string; to_wallet: string; memo: string | null; recorded_by: string; recorded_at: string };
+type DepositRow = { id: string; bounty_id: string; chain: DepositChain; asset_contract: string | null; amount: string; tx_ref: string; from_address: string; to_wallet: string; memo: string | null; recorded_by: string; recorded_at: string };
 
 const toSubmission = (r: SubmissionRow): BountySubmission => ({ id: r.id, bountyId: r.bounty_id, submittedBy: r.submitted_by, prUrl: r.pr_url, note: r.note, submittedAt: r.submitted_at, outcome: r.outcome });
 const toDeposit = (r: DepositRow): BountyDeposit => ({
@@ -83,7 +83,7 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
   }
 
   // The public wallets this server will check a deposit against (never a key it holds).
-  app.get("/api/bounties/wallets", async (): Promise<{ ethereum?: string; solana?: string }> => {
+  app.get("/api/bounties/wallets", async (): Promise<BountyWallets> => {
     return config.depositWallets;
   });
 
@@ -173,23 +173,34 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
     // An Ethereum tx hash is hex and case-insensitive on-chain (0xABC... and 0xabc... are the same
     // real transaction) -- lowercase it before every lookup/insert so the real sender can't get one
     // real payment counted multiple times by resubmitting it with different letter-casing. Solana
-    // signatures are base58, already case-sensitive with one canonical form, so left as-is.
-    const txRef = body.chain === "ethereum" ? body.txRef.toLowerCase() : body.txRef;
+    // signatures are base58, already case-sensitive with one canonical form, so left as-is. A Bitcoin
+    // txid is hex with the same case-insensitivity, so it's lowercased too (also the form Esplora
+    // serves it in).
+    const txRef = body.chain === "solana" ? body.txRef : body.txRef.toLowerCase();
     if (db.get("SELECT 1 FROM bounty_deposits WHERE chain = ? AND tx_ref = ?", body.chain, txRef)) throw conflict("This payment has already been recorded");
 
     const budget = budgetMs(8000);
-    const verified =
-      body.chain === "solana"
-        ? await verifySolanaDeposit(http, config.solanaRpcUrl, txRef, wallet, config.depositAllowedTokens.solana, budget)
-        : await verifyEthereumDeposit(http, config.ethBlockscoutUrl, config.ethRpcUrl, txRef, wallet, config.depositAllowedTokens.ethereum, budget);
+    const verifiers: Record<DepositChain, () => Promise<DepositVerification>> = {
+      solana: () => verifySolanaDeposit(http, config.solanaRpcUrl, txRef, wallet, config.depositAllowedTokens.solana, budget),
+      ethereum: () => verifyEthereumDeposit(http, config.ethBlockscoutUrl, config.ethRpcUrl, txRef, wallet, config.depositAllowedTokens.ethereum, budget),
+      bitcoin: () => verifyBitcoinDeposit(http, config.esploraUrl, txRef, wallet, budget),
+    };
+    const verified = await verifiers[body.chain]();
     if (!verified.ok) {
       const messages: Record<typeof verified.reason, string> = {
         not_configured: "No deposit wallet is configured for this chain",
         not_found: "That transaction wasn't found",
-        not_confirmed: "That transaction didn't succeed on-chain",
+        // A Bitcoin "not_confirmed" means not mined into a block yet (it may still confirm), not a
+        // failed tx the way it is for ETH/SOL -- say so, so the depositor knows to retry later.
+        not_confirmed:
+          body.chain === "bitcoin" ? "That transaction isn't confirmed in a block yet -- try again once it has at least one confirmation" : "That transaction didn't succeed on-chain",
         wrong_wallet: "That transaction doesn't pay the configured deposit wallet",
         unsupported_asset: "That transaction pays the right wallet, but not in an asset this server tracks for deposits (native SOL/ETH, USDC or USDT)",
-        malformed_reference: body.chain === "solana" ? "That doesn't look like a real Solana signature" : "That doesn't look like a real Ethereum transaction hash",
+        malformed_reference: {
+          solana: "That doesn't look like a real Solana signature",
+          ethereum: "That doesn't look like a real Ethereum transaction hash",
+          bitcoin: "That doesn't look like a real Bitcoin transaction ID (64 hex characters)",
+        }[body.chain],
       };
       throw badRequest(messages[verified.reason]);
     }
@@ -198,8 +209,16 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
     // Deposit transactions are public on-chain data -- without this check, anyone signed in could
     // watch the deposit wallet and attach someone else's transaction (meant for a different bounty)
     // to one of their own choosing, first-come-first-served. The caller must be the real sender.
-    if (u.chain !== body.chain || !u.walletAddress || normalizeAddress(body.chain, u.walletAddress) !== normalizeAddress(body.chain, d.fromAddress)) {
-      throw forbidden("That transaction wasn't sent from your connected wallet");
+    //
+    // Bitcoin is deliberately exempt: there's no BTC wallet-connect sign-in to prove ownership with,
+    // and a BTC tx has no single recoverable "sender" (see verifyBitcoinDeposit) -- `fromAddress` is
+    // display-only there. Any signed-in user (on any chain's account) can record a verified BTC
+    // payment; the trade-off is that a watcher could attach someone else's BTC payment to a bounty,
+    // which is the accepted cost of supporting Bitcoin at all without custody (ADR 0020).
+    if (body.chain !== "bitcoin") {
+      if (u.chain !== body.chain || !u.walletAddress || normalizeAddress(body.chain, u.walletAddress) !== normalizeAddress(body.chain, d.fromAddress)) {
+        throw forbidden("That transaction wasn't sent from your connected wallet");
+      }
     }
 
     const id = randomUUID();

@@ -252,3 +252,48 @@ export async function verifyEthereumDeposit(http: HttpClient, blockscoutUrl: str
     ? verifyEthereumDepositViaRpc(http, ethRpcUrl, txHash, wallet, allowedTokens, budget)
     : verifyEthereumDepositViaBlockscout(http, blockscoutUrl, txHash, wallet, allowedTokens, budget);
 }
+
+const BTC_TXID_FORMAT = /^[0-9a-fA-F]{64}$/;
+const BTC_DECIMALS = 8;
+
+type EsploraVout = { scriptpubkey_address?: string; value: number };
+type EsploraVin = { prevout?: { scriptpubkey_address?: string } };
+type EsploraTx = { status: { confirmed: boolean }; vin: EsploraVin[]; vout: EsploraVout[] };
+
+/**
+ * Bitcoin, via a public Esplora-API block explorer (Blockstream.info by default, mempool.space is
+ * API-compatible and configurable instead) -- no RPC/node/key needed, same zero-config-REST-fallback
+ * shape as Ethereum's Blockscout path. There's deliberately no per-asset allowlist here the way ETH
+ * and Solana have one: Bitcoin's base chain has no general fungible-token standard the way SPL/ERC-20
+ * do, so every real BTC payment is the same native asset -- nothing to be "a worthless token" of.
+ *
+ * No sender-ownership check either (unlike verifyEthereumDeposit/verifySolanaDeposit, see
+ * routes/bounties.ts): Bitcoin has no browser wallet-connect standard this project's accounts can
+ * sign in with, and a BTC transaction doesn't have one clean "sender" the way an ETH/SOL account-model
+ * tx does -- multiple inputs, no signing authority recoverable from the tx alone the way ecrecover
+ * works for Ethereum. A BTC deposit is accepted as "someone" paying the configured wallet, the same
+ * trust level as anyone citing a public payment -- `fromAddress` below is best-effort (the first
+ * input's own previous output address, when Esplora resolves it) for display only, never checked
+ * against the signed-in caller.
+ */
+export async function verifyBitcoinDeposit(http: HttpClient, esploraUrl: string, txid: string, wallet: string | undefined, budget: Budget): Promise<DepositVerification> {
+  if (!wallet) return { ok: false, reason: "not_configured" };
+  if (!BTC_TXID_FORMAT.test(txid)) return { ok: false, reason: "malformed_reference" };
+
+  let tx: EsploraTx;
+  try {
+    const { data } = await http.json<EsploraTx>(`${esploraUrl}/api/tx/${txid}`, { budget });
+    tx = data;
+  } catch {
+    return { ok: false, reason: "not_found" };
+  }
+  if (!tx.status.confirmed) return { ok: false, reason: "not_confirmed" };
+
+  const paidSats = tx.vout.filter((v) => v.scriptpubkey_address && sameAddress(v.scriptpubkey_address, wallet)).reduce((sum, v) => sum + v.value, 0);
+  if (paidSats <= 0) return { ok: false, reason: "wrong_wallet" };
+
+  return {
+    ok: true,
+    deposit: { asset: "native", amount: formatUnits(String(paidSats), BTC_DECIMALS), fromAddress: tx.vin[0]?.prevout?.scriptpubkey_address ?? "unknown", toWallet: wallet },
+  };
+}

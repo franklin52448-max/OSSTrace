@@ -23,13 +23,19 @@ async function signupEthereum(app: FastifyInstance, wallet: Wallet): Promise<Cli
 
 const SOL_WALLET = "11111111111111111111111111111111";
 const ETH_WALLET = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+const BTC_WALLET = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
 
-/** Mocks the two deposit-verification upstreams: Solana's getParsedTransaction RPC, and Blockscout's tx/token-transfer REST endpoints. */
-function depositFetch(opts: { solTx?: unknown; bsTx?: unknown; bsTransfers?: unknown }): typeof fetch {
+/** Mocks the three deposit-verification upstreams: Solana's getParsedTransaction RPC, Blockscout's
+ *  tx/token-transfer REST endpoints, and an Esplora explorer's `/api/tx/:txid` (404 when `btcTx` is
+ *  unset, the same as Blockstream.info answers for a txid it doesn't know). */
+function depositFetch(opts: { solTx?: unknown; bsTx?: unknown; bsTransfers?: unknown; btcTx?: unknown }): typeof fetch {
   return (async (input: string | URL, init?: RequestInit) => {
     const url = String(input);
     if (init?.method === "POST") {
       return new Response(JSON.stringify({ result: opts.solTx ?? null }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (url.includes("/api/tx/")) {
+      return opts.btcTx ? new Response(JSON.stringify(opts.btcTx), { status: 200, headers: { "content-type": "application/json" } }) : new Response("Transaction not found", { status: 404 });
     }
     if (url.includes("/token-transfers")) return new Response(JSON.stringify(opts.bsTransfers ?? { items: [] }), { status: 200 });
     if (url.includes("/api/v2/transactions/")) return new Response(JSON.stringify(opts.bsTx ?? { status: null, value: "0", to: null, from: null }), { status: 200 });
@@ -38,7 +44,7 @@ function depositFetch(opts: { solTx?: unknown; bsTx?: unknown; bsTransfers?: unk
 }
 
 async function makeBountyApp(fetchImpl: typeof fetch, eth: FakeProvider, sol: FakeProvider, over: Partial<Config> = {}) {
-  const config = { ...loadConfig({ NODE_ENV: "test" } as NodeJS.ProcessEnv), dbPath: ":memory:", depositWallets: { solana: SOL_WALLET, ethereum: ETH_WALLET }, ...over };
+  const config = { ...loadConfig({ NODE_ENV: "test" } as NodeJS.ProcessEnv), dbPath: ":memory:", depositWallets: { solana: SOL_WALLET, ethereum: ETH_WALLET, bitcoin: BTC_WALLET }, ...over };
   const db = openDb(":memory:");
   const { app } = await buildApp(config, {
     db,
@@ -261,5 +267,140 @@ describe("bounties", () => {
     } finally {
       await close();
     }
+  });
+
+  describe("Bitcoin deposits (paste-a-txid only, no sender-ownership check -- ADR 0020 addendum)", () => {
+    const TXID = "ab".repeat(32); // 64 hex chars -- routes into the (mocked) Esplora lookup
+    const SENDER = "bc1qsomeoneelsesinput0000000000000000000000";
+    /** An Esplora `/api/tx/:txid` body: two outputs pay the configured wallet (summed), one is change. */
+    const btcTx = (over: { confirmed?: boolean; vout?: { scriptpubkey_address?: string; value: number }[] } = {}) => ({
+      status: { confirmed: over.confirmed ?? true },
+      vin: [{ prevout: { scriptpubkey_address: SENDER } }],
+      vout: over.vout ?? [
+        { scriptpubkey_address: BTC_WALLET, value: 150_000 },
+        { scriptpubkey_address: SENDER, value: 9_000_000 },
+        { scriptpubkey_address: BTC_WALLET, value: 50_000 },
+      ],
+    });
+
+    it("records a confirmed tx paying the configured wallet, summing every output to it; refuses a re-submission under different letter-casing", async () => {
+      const stub = new FakeProvider("solana");
+      const { app, close } = await makeBountyApp(depositFetch({ btcTx: btcTx() }), stub, stub);
+      try {
+        const u = await signup(app, "btc-backer");
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef: TXID });
+        expect(r.statusCode).toBe(201);
+        // 150_000 + 50_000 sats = 0.002 BTC; the 9_000_000-sat change output back to the sender isn't counted.
+        expect(r.json()).toMatchObject({ chain: "bitcoin", asset: "native", amount: "0.002", txRef: TXID, fromAddress: SENDER, toWallet: BTC_WALLET });
+        expect((await u.get(`/api/bounties/${b.id}`)).json().deposits).toHaveLength(1);
+
+        const again = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef: TXID.toUpperCase() });
+        expect(again.statusCode).toBe(409);
+      } finally {
+        await close();
+      }
+    });
+
+    it("succeeds no matter whose wallet the signed-in caller has -- neither a Solana nor an Ethereum account's address has anything to do with the tx", async () => {
+      const stub = new FakeProvider("solana");
+      const second = "cd".repeat(32);
+      const { app, close } = await makeBountyApp(depositFetch({ btcTx: btcTx() }), stub, stub);
+      try {
+        // A Solana account whose own address is nowhere in the BTC tx -- the ETH/SOL equivalent of
+        // this is a 403 ("wasn't sent from your connected wallet"), see the Solana test above.
+        const solUser = await signup(app, "btc-unrelated-solana-account");
+        const b = (await solUser.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const viaSol = await solUser.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef: TXID });
+        expect(viaSol.statusCode).toBe(201);
+        expect(viaSol.json().fromAddress).toBe(SENDER);
+
+        // Same for an Ethereum account.
+        const ethUser = await signupEthereum(app, new Wallet("0x" + "9".repeat(64)));
+        const viaEth = await ethUser.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef: second });
+        expect(viaEth.statusCode).toBe(201);
+      } finally {
+        await close();
+      }
+    });
+
+    it("an unconfirmed (still in the mempool) tx is rejected with a retry-later message, and nothing is recorded", async () => {
+      const stub = new FakeProvider("solana");
+      const { app, close } = await makeBountyApp(depositFetch({ btcTx: btcTx({ confirmed: false }) }), stub, stub);
+      try {
+        const u = await signup(app, "btc-unconfirmed");
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef: TXID });
+        expect(r.statusCode).toBe(400);
+        expect(r.json().error.message).toMatch(/isn't confirmed in a block yet/i);
+        expect((await u.get(`/api/bounties/${b.id}`)).json().deposits).toEqual([]);
+      } finally {
+        await close();
+      }
+    });
+
+    it("a malformed txid is rejected without ever reaching the explorer", async () => {
+      const stub = new FakeProvider("solana");
+      let explorerCalls = 0;
+      const inner = depositFetch({ btcTx: btcTx() });
+      const fetchImpl = (async (input: string | URL, init?: RequestInit) => {
+        if (String(input).includes("/api/tx/")) explorerCalls++;
+        return inner(input, init);
+      }) as typeof fetch;
+      const { app, close } = await makeBountyApp(fetchImpl, stub, stub);
+      try {
+        const u = await signup(app, "btc-malformed");
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        for (const txRef of ["not-a-txid", "ab".repeat(31), "zz".repeat(32), `0x${"ab".repeat(32)}`]) {
+          const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef });
+          expect(r.statusCode).toBe(400);
+          expect(r.json().error.message).toMatch(/real Bitcoin transaction ID/i);
+        }
+        expect(explorerCalls).toBe(0);
+      } finally {
+        await close();
+      }
+    });
+
+    it("a confirmed tx that doesn't pay the configured wallet is rejected, as is a txid the explorer doesn't know", async () => {
+      const stub = new FakeProvider("solana");
+      const elsewhere = btcTx({ vout: [{ scriptpubkey_address: SENDER, value: 1_000_000 }, { value: 0 } /* OP_RETURN: no address */] });
+      const { app, close } = await makeBountyApp(depositFetch({ btcTx: elsewhere }), stub, stub);
+      try {
+        const u = await signup(app, "btc-wrong-wallet");
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef: TXID });
+        expect(r.statusCode).toBe(400);
+        expect(r.json().error.message).toMatch(/doesn't pay the configured deposit wallet/i);
+      } finally {
+        await close();
+      }
+
+      const missing = await makeBountyApp(depositFetch({}), stub, stub);
+      try {
+        const u = await signup(missing.app, "btc-unknown-txid");
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef: TXID });
+        expect(r.statusCode).toBe(400);
+        expect(r.json().error.message).toMatch(/wasn't found/i);
+      } finally {
+        await missing.close();
+      }
+    });
+
+    it("is refused when no Bitcoin wallet is configured, and the wallets endpoint only lists what is", async () => {
+      const stub = new FakeProvider("solana");
+      const { app, close } = await makeBountyApp(depositFetch({ btcTx: btcTx() }), stub, stub, { depositWallets: { solana: SOL_WALLET } });
+      try {
+        expect((await new Client(app).get("/api/bounties/wallets")).json()).toEqual({ solana: SOL_WALLET });
+        const u = await signup(app, "btc-not-configured");
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef: TXID });
+        expect(r.statusCode).toBe(400);
+        expect(r.json().error.message).toMatch(/no bitcoin deposit wallet/i);
+      } finally {
+        await close();
+      }
+    });
   });
 });

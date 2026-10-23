@@ -16,7 +16,8 @@ npm run dev --workspace packages/server
 Listens on `127.0.0.1:5320` by default (`PORT`/`HOST`). A SQLite file at `./data/server.db`
 (`SERVER_DB`) is created on first run. No API keys required: Ethereum via Blockscout
 (`ETH_BLOCKSCOUT_URL`), Solana via the public JSON-RPC (`SOLANA_RPC_URL`/`SOLANA_RPC_URL_FILE`),
-prices via DefiLlama (`DEFILLAMA_URL`). See `src/config.ts` for every variable.
+prices via DefiLlama (`DEFILLAMA_URL`), Bitcoin bounty-deposit checks via a public Esplora
+explorer (`ESPLORA_URL`, Blockstream.info by default). See `src/config.ts` for every variable.
 
 **`DEV_SKIP_AUTH=1`**: local dev only, treats every request as signed in as a fixed fake user
 (no wallet, no cookie needed) so every feature can be driven without going through the real

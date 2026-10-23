@@ -224,6 +224,7 @@ const BUILD_TARGETS: readonly { title: string; path: string; body: string; doc: 
     path: "data/labels",
     body: "Public datasets that make lookups smarter. Every entry cites a checkable source, or it isn't merged.",
     doc: "data/labels/README.md",
+    aside: <WantedLabels />,
   },
 ];
 
@@ -310,36 +311,80 @@ function BuildWithBounties() {
 }
 
 /**
+ * A brand mark on its own disc: one or more filled paths in a 24x24 box, or an image for a mark too
+ * detailed for inline paths. `scale` sizes it within the disc.
+ */
+type BrandMark = {
+  name: string;
+  disc: string;
+  scale: number;
+  paths?: readonly { d: string; fill: string; evenOdd?: boolean }[];
+  image?: string;
+};
+
+/**
  * Chains nobody has built an adapter for yet, as a tight row of their marks in brand colours.
  * Marks: Bitcoin and Robinhood from Simple Icons (CC0-1.0); Tron and Monad from Web3 Icons (MIT, see
- * vendor/README.md). Each sits on its own disc; `scale` sizes the glyph within it.
+ * vendor/README.md).
  */
-const WANTED_CHAINS: readonly { name: string; disc: string; fill: string; scale: number; path: string; evenOdd?: boolean }[] = [
-  { name: "Bitcoin", disc: "#ffffff", fill: "#F7931A", scale: 1, path: "M23.638 14.904c-1.602 6.43-8.113 10.34-14.542 8.736C2.67 22.05-1.244 15.525.362 9.105 1.962 2.67 8.475-1.243 14.9.358c6.43 1.605 10.342 8.115 8.738 14.548v-.002zm-6.35-4.613c.24-1.59-.974-2.45-2.64-3.03l.54-2.153-1.315-.33-.525 2.107c-.345-.087-.705-.167-1.064-.25l.526-2.127-1.32-.33-.54 2.165c-.285-.067-.565-.132-.84-.2l-1.815-.45-.35 1.407s.975.225.955.236c.535.136.63.486.615.766l-1.477 5.92c-.075.166-.24.406-.614.314.015.02-.96-.24-.96-.24l-.66 1.51 1.71.426.93.242-.54 2.19 1.32.327.54-2.17c.36.1.705.19 1.05.273l-.51 2.154 1.32.33.545-2.19c2.24.427 3.93.257 4.64-1.774.57-1.637-.03-2.58-1.217-3.196.854-.193 1.5-.76 1.68-1.93h.01zm-3.01 4.22c-.404 1.64-3.157.75-4.05.53l.72-2.9c.896.23 3.757.67 3.33 2.37zm.41-4.24c-.37 1.49-2.662.735-3.405.55l.654-2.64c.744.18 3.137.524 2.75 2.084v.006z" },
-  { name: "Tron", disc: "#FF060A", fill: "#ffffff", scale: 0.66, evenOdd: true, path: "M4.42 3.186a.57.57 0 0 1 .552-.17L16.876 5.93a.5.5 0 0 1 .197.092l2.422 1.767a.565.565 0 0 1 .133.773l-8.332 12.191a.563.563 0 0 1-.998-.13L4.306 3.753a.57.57 0 0 1 .114-.566M6.383 6.23l4.16 11.712.684-6.069zm5.958 5.838-.695 6.175 5.884-8.61zm5.72-3.93-3.793 1.78 2.542-2.691zm-2.396-1.343L6.41 4.531l5.426 6.318z" },
-  { name: "Monad", disc: "#836EF9", fill: "#ffffff", scale: 0.68, path: "M12 3c-2.599 0-9 6.4-9 9s6.401 9 9 9 9-6.401 9-9-6.401-9-9-9m-1.402 14.146c-1.097-.298-4.043-5.453-3.744-6.549s5.453-4.042 6.549-3.743c1.095.298 4.042 5.453 3.743 6.549-.298 1.095-5.453 4.042-6.549 3.743" },
-  { name: "Robinhood Chain", disc: "#CCFF00", fill: "#000000", scale: 0.6, path: "M2.84 24h.53c.096 0 .192-.048.224-.128C7.591 13.696 11.94 8.656 14.67 5.638c.112-.128.064-.225-.096-.225h-4.88a.55.55 0 0 0-.45.225L5.746 9.972c-.514.642-.642 1.236-.642 2.086v4.43c-1.14 3.194-1.862 5.361-2.392 7.32-.032.125.016.192.129.192M20.447.646c-.754-.802-4.157-.834-5.73-.224a3 3 0 0 0-.786.465 41 41 0 0 0-3.323 3.178c-.112.113-.064.225.097.225h5.409c.497 0 .786.289.786.786v6.1c0 .16.128.208.225.064l3.258-4.254c.53-.69.69-.898.835-1.861.192-1.413.08-3.58-.77-4.479m-6.982 16.18 2.231-3.676a.7.7 0 0 0 .064-.29V6.73c0-.16-.112-.225-.224-.097-3.355 3.74-5.971 7.672-8.395 12.407-.06.12.016.225.16.177l5.009-1.54c.565-.174.882-.402 1.155-.852" },
+const WANTED_CHAINS: readonly BrandMark[] = [
+  { name: "Bitcoin", disc: "#ffffff", scale: 1, paths: [{ fill: "#F7931A", d: "M23.638 14.904c-1.602 6.43-8.113 10.34-14.542 8.736C2.67 22.05-1.244 15.525.362 9.105 1.962 2.67 8.475-1.243 14.9.358c6.43 1.605 10.342 8.115 8.738 14.548v-.002zm-6.35-4.613c.24-1.59-.974-2.45-2.64-3.03l.54-2.153-1.315-.33-.525 2.107c-.345-.087-.705-.167-1.064-.25l.526-2.127-1.32-.33-.54 2.165c-.285-.067-.565-.132-.84-.2l-1.815-.45-.35 1.407s.975.225.955.236c.535.136.63.486.615.766l-1.477 5.92c-.075.166-.24.406-.614.314.015.02-.96-.24-.96-.24l-.66 1.51 1.71.426.93.242-.54 2.19 1.32.327.54-2.17c.36.1.705.19 1.05.273l-.51 2.154 1.32.33.545-2.19c2.24.427 3.93.257 4.64-1.774.57-1.637-.03-2.58-1.217-3.196.854-.193 1.5-.76 1.68-1.93h.01zm-3.01 4.22c-.404 1.64-3.157.75-4.05.53l.72-2.9c.896.23 3.757.67 3.33 2.37zm.41-4.24c-.37 1.49-2.662.735-3.405.55l.654-2.64c.744.18 3.137.524 2.75 2.084v.006z" }] },
+  { name: "Tron", disc: "#FF060A", scale: 0.66, paths: [{ fill: "#ffffff", evenOdd: true, d: "M4.42 3.186a.57.57 0 0 1 .552-.17L16.876 5.93a.5.5 0 0 1 .197.092l2.422 1.767a.565.565 0 0 1 .133.773l-8.332 12.191a.563.563 0 0 1-.998-.13L4.306 3.753a.57.57 0 0 1 .114-.566M6.383 6.23l4.16 11.712.684-6.069zm5.958 5.838-.695 6.175 5.884-8.61zm5.72-3.93-3.793 1.78 2.542-2.691zm-2.396-1.343L6.41 4.531l5.426 6.318z" }] },
+  { name: "Monad", disc: "#836EF9", scale: 0.68, paths: [{ fill: "#ffffff", d: "M12 3c-2.599 0-9 6.4-9 9s6.401 9 9 9 9-6.401 9-9-6.401-9-9-9m-1.402 14.146c-1.097-.298-4.043-5.453-3.744-6.549s5.453-4.042 6.549-3.743c1.095.298 4.042 5.453 3.743 6.549-.298 1.095-5.453 4.042-6.549 3.743" }] },
+  { name: "Robinhood Chain", disc: "#CCFF00", scale: 0.6, paths: [{ fill: "#000000", d: "M2.84 24h.53c.096 0 .192-.048.224-.128C7.591 13.696 11.94 8.656 14.67 5.638c.112-.128.064-.225-.096-.225h-4.88a.55.55 0 0 0-.45.225L5.746 9.972c-.514.642-.642 1.236-.642 2.086v4.43c-1.14 3.194-1.862 5.361-2.392 7.32-.032.125.016.192.129.192M20.447.646c-.754-.802-4.157-.834-5.73-.224a3 3 0 0 0-.786.465 41 41 0 0 0-3.323 3.178c-.112.113-.064.225.097.225h5.409c.497 0 .786.289.786.786v6.1c0 .16.128.208.225.064l3.258-4.254c.53-.69.69-.898.835-1.861.192-1.413.08-3.58-.77-4.479m-6.982 16.18 2.231-3.676a.7.7 0 0 0 .064-.29V6.73c0-.16-.112-.225-.224-.097-3.355 3.74-5.971 7.672-8.395 12.407-.06.12.016.225.16.177l5.009-1.54c.565-.174.882-.402 1.155-.852" }] },
+];
+
+/**
+ * Kinds of label data nobody has contributed yet: an exchange, a government, an asset manager and a
+ * launchpad. Binance from Simple Icons (CC0-1.0); the US coat of arms from the Great Seal (public
+ * domain, public/us-coat-of-arms.png); BlackRock and pump.fun drawn here (see vendor/README.md).
+ */
+const WANTED_LABELS: readonly BrandMark[] = [
+  { name: "Binance", disc: "#F0B90B", scale: 0.62, paths: [{ fill: "#181A20", d: "M16.624 13.9202l2.7175 2.7154-7.353 7.353-7.353-7.352 2.7175-2.7164 4.6355 4.6595 4.6356-4.6595zm4.6366-4.6366L24 12l-2.7154 2.7164L18.5682 12l2.6924-2.7164zm-9.272.001l2.7163 2.6914-2.7164 2.7174v-.001L9.2721 12l2.7164-2.7154zm-9.2722-.001L5.4088 12l-2.6914 2.6924L0 12l2.7164-2.7164zM11.9885.0115l7.353 7.329-2.7174 2.7154-4.6356-4.6356-4.6355 4.6595-2.7174-2.7154 7.353-7.353z" }] },
+  { name: "US Government", disc: "#ffffff", scale: 1, image: "/us-coat-of-arms.png" },
+  { name: "BlackRock", disc: "#000000", scale: 0.72, paths: [{ fill: "#ffffff", evenOdd: true, d: "M7.5 4.5H13C15.6 4.5 17 5.8 17 7.9C17 9.3 16.3 10.3 15.1 10.7C16.7 11.1 17.6 12.3 17.6 14C17.6 18.2 16 19.5 13.3 19.5H7.5ZM10.2 6.8V10H12.7C13.8 10 14.4 9.4 14.4 8.4C14.4 7.4 13.8 6.8 12.7 6.8ZM10.2 12.2V17.2H13C14.2 17.2 14.9 16.3 14.9 14.7C14.9 13.1 14.2 12.2 13 12.2Z" }] },
+  {
+    name: "pump.fun",
+    disc: "#ffffff",
+    scale: 0.8,
+    paths: [
+      { fill: "#1B4D3E", d: "M3.94 12.42L12.42 3.94A5.4 5.4 0 0 1 20.06 11.58L11.58 20.06A5.4 5.4 0 0 1 3.94 12.42Z" },
+      { fill: "#ffffff", d: "M9.88 8.75L13.56 5.07A3.8 3.8 0 0 1 18.93 10.44L15.25 14.12Z" },
+      { fill: "#53C68C", d: "M5.07 13.56L8.75 9.88L14.12 15.25L10.44 18.93A3.8 3.8 0 0 1 5.07 13.56Z" },
+    ],
+  },
 ];
 
 function WantedChains() {
+  return <BrandMarks marks={WANTED_CHAINS} label="Chains not supported yet" />;
+}
+
+function WantedLabels() {
+  return <BrandMarks marks={WANTED_LABELS} label="Label data not added yet" />;
+}
+
+function BrandMarks({ marks, label }: { marks: readonly BrandMark[]; label: string }) {
   return (
-    <ul className="flex shrink-0 -space-x-1" aria-label="Chains not supported yet">
-      {WANTED_CHAINS.map((chain) => (
+    <ul className="flex shrink-0 -space-x-1" aria-label={label}>
+      {marks.map((mark) => (
         <li
-          key={chain.name}
-          title={chain.name}
+          key={mark.name}
+          title={mark.name}
           className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full ring-2 ring-[var(--color-panel)]"
-          style={{ background: chain.disc }}
+          style={{ background: mark.disc }}
         >
-          <svg viewBox="0 0 24 24" className="h-full w-full" aria-hidden="true">
-            <path
-              fill={chain.fill}
-              fillRule={chain.evenOdd ? "evenodd" : undefined}
-              transform={`translate(12 12) scale(${chain.scale}) translate(-12 -12)`}
-              d={chain.path}
-            />
-          </svg>
-          <span className="sr-only">{chain.name}</span>
+          {mark.image ? (
+            <img src={mark.image} alt="" className="h-full w-full" style={{ transform: `scale(${mark.scale})` }} />
+          ) : (
+            <svg viewBox="0 0 24 24" className="h-full w-full" aria-hidden="true">
+              <g transform={`translate(12 12) scale(${mark.scale}) translate(-12 -12)`}>
+                {mark.paths?.map((path) => (
+                  <path key={path.d} fill={path.fill} fillRule={path.evenOdd ? "evenodd" : undefined} d={path.d} />
+                ))}
+              </g>
+            </svg>
+          )}
+          <span className="sr-only">{mark.name}</span>
         </li>
       ))}
     </ul>

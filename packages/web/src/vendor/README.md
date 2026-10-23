@@ -25,7 +25,7 @@ page works without it) before redistributing OSSTrace in a way the Commons Claus
 
 ## Chain marks on the home page
 
-The unsupported-chain logos under "Add a chain" in `src/HomeFeatures.tsx` (`WANTED_CHAINS`) are single SVG paths
+The unsupported-chain logos under "Add a chain" in `src/HomeFeatures.tsx` (`WANTED_CHAINS`) are SVG paths
 copied in, not a dependency:
 
 - Bitcoin and Robinhood: [Simple Icons](https://simpleicons.org) 16.35.0, **CC0-1.0** (the same
@@ -34,6 +34,20 @@ copied in, not a dependency:
   icons) by 0xa3k5, **MIT**, which allows this as long as the credit is kept.
 
 The marks are trademarks of their projects, shown only to name chains OSSTrace doesn't support yet.
+
+## Label-data marks on the home page
+
+The logos under "Add label data" in `src/HomeFeatures.tsx` (`WANTED_LABELS`) name kinds of label data
+nobody has contributed yet:
+
+- Binance: [Simple Icons](https://simpleicons.org) 16.35.0, **CC0-1.0**.
+- US Government: the coat of arms from the obverse of the Great Seal, a US Government work in the
+  **public domain** ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Great_Seal_of_the_United_States_(obverse).svg)),
+  cropped to the eagle and rendered to a 96px PNG at `public/us-coat-of-arms.png`.
+- BlackRock and pump.fun: simplified redrawings of their favicons (a white "B" on black; a
+  green-and-white pill), drawn here.
+
+The marks are trademarks of their owners, shown only to name label sources OSSTrace doesn't have yet.
 
 ## Wallet marks in the connect dialog
 

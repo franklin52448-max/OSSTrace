@@ -684,7 +684,7 @@ const removeNode = defineTool({
 
 const renameNode = defineTool({
   name: "rename_node",
-  description: `Give a node a display name on this trace (max ${NODE_LABEL_MAX} chars; empty string clears it). Only affects this trace.`,
+  description: `Give a node a display name on this trace (max ${NODE_LABEL_MAX} chars; empty string clears it). Only affects this trace. Use the name the user asked for -- never a guessed owner or identity.`,
   parameters: { type: "object", properties: { nodeId: { type: "string" }, label: { type: "string", maxLength: NODE_LABEL_MAX } }, required: ["nodeId", "label"], additionalProperties: false },
   args: z.object({ nodeId: nodeRef, label: clearable(NODE_LABEL_MAX) }).strict(),
   async run(env, { nodeId, label }) {
@@ -697,7 +697,7 @@ const renameNode = defineTool({
 
 const annotateNode = defineTool({
   name: "annotate_node",
-  description: `Set a node's investigator note on this trace (max ${NODE_NOTE_MAX} chars; empty string clears it).`,
+  description: `Set a node's investigator note on this trace (max ${NODE_NOTE_MAX} chars; empty string clears it). Write what the user asked for or what tool results showed -- never a guess written as fact.`,
   parameters: { type: "object", properties: { nodeId: { type: "string" }, note: { type: "string", maxLength: NODE_NOTE_MAX } }, required: ["nodeId", "note"], additionalProperties: false },
   args: z.object({ nodeId: nodeRef, note: clearable(NODE_NOTE_MAX) }).strict(),
   async run(env, { nodeId, note }) {
@@ -728,7 +728,7 @@ function newestThatFit<T>(xs: T[], budget: number): T[] {
 
 const getDocState = defineTool({
   name: "get_doc_state",
-  description: "The current trace: its nodes (id, chain, address, label, note) and edges (with transfer/aggregate details). Call it before acting on 'that node', 'the second one', etc.",
+  description: "The current trace: its nodes (id, chain, address, label, note), oldest first, and edges (with transfer/aggregate details). A node's label and note were written by the user -- their own annotations, not sourced facts about who an address is. Call it before acting on 'that node', 'the second one', etc.",
   parameters: { type: "object", properties: {}, additionalProperties: false },
   args: z.object({}).strict(),
   async run(env) {

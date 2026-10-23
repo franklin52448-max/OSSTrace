@@ -208,10 +208,12 @@ export function TracerPage({ id, readOnly: readOnlyProp = false }: { id: string;
     (from: Map<string, XY>, to: Map<string, XY>) => {
       if (readOnly) return;
       const doOps = moveOps(to);
-      void store.beginTransaction({ label: "Move node", doOps, undoOps: [], pushToUndoStack: false }).then((ok) => !ok && toast.error("Could not save the new position."));
+      void store
+        .beginTransaction({ label: "Move node", doOps, undoOps: [], pushToUndoStack: false })
+        .then((ok) => !ok && toast.error(`Could not save the new position. ${snap.lastError ?? ""}`.trim()));
       store.pushUndoRecord({ label: to.size > 1 ? "Move nodes" : "Move node", doOps, undoOps: moveOps(from) });
     },
-    [readOnly, store, toast],
+    [readOnly, store, toast, snap.lastError],
   );
   const onResizeEnd = useCallback((node: TraceNode, w: number) => void run(sizeEdit(node, w, null)), [run]);
 

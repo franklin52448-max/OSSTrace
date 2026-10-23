@@ -2,7 +2,21 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Bounty, BountyDeposit } from "@osstrace/contract";
 import { compareDecimalAmounts } from "../src/decimalAmount.ts";
-import { applyQuery, assetDescription, assetKey, assetLabel, boardAssets, fundingTotals, sortBounties, statusCounts } from "../src/bountyBoard.ts";
+import {
+  applyQuery,
+  assetDescription,
+  assetKey,
+  assetLabel,
+  boardAssets,
+  deadlineInfo,
+  DEFAULT_QUERY,
+  fundingTotals,
+  hasNarrowingFilters,
+  matchesQuery,
+  sortBounties,
+  statusCounts,
+  type BoardQuery,
+} from "../src/bountyBoard.ts";
 
 /** Test fixtures shaped exactly like GET /api/bounties rows; the board's own UI tests drive the real server. */
 const USDC_ETH = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
@@ -14,9 +28,11 @@ function deposit(chain: BountyDeposit["chain"], asset: BountyDeposit["asset"], a
   return { id: `d${seq}`, chain, asset, amount, txRef: `tx${seq}`, fromAddress: "from", toWallet: "to", recordedBy: "u", recordedAt: `2026-10-0${(seq % 9) + 1}T00:00:00.000Z` };
 }
 
-function bounty(id: string, openedAt: string, status: Bounty["status"], deposits: BountyDeposit[] = []): Bounty {
-  return { id, status, title: id, description: "d", reward: "free text", openedBy: "u", openedAt, submissions: [], deposits };
+function bounty(id: string, openedAt: string, status: Bounty["status"], deposits: BountyDeposit[] = [], meta: Partial<Pick<Bounty, "tags" | "difficulty" | "deadline">> = {}): Bounty {
+  return { id, status, title: id, description: "d", reward: "free text", tags: [], ...meta, openedBy: "u", openedAt, submissions: [], deposits };
 }
+
+const ALL: BoardQuery = { ...DEFAULT_QUERY, status: "all" };
 
 test("fundingTotals: sums per asset exactly, keeps assets apart, and groups EVM contracts case-insensitively", () => {
   const totals = fundingTotals([
@@ -63,9 +79,52 @@ test("compareDecimalAmounts: exact, across differing fractional digits", () => {
 test("statusCounts + status filter: counts every status, and 'all' keeps everything", () => {
   const list = [bounty("a", "2026-10-01T00:00:00.000Z", "open"), bounty("b", "2026-10-02T00:00:00.000Z", "claimed"), bounty("c", "2026-10-03T00:00:00.000Z", "open"), bounty("d", "2026-10-04T00:00:00.000Z", "cancelled")];
   assert.deepEqual(statusCounts(list), { open: 2, claimed: 1, cancelled: 1, all: 4 });
-  assert.deepEqual(applyQuery(list, { status: "open", sort: "newest" }).map((b) => b.id), ["c", "a"]);
-  assert.deepEqual(applyQuery(list, { status: "claimed", sort: "newest" }).map((b) => b.id), ["b"]);
-  assert.deepEqual(applyQuery(list, { status: "all", sort: "oldest" }).map((b) => b.id), ["a", "b", "c", "d"]);
+  assert.deepEqual(applyQuery(list, DEFAULT_QUERY).map((b) => b.id), ["c", "a"], "the default view is open bounties, newest first");
+  assert.deepEqual(applyQuery(list, { ...ALL, status: "claimed" }).map((b) => b.id), ["b"]);
+  assert.deepEqual(applyQuery(list, { ...ALL, sort: "oldest" }).map((b) => b.id), ["a", "b", "c", "d"]);
+});
+
+test("tag filter matches ANY selected tag; difficulty filter is exact, and never matches a bounty opened before difficulty existed", () => {
+  const list = [
+    bounty("fe-small", "2026-10-01T00:00:00.000Z", "open", [], { tags: ["frontend"], difficulty: "small" }),
+    bounty("be-docs-large", "2026-10-02T00:00:00.000Z", "open", [], { tags: ["backend", "docs"], difficulty: "large" }),
+    bounty("data-small", "2026-10-03T00:00:00.000Z", "claimed", [], { tags: ["data"], difficulty: "small" }),
+    bounty("legacy", "2026-10-04T00:00:00.000Z", "open"), // opened before metadata: no tags, no difficulty
+  ];
+  const ids = (q: Partial<BoardQuery>) => applyQuery(list, { ...ALL, ...q }).map((b) => b.id);
+  assert.deepEqual(ids({}), ["legacy", "data-small", "be-docs-large", "fe-small"]);
+  assert.deepEqual(ids({ tags: ["docs"] }), ["be-docs-large"]);
+  assert.deepEqual(ids({ tags: ["frontend", "data"] }), ["data-small", "fe-small"]);
+  assert.deepEqual(ids({ difficulty: "small" }), ["data-small", "fe-small"]);
+  assert.deepEqual(ids({ difficulty: "medium" }), []);
+  assert.deepEqual(ids({ tags: ["frontend", "data"], difficulty: "small", status: "open" }), ["fe-small"], "every filter applies together");
+  assert.equal(matchesQuery(list[3]!, { ...ALL, difficulty: "large" }), false);
+  assert.equal(hasNarrowingFilters(DEFAULT_QUERY), false);
+  assert.equal(hasNarrowingFilters({ ...DEFAULT_QUERY, tags: ["docs"] }), true);
+});
+
+test("deadlineInfo: whole calendar days in the viewer's own timezone, never a time-of-day countdown", () => {
+  const now = new Date(2026, 9, 23, 23, 30); // late evening, Oct 23 local
+  assert.deepEqual(
+    ["2026-10-23", "2026-10-24", "2026-11-02", "2026-10-22"].map((d) => deadlineInfo(d, now).text),
+    ["due today", "1 day left", "10 days left", "deadline passed"],
+  );
+  assert.equal(deadlineInfo("2026-10-22", now).passed, true);
+  assert.equal(deadlineInfo("2026-10-23", now).passed, false, "the deadline day itself isn't passed yet");
+  assert.equal(deadlineInfo("2026-12-25", now).dateText, new Date(2026, 11, 25).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }));
+});
+
+test("sort by deadline: soonest upcoming first, then passed ones (most recent first), then open-ended ones newest first", () => {
+  const now = new Date(2026, 9, 23, 12);
+  const list = [
+    bounty("none-old", "2026-10-01T00:00:00.000Z", "open"),
+    bounty("in-10", "2026-10-02T00:00:00.000Z", "open", [], { deadline: "2026-11-02" }),
+    bounty("passed-1", "2026-10-03T00:00:00.000Z", "open", [], { deadline: "2026-10-22" }),
+    bounty("today", "2026-10-04T00:00:00.000Z", "open", [], { deadline: "2026-10-23" }),
+    bounty("passed-5", "2026-10-05T00:00:00.000Z", "open", [], { deadline: "2026-10-18" }),
+    bounty("none-new", "2026-10-06T00:00:00.000Z", "open"),
+  ];
+  assert.deepEqual(sortBounties(list, "deadline", now).map((b) => b.id), ["today", "in-10", "passed-1", "passed-5", "none-new", "none-old"]);
 });
 
 test("sort by funded amount: only ever within one asset, never across assets; unfunded-in-that-asset bounties go last, newest first", () => {

@@ -266,12 +266,24 @@ export type BountyDeposit = {
   recordedAt: string;
 };
 export type BountySubmission = { id: string; bountyId: string; submittedBy: string; prUrl: string; note: string; submittedAt: string; outcome: "pending" | "accepted" | "rejected" };
+/** The fixed set of areas a bounty can be tagged with (one or more, chosen by its opener). */
+export const BOUNTY_TAGS = ["frontend", "backend", "docs", "data", "other"] as const;
+export type BountyTag = (typeof BOUNTY_TAGS)[number];
+/** The opener's own rough size for the work -- a self-description, not an estimate this system makes. */
+export const BOUNTY_DIFFICULTIES = ["small", "medium", "large"] as const;
+export type BountyDifficulty = (typeof BOUNTY_DIFFICULTIES)[number];
 export type Bounty = {
   id: string;
   status: BountyStatus;
   title: string;
   description: string;
   reward: string;
+  /** In BOUNTY_TAGS order; `[]` only for a bounty opened before tags existed. */
+  tags: BountyTag[];
+  /** Absent only for a bounty opened before difficulty existed -- never guessed for those. */
+  difficulty?: BountyDifficulty;
+  /** A calendar date, YYYY-MM-DD; absent = open-ended. Informational: passing it doesn't change `status`. */
+  deadline?: string;
   openedBy: string;
   openedAt: string;
   claimedSubmissionId?: string;
@@ -284,7 +296,8 @@ export type Bounty = {
   submissions: BountySubmission[];
   deposits: BountyDeposit[];
 };
-export type CreateBounty = { title: string; description: string; reward: string };
+/** `tags` (at least one) and `difficulty` are required; `deadline` (YYYY-MM-DD, not in the past) is optional. */
+export type CreateBounty = { title: string; description: string; reward: string; tags: BountyTag[]; difficulty: BountyDifficulty; deadline?: string | null };
 export type BountyWallets = { ethereum?: string; solana?: string; bnb?: string; robinhood?: string; bitcoin?: string };
 // GET /api/bounties/wallets -> BountyWallets (public config; a chain missing means it's not configured)
 // GET /api/bounties -> Bounty[] (no auth -- "anyone can browse"); GET /api/bounties/:id -> Bounty

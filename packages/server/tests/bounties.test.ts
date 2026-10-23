@@ -78,8 +78,11 @@ async function makeBountyApp(fetchImpl: typeof fetch, eth: FakeProvider, sol: Fa
     logger: false,
   });
   await app.ready();
-  return { app, close: async () => { await app.close(); db.close(); } };
+  return { app, db, close: async () => { await app.close(); db.close(); } };
 }
+
+/** A UTC calendar date `days` from now, YYYY-MM-DD. */
+const utcDate = (days: number): string => new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
 describe("bounties", () => {
   it("open -> submit -> claim: full lifecycle, authorization enforced", async () => {
@@ -92,7 +95,7 @@ describe("bounties", () => {
       const anon = new Client(app);
       expect((await anon.get("/api/bounties")).json()).toEqual([]);
 
-      const opened = (await opener.post("/api/bounties", { title: "Build X", description: "Spec...", reward: "100,000 tokens" })).json();
+      const opened = (await opener.post("/api/bounties", { title: "Build X", description: "Spec...", reward: "100,000 tokens", tags: ["backend", "frontend"], difficulty: "large" })).json();
       expect(opened).toMatchObject({ status: "open", title: "Build X", submissions: [], deposits: [] });
 
       // anyone can browse without signing in
@@ -123,10 +126,85 @@ describe("bounties", () => {
     try {
       const opener = await signup(app, "cancel-opener");
       const other = await signup(app, "cancel-other");
-      const b = (await opener.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+      const b = (await opener.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
       expect((await other.post(`/api/bounties/${b.id}/cancel`, { reason: "nope" })).statusCode).toBe(403);
       const cancelled = (await opener.post(`/api/bounties/${b.id}/cancel`, { reason: "changed my mind" })).json();
       expect(cancelled).toMatchObject({ status: "cancelled", cancellationReason: "changed my mind" });
+    } finally {
+      await close();
+    }
+  });
+
+  it("metadata: tags (de-duplicated, fixed order), difficulty and an optional deadline are stored and returned", async () => {
+    const { app, close } = await makeBountyApp(depositFetch({}), new FakeProvider("ethereum"), new FakeProvider("solana"));
+    try {
+      const opener = await signup(app, "meta-opener");
+      const deadline = utcDate(30);
+      const withDeadline = await opener.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["docs", "frontend", "docs"], difficulty: "medium", deadline });
+      expect(withDeadline.statusCode).toBe(201);
+      expect(withDeadline.json()).toMatchObject({ tags: ["frontend", "docs"], difficulty: "medium", deadline });
+
+      // No deadline (omitted or explicitly null) is an open-ended bounty: the field is simply absent.
+      for (const extra of [{}, { deadline: null }]) {
+        const openEnded = (await opener.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["data"], difficulty: "large", ...extra })).json();
+        expect(openEnded.tags).toEqual(["data"]);
+        expect(openEnded).not.toHaveProperty("deadline");
+      }
+
+      // The list and the detail endpoint carry the same fields.
+      const anon = new Client(app);
+      const listed = (await anon.get("/api/bounties")).json() as { id: string; tags: string[]; difficulty: string; deadline?: string }[];
+      expect(listed.find((b) => b.id === withDeadline.json().id)).toMatchObject({ tags: ["frontend", "docs"], difficulty: "medium", deadline });
+      expect((await anon.get(`/api/bounties/${withDeadline.json().id}`)).json()).toMatchObject({ tags: ["frontend", "docs"], difficulty: "medium", deadline });
+
+      // A deadline of "yesterday" in UTC is still "today" somewhere behind UTC, so it's accepted.
+      expect((await opener.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["other"], difficulty: "small", deadline: utcDate(-1) })).statusCode).toBe(201);
+    } finally {
+      await close();
+    }
+  });
+
+  it("metadata validation: tags and difficulty are required, only from the fixed sets; a deadline must be a real, non-past date", async () => {
+    const { app, close } = await makeBountyApp(depositFetch({}), new FakeProvider("ethereum"), new FakeProvider("solana"));
+    try {
+      const opener = await signup(app, "meta-validator");
+      const base = { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" };
+      const cases: [string, Record<string, unknown>, RegExp][] = [
+        ["no tags", { ...base, tags: undefined }, /tags/],
+        ["empty tags", { ...base, tags: [] }, /at least one tag/],
+        ["unknown tag", { ...base, tags: ["backend", "marketing"] }, /tags/],
+        ["no difficulty", { ...base, difficulty: undefined }, /difficulty/],
+        ["unknown difficulty", { ...base, difficulty: "huge" }, /difficulty/],
+        ["timestamp, not a date", { ...base, deadline: "2099-01-01T00:00:00Z" }, /YYYY-MM-DD/],
+        ["impossible date", { ...base, deadline: "2099-02-30" }, /real calendar date/],
+        ["past date", { ...base, deadline: utcDate(-3) }, /in the past/],
+      ];
+      for (const [what, body, message] of cases) {
+        const res = await opener.post("/api/bounties", body);
+        expect(res.statusCode, what).toBe(400);
+        expect(res.json().error.message, what).toMatch(message);
+      }
+      expect((await new Client(app).get("/api/bounties")).json(), "nothing invalid was stored").toEqual([]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("migration 011: a bounty opened before metadata existed reads back with no tags and no guessed difficulty or deadline", async () => {
+    const { app, db, close } = await makeBountyApp(depositFetch({}), new FakeProvider("ethereum"), new FakeProvider("solana"));
+    try {
+      const opener = await signup(app, "legacy-opener");
+      const openedBy = (await opener.get("/api/auth/me")).json().user.id as string;
+      // The exact INSERT the route ran before migration 011 (no tags/difficulty/deadline columns).
+      db.run("INSERT INTO bounties (id, status, title, description, reward, opened_by, opened_at) VALUES ('legacy', 'open', 'Old', 'D', 'R', ?, '2026-10-01T00:00:00.000Z')", openedBy);
+      const legacy = (await new Client(app).get("/api/bounties/legacy")).json();
+      expect(legacy.tags).toEqual([]);
+      expect(legacy).not.toHaveProperty("difficulty");
+      expect(legacy).not.toHaveProperty("deadline");
+      // The schema itself refuses anything outside the fixed sets, whatever writes to it.
+      expect(() => db.run("UPDATE bounties SET difficulty = 'huge' WHERE id = 'legacy'")).toThrow(/CHECK/);
+      expect(() => db.run("UPDATE bounties SET tags = 'backend' WHERE id = 'legacy'")).toThrow(/CHECK/);
+      expect(() => db.run("UPDATE bounties SET deadline = 'soon' WHERE id = 'legacy'")).toThrow(/CHECK/);
     } finally {
       await close();
     }
@@ -148,7 +226,7 @@ describe("bounties", () => {
       const { message, nonce } = chal.json() as { message: string; nonce: string };
       const signature = Buffer.from(nacl.sign.detached(new TextEncoder().encode(message), payer.secretKey)).toString("base64");
       await u.post("/api/auth/verify", { chain: "solana", address: payer.address, nonce, signature });
-      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
 
       const fakeSig = "A".repeat(64); // valid base58 charset + length, so it routes into real RPC verification (mocked above)
       const good = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "solana", txRef: fakeSig });
@@ -166,7 +244,7 @@ describe("bounties", () => {
       // a different signed-in user can't attach THIS (real, public) payment to their own bounty --
       // the tx really happened on-chain, but it wasn't sent from their wallet.
       const stranger = await signup(app, "stranger-watching-the-wallet");
-      const strangersBounty = (await stranger.post("/api/bounties", { title: "T2", description: "D", reward: "R" })).json();
+      const strangersBounty = (await stranger.post("/api/bounties", { title: "T2", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
       const stolen = await stranger.post(`/api/bounties/${strangersBounty.id}/deposits`, { chain: "solana", txRef: "B".repeat(64) });
       expect(stolen.statusCode).toBe(403);
       expect(stolen.json().error.message).toMatch(/sent from your connected wallet/i);
@@ -184,7 +262,7 @@ describe("bounties", () => {
     const { app, close } = await makeBountyApp(depositFetch({ bsTx, bsTransfers }), stub, stub);
     try {
       const u = await signupEthereum(app, wallet);
-      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
       const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "ethereum", txRef: `0x${"a".repeat(64)}` });
       expect(r.statusCode).toBe(201);
       expect(r.json()).toMatchObject({ asset: { contract: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" }, amount: "5.5", fromAddress: sender, toWallet: ETH_WALLET }); // raw 5_500_000 at 6 decimals
@@ -202,7 +280,7 @@ describe("bounties", () => {
     const { app, close } = await makeBountyApp(depositFetch({ bsTx, bsTransfers }), stub, stub);
     try {
       const u = await signupEthereum(app, wallet);
-      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
       const hashLower = `0x${"c".repeat(64)}`;
       const first = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "ethereum", txRef: hashLower });
       expect(first.statusCode).toBe(201);
@@ -225,7 +303,7 @@ describe("bounties", () => {
     const { app, close } = await makeBountyApp(depositFetch({ bsTx, bsTransfers }), stub, stub);
     try {
       const u = await signupEthereum(app, wallet);
-      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
       const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "ethereum", txRef: `0x${"d".repeat(64)}` });
       expect(r.statusCode).toBe(400);
       expect(r.json().error.message).toMatch(/not.*an asset this server tracks/i);
@@ -249,7 +327,7 @@ describe("bounties", () => {
     const { app, close } = await makeBountyApp(depositFetch({ bsTx, bsTransfers }), stub, stub);
     try {
       const u = await signupEthereum(app, wallet);
-      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
       const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "ethereum", txRef: `0x${"e".repeat(64)}` });
       expect(r.statusCode).toBe(201);
       expect(r.json()).toMatchObject({ asset: { contract: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" }, amount: "5.5" });
@@ -267,7 +345,7 @@ describe("bounties", () => {
     const { app, close } = await makeBountyApp(depositFetch({ bsTx, bsTransfers }), stub, stub);
     try {
       const u = await signupEthereum(app, wallet);
-      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
       const cancelled = await u.post(`/api/bounties/${b.id}/cancel`, { reason: "no longer needed" });
       expect(cancelled.statusCode).toBe(200);
       const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "ethereum", txRef: `0x${"f".repeat(64)}` });
@@ -283,7 +361,7 @@ describe("bounties", () => {
     const { app, close } = await makeBountyApp(depositFetch({}), stub, stub, { depositWallets: {} });
     try {
       const u = await signup(app, "no-wallet-configured");
-      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
       const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "ethereum", txRef: `0x${"b".repeat(64)}` });
       expect(r.statusCode).toBe(400);
       expect(r.json().error.message).toMatch(/no ethereum deposit wallet/i);
@@ -311,7 +389,7 @@ describe("bounties", () => {
       const { app, close } = await makeBountyApp(depositFetch({ btcTx: btcTx() }), stub, stub);
       try {
         const u = await signup(app, "btc-backer");
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef: TXID });
         expect(r.statusCode).toBe(201);
         // 150_000 + 50_000 sats = 0.002 BTC; the 9_000_000-sat change output back to the sender isn't counted.
@@ -333,7 +411,7 @@ describe("bounties", () => {
         // A Solana account whose own address is nowhere in the BTC tx -- the ETH/SOL equivalent of
         // this is a 403 ("wasn't sent from your connected wallet"), see the Solana test above.
         const solUser = await signup(app, "btc-unrelated-solana-account");
-        const b = (await solUser.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await solUser.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const viaSol = await solUser.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef: TXID });
         expect(viaSol.statusCode).toBe(201);
         expect(viaSol.json().fromAddress).toBe(SENDER);
@@ -352,7 +430,7 @@ describe("bounties", () => {
       const { app, close } = await makeBountyApp(depositFetch({ btcTx: btcTx({ confirmed: false }) }), stub, stub);
       try {
         const u = await signup(app, "btc-unconfirmed");
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef: TXID });
         expect(r.statusCode).toBe(400);
         expect(r.json().error.message).toMatch(/isn't confirmed in a block yet/i);
@@ -373,7 +451,7 @@ describe("bounties", () => {
       const { app, close } = await makeBountyApp(fetchImpl, stub, stub);
       try {
         const u = await signup(app, "btc-malformed");
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         for (const txRef of ["not-a-txid", "ab".repeat(31), "zz".repeat(32), `0x${"ab".repeat(32)}`]) {
           const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef });
           expect(r.statusCode).toBe(400);
@@ -391,7 +469,7 @@ describe("bounties", () => {
       const { app, close } = await makeBountyApp(depositFetch({ btcTx: elsewhere }), stub, stub);
       try {
         const u = await signup(app, "btc-wrong-wallet");
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef: TXID });
         expect(r.statusCode).toBe(400);
         expect(r.json().error.message).toMatch(/doesn't pay the configured deposit wallet/i);
@@ -402,7 +480,7 @@ describe("bounties", () => {
       const missing = await makeBountyApp(depositFetch({}), stub, stub);
       try {
         const u = await signup(missing.app, "btc-unknown-txid");
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef: TXID });
         expect(r.statusCode).toBe(400);
         expect(r.json().error.message).toMatch(/wasn't found/i);
@@ -417,7 +495,7 @@ describe("bounties", () => {
       try {
         expect((await new Client(app).get("/api/bounties/wallets")).json()).toEqual({ solana: SOL_WALLET });
         const u = await signup(app, "btc-not-configured");
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bitcoin", txRef: TXID });
         expect(r.statusCode).toBe(400);
         expect(r.json().error.message).toMatch(/no bitcoin deposit wallet/i);
@@ -508,7 +586,7 @@ describe("bounties", () => {
       const { app, close } = await makeBountyApp(depositFetch({ solTx }), stub, stub);
       try {
         const relayerClient = await signup(app, "attribution-route-relayer");
-        const b = (await relayerClient.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await relayerClient.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const byRelayer = await relayerClient.post(`/api/bounties/${b.id}/deposits`, { chain: "solana", txRef: SIG });
         expect(byRelayer.statusCode).toBe(403); // before this fix, the fee payer was "the sender" and this was accepted
 
@@ -538,7 +616,7 @@ describe("bounties", () => {
       const { app, close } = await makeBountyApp(depositFetch({ bnbRpc: { tx: nativeTx, receipt: { status: "0x1", logs: [] }, calls } }), new FakeProvider("ethereum"), new FakeProvider("solana"));
       try {
         const u = await signupEthereum(app, wallet);
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: HASH });
         expect(r.statusCode).toBe(201);
         expect(r.json()).toMatchObject({ chain: "bnb", asset: "native", amount: "2", toWallet: BNB_WALLET, txRef: HASH });
@@ -555,7 +633,7 @@ describe("bounties", () => {
       const { app, close } = await makeBountyApp(depositFetch({ bnbRpc: { ...tokenTx(USDT_BSC), decimals: 18 } }), new FakeProvider("ethereum"), new FakeProvider("solana"));
       try {
         const u = await signupEthereum(app, wallet);
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: HASH });
         expect(r.statusCode).toBe(201);
         expect(r.json()).toMatchObject({ chain: "bnb", asset: { contract: USDT_BSC.toLowerCase() }, amount: "5.5", fromAddress: sender.toLowerCase() });
@@ -569,7 +647,7 @@ describe("bounties", () => {
       const { app, close } = await makeBountyApp(depositFetch({ bnbRpc: tokenTx(ETH_USDC) }), new FakeProvider("ethereum"), new FakeProvider("solana"));
       try {
         const u = await signupEthereum(app, wallet);
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: HASH });
         expect(r.statusCode).toBe(400);
         expect(r.json().error.message).toMatch(/not in an asset this server tracks/);
@@ -582,7 +660,7 @@ describe("bounties", () => {
       const { app, close } = await makeBountyApp(depositFetch({ bnbRpc: { tx: nativeTx, receipt: { status: "0x1", logs: [] } } }), new FakeProvider("ethereum"), new FakeProvider("solana"));
       try {
         const sol = await signup(app, "bnb-sol-user");
-        const b = (await sol.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await sol.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const r1 = await sol.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: HASH });
         expect(r1.statusCode).toBe(403);
         const other = await signupEthereum(app, new Wallet("0x" + "9".repeat(64)));
@@ -598,7 +676,7 @@ describe("bounties", () => {
       const { app, close } = await makeBountyApp(depositFetch({ bnbRpc: { tx: nativeTx, receipt: { status: "0x0", logs: [] } } }), new FakeProvider("ethereum"), new FakeProvider("solana"));
       try {
         const u = await signupEthereum(app, wallet);
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         expect((await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: HASH })).json().error.message).toMatch(/didn't succeed on-chain/);
         expect((await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: "0x1234" })).json().error.message).toMatch(/real BNB Chain transaction hash/);
       } finally {
@@ -608,7 +686,7 @@ describe("bounties", () => {
       try {
         expect((await new Client(none.app).get("/api/bounties/wallets")).json()).toEqual({ ethereum: ETH_WALLET });
         const u = await signupEthereum(none.app, wallet);
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: HASH });
         expect(r.statusCode).toBe(400);
         expect(r.json().error.message).toMatch(/no bnb deposit wallet/i);
@@ -666,7 +744,7 @@ describe("bounties", () => {
       try {
         expect((await new Client(a).get("/api/bounties/wallets")).json()).toEqual({ ethereum: ETH_WALLET, robinhood: RH_WALLET });
         const u = await signupEthereum(a, wallet);
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH.toUpperCase().replace("0X", "0x") });
         expect(r.statusCode).toBe(201);
         expect(r.json()).toMatchObject({ chain: "robinhood", asset: "native", amount: "4", txRef: HASH, toWallet: RH_WALLET });
@@ -683,7 +761,7 @@ describe("bounties", () => {
       const { app: a, close } = await app(rhRpcFetch({ tx: tokenTx(wallet.address, USDG), receipt: tokenReceipt(USDG, wallet.address, 25_000_000n), decimals: 6 }));
       try {
         const u = await signupEthereum(a, wallet);
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH });
         expect(r.statusCode).toBe(201);
         expect(r.json()).toMatchObject({ chain: "robinhood", asset: { contract: USDG.toLowerCase() }, amount: "25" });
@@ -696,7 +774,7 @@ describe("bounties", () => {
       const { app: a, close } = await app(rhRpcFetch({ tx: tokenTx(wallet.address, MAINNET_USDC), receipt: tokenReceipt(MAINNET_USDC, wallet.address, 5_000_000n), decimals: 6 }));
       try {
         const u = await signupEthereum(a, wallet);
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH });
         expect(r.statusCode).toBe(400);
         expect(r.json().error.message).toBe("That transaction pays the right wallet, but not in an asset this server tracks for Robinhood Chain deposits (native ETH or USDG)");
@@ -709,7 +787,7 @@ describe("bounties", () => {
       const { app: a, close } = await app(rhRpcFetch({ tx: nativeTx(wallet.address), receipt: ok }));
       try {
         const otherEth = await signupEthereum(a, new Wallet("0x" + "8".repeat(64)));
-        const b = (await otherEth.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await otherEth.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const r1 = await otherEth.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH });
         expect(r1.statusCode).toBe(403);
         const sol = await signup(a, "rh-solana-account");
@@ -726,7 +804,7 @@ describe("bounties", () => {
       const reverted = await app(rhRpcFetch({ tx: nativeTx(wallet.address), receipt: { status: "0x0", logs: [] } }));
       try {
         const u = await signupEthereum(reverted.app, wallet);
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         expect((await u.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH })).json().error.message).toBe("That transaction didn't succeed on-chain");
         const bad = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: "0x1234" });
         expect(bad.statusCode).toBe(400);
@@ -737,7 +815,7 @@ describe("bounties", () => {
       const missing = await app(rhRpcFetch({ tx: null, receipt: null }));
       try {
         const u = await signupEthereum(missing.app, wallet);
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         expect((await u.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH })).json().error.message).toBe("That transaction wasn't found");
       } finally {
         await missing.close();
@@ -748,7 +826,7 @@ describe("bounties", () => {
       const { app: a, close } = await app(rhRpcFetch({ tx: nativeTx(wallet.address), receipt: ok }), { depositWallets: { ethereum: ETH_WALLET } });
       try {
         const u = await signupEthereum(a, wallet);
-        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
         const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH });
         expect(r.statusCode).toBe(400);
         expect(r.json().error.message).toMatch(/no robinhood deposit wallet/i);

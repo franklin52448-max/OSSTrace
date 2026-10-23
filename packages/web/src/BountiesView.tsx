@@ -1,17 +1,21 @@
 import { Fragment, lazy, Suspense, useCallback, useEffect, useState } from "react";
-import type { Bounty, BountySubmission } from "@osstrace/contract";
+import { BOUNTY_DIFFICULTIES, BOUNTY_TAGS, type Bounty, type BountyDifficulty, type BountySubmission, type BountyTag, type CreateBounty } from "@osstrace/contract";
 import { serverApiCall, useServerSession } from "./serverSession.ts";
 import { EmptyState, Loading, Notice, PageHeader, SignInPrompt } from "./ui.tsx";
-import { cx } from "./prism/components.tsx";
+import { Checkbox, cx } from "./prism/components.tsx";
 import {
   applyQuery,
   assetDescription,
   assetLabel,
   boardAssets,
+  deadlineInfo,
   DEFAULT_QUERY,
+  DIFFICULTY_TEXT,
   fundingTotals,
+  hasNarrowingFilters,
   STATUS_FILTERS,
   statusCounts,
+  TAG_TEXT,
   type BoardQuery,
   type BountySort,
   type StatusFilter,
@@ -32,6 +36,12 @@ const STATUS_CLASS: Record<BountyStatus, string> = {
   cancelled: "border-line bg-raised text-ink-faint",
 };
 const STATUS_FILTER_TEXT: Record<StatusFilter, string> = { ...STATUS_TEXT, all: "All" };
+
+/** Today's date where the viewer is, as the YYYY-MM-DD a date input uses. */
+function todayDate(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
 
 function short(id: string): string {
   return id.length > 10 ? `${id.slice(0, 6)}…` : id;
@@ -173,6 +183,7 @@ function BountyList({
           <select aria-label="Sort bounties" value={sort} onChange={(e) => onQueryChange({ ...query, sort: e.target.value as BountySort })} className="ctl h-9 py-0 text-sm">
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
+            <option value="deadline">Deadline soonest</option>
             {assets.map((a) => (
               <option key={a.key} value={`funded:${a.key}`}>
                 Most funded in {assetDescription(a.chain, a.asset)}
@@ -180,6 +191,46 @@ function BountyList({
             ))}
           </select>
         </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-4 py-2.5">
+        <div role="group" aria-label="Filter by tag" className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs text-ink-faint">Tags</span>
+          {BOUNTY_TAGS.map((t) => {
+            const on = query.tags.includes(t);
+            return (
+              <button
+                key={t}
+                type="button"
+                aria-pressed={on}
+                onClick={() => onQueryChange({ ...query, tags: on ? query.tags.filter((x) => x !== t) : [...query.tags, t] })}
+                className={cx("chip border transition-colors duration-150", on ? "border-signal/35 bg-signal/10 text-signal" : "border-line text-ink-faint hover:border-line-strong hover:text-ink")}
+              >
+                {TAG_TEXT[t]}
+              </button>
+            );
+          })}
+        </div>
+        <label className="flex items-center gap-2 text-xs text-ink-faint">
+          Size
+          <select
+            aria-label="Filter by difficulty"
+            value={query.difficulty}
+            onChange={(e) => onQueryChange({ ...query, difficulty: e.target.value as BoardQuery["difficulty"] })}
+            className="ctl h-8 py-0 text-xs"
+          >
+            <option value="any">Any</option>
+            {BOUNTY_DIFFICULTIES.map((d) => (
+              <option key={d} value={d}>
+                {DIFFICULTY_TEXT[d]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {hasNarrowingFilters(query) && (
+          <button type="button" onClick={() => onQueryChange({ ...query, tags: [], difficulty: "any" })} className="text-xs text-ink-dim underline-offset-2 hover:text-ink hover:underline">
+            Clear filters
+          </button>
+        )}
       </div>
       {shown.length === 0 ? (
         <div className="px-4 py-10 text-center text-sm text-ink-faint">No bounties match these filters.</div>
@@ -213,6 +264,39 @@ function FundedChips({ bounty }: { bounty: Bounty }) {
   );
 }
 
+/** The opener's own size estimate and tags. A bounty opened before these existed simply shows none. */
+function MetaChips({ bounty }: { bounty: Bounty }) {
+  if (!bounty.difficulty && bounty.tags.length === 0) return null;
+  return (
+    <span className="flex flex-wrap items-center gap-1.5" aria-label="Bounty details">
+      {bounty.difficulty && (
+        <span title="The opener's own estimate of the work's size" className="chip border border-line-strong bg-raised text-ink">
+          {DIFFICULTY_TEXT[bounty.difficulty]}
+        </span>
+      )}{" "}
+      {bounty.tags.map((t, i) => (
+        <Fragment key={t}>
+          {i > 0 && " "}
+          <span className="chip border border-line text-ink-dim">{TAG_TEXT[t]}</span>
+        </Fragment>
+      ))}
+    </span>
+  );
+}
+
+/** "Due Nov 3, 2026 · 9 days left" while open; just the date once resolved (a countdown would mean nothing then). */
+function DeadlineText({ bounty }: { bounty: Bounty }) {
+  if (!bounty.deadline) return null;
+  const info = deadlineInfo(bounty.deadline);
+  const live = bounty.status === "open";
+  return (
+    <span aria-label="Deadline" className={cx(live && info.passed && "text-warn", live && !info.passed && info.daysLeft <= 7 && "text-ink-dim")}>
+      Due {info.dateText}
+      {live && ` · ${info.text}`}
+    </span>
+  );
+}
+
 function BountyRow({ bounty: b, onSelect }: { bounty: Bounty; onSelect: () => void }) {
   return (
     <button type="button" onClick={onSelect} className="flex w-full items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors duration-150 hover:bg-raised">
@@ -224,7 +308,9 @@ function BountyRow({ bounty: b, onSelect }: { bounty: Bounty; onSelect: () => vo
           </span>
           <FundedChips bounty={b} />
           <span>opened {new Date(b.openedAt).toLocaleDateString()}</span>
+          {b.deadline && <DeadlineText bounty={b} />}
         </div>
+        <MetaChips bounty={b} />
       </div>
       <span className={`chip shrink-0 border ${STATUS_CLASS[b.status]}`}>{STATUS_TEXT[b.status]}</span>
     </button>
@@ -235,14 +321,25 @@ function OpenBountyForm({ onOpened }: { onOpened: () => void }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [reward, setReward] = useState("");
+  const [tags, setTags] = useState<BountyTag[]>([]);
+  const [difficulty, setDifficulty] = useState<BountyDifficulty | "">("");
+  const [deadline, setDeadline] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(event: React.FormEvent): Promise<void> {
     event.preventDefault();
+    // The select's `required` already blocks an empty difficulty; checkboxes have no group-level
+    // `required`, so "at least one tag" is checked here (and again, authoritatively, server-side).
+    if (tags.length === 0) {
+      setError("Pick at least one tag.");
+      return;
+    }
+    if (!difficulty) return;
     setSubmitting(true);
     setError(null);
-    const res = await serverApiCall<Bounty>("/api/bounties", { method: "POST", body: { title, description, reward } });
+    const body: CreateBounty = { title, description, reward, tags, difficulty, ...(deadline ? { deadline } : {}) };
+    const res = await serverApiCall<Bounty>("/api/bounties", { method: "POST", body });
     setSubmitting(false);
     if (!res.ok) {
       setError(res.message);
@@ -251,6 +348,9 @@ function OpenBountyForm({ onOpened }: { onOpened: () => void }) {
     setTitle("");
     setDescription("");
     setReward("");
+    setTags([]);
+    setDifficulty("");
+    setDeadline("");
     onOpened();
   }
 
@@ -278,6 +378,43 @@ function OpenBountyForm({ onOpened }: { onOpened: () => void }) {
       <p className="text-xs text-ink-faint">
         Your own promise, not a balance held here: you pay whichever submission you mark claimed, off-platform.
       </p>
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium text-ink">Tags</legend>
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          {BOUNTY_TAGS.map((t) => (
+            <Checkbox key={t} aria-label={`Tag: ${TAG_TEXT[t]}`} checked={tags.includes(t)} onCheckedChange={(on) => setTags((prev) => (on ? [...prev, t] : prev.filter((x) => x !== t)))}>
+              {TAG_TEXT[t]}
+            </Checkbox>
+          ))}
+        </div>
+      </fieldset>
+      <div className="flex flex-wrap items-end gap-4">
+        <label className="space-y-1.5">
+          <span className="block text-sm font-medium text-ink">Size</span>
+          <select aria-label="Difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value as BountyDifficulty)} required className="ctl h-10 py-0">
+            <option value="" disabled>
+              Choose…
+            </option>
+            {BOUNTY_DIFFICULTIES.map((d) => (
+              <option key={d} value={d}>
+                {DIFFICULTY_TEXT[d]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1.5">
+          <span className="block text-sm font-medium text-ink">
+            Deadline <span className="font-normal text-ink-faint">(optional)</span>
+          </span>
+          <input type="date" aria-label="Deadline" value={deadline} min={todayDate()} onChange={(e) => setDeadline(e.target.value)} className="ctl h-10 py-0" />
+        </label>
+        {deadline && (
+          <button type="button" onClick={() => setDeadline("")} className="btn-outline h-10">
+            No deadline
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-ink-faint">Leave the deadline empty for an open-ended bounty. It's shown on the board; it never closes the bounty by itself.</p>
       {error && <Notice tone="danger">{error}</Notice>}
       <button type="submit" disabled={submitting} className="btn-accent">
         {submitting ? "Opening…" : "Open bounty"}
@@ -330,6 +467,14 @@ function BountyDetail({ bounty, onBack, onChanged }: { bounty: Bounty; onBack: (
           <span className={`chip shrink-0 border ${STATUS_CLASS[bounty.status]}`}>{STATUS_TEXT[bounty.status]}</span>
         </div>
         <div className="space-y-3 px-4 py-3 text-sm">
+          <MetaChips bounty={bounty} />
+          {bounty.deadline ? (
+            <div className="text-xs text-ink-faint">
+              <DeadlineText bounty={bounty} />
+            </div>
+          ) : (
+            <div className="text-xs text-ink-faint">No deadline: open-ended.</div>
+          )}
           <p className="whitespace-pre-wrap text-ink-dim">{bounty.description}</p>
           <div className="text-xs text-ink-faint">
             Reward <span className="num font-medium text-ink">{bounty.reward}</span> · the poster's own claim, not escrowed

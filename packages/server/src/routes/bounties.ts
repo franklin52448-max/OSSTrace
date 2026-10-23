@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { Bounty, BountyDeposit, BountySubmission, BountyWallets, DepositChain } from "@osstrace/contract";
+import { BOUNTY_DIFFICULTIES, BOUNTY_TAGS, type BountyDifficulty, type BountyTag } from "@osstrace/contract";
 import { requireUser, type Ctx } from "../context.ts";
 import { HttpClient, budgetMs } from "../lib/http.ts";
 import { verifyBitcoinDeposit, verifyBnbDeposit, verifyEthereumDeposit, verifyRobinhoodDeposit, verifySolanaDeposit, type DepositVerification } from "../chain/deposits.ts";
@@ -10,11 +11,45 @@ import { ApiErr, badRequest, conflict, forbidden, notFound } from "../lib/errors
 import { nowIso } from "../lib/time.ts";
 import { depositChain, parse } from "../schemas.ts";
 
-const createBody = z.object({ title: z.string().trim().min(1).max(200), description: z.string().trim().min(1).max(20_000), reward: z.string().trim().min(1).max(300) }).strict();
+const createBody = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    description: z.string().trim().min(1).max(20_000),
+    reward: z.string().trim().min(1).max(300),
+    // Stored de-duplicated, in BOUNTY_TAGS order, so the same set always reads the same way.
+    tags: z
+      .array(z.enum(BOUNTY_TAGS))
+      .min(1, "pick at least one tag")
+      .max(BOUNTY_TAGS.length)
+      .transform((tags) => BOUNTY_TAGS.filter((t) => tags.includes(t))),
+    difficulty: z.enum(BOUNTY_DIFFICULTIES),
+    deadline: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "deadline must be a date, YYYY-MM-DD")
+      .refine(isCalendarDate, "deadline must be a real calendar date")
+      .refine(notBeforeYesterdayUtc, "deadline can't be in the past")
+      .nullable()
+      .optional(),
+  })
+  .strict();
 const submitBody = z.object({ prUrl: z.string().trim().min(1).max(500).regex(/^https?:\/\/\S+$/, "prUrl must be a full http(s) URL"), note: z.string().trim().max(2000).default("") }).strict();
 const claimBody = z.object({ submissionId: z.string().min(1).max(64) }).strict();
 const cancelBody = z.object({ reason: z.string().trim().min(1).max(2000) }).strict();
 const depositBody = z.object({ chain: depositChain, txRef: z.string().trim().min(1).max(200) }).strict();
+
+/** "2026-02-30" matches the YYYY-MM-DD shape but isn't a day; Date.UTC would silently roll it to March 2. */
+function isCalendarDate(value: string): boolean {
+  const [y, m, d] = value.split("-").map(Number) as [number, number, number];
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+}
+
+/** A deadline is a calendar date in the opener's own timezone, which may run up to a day behind UTC
+ *  -- so "today" for them can be "yesterday" in UTC. Anything earlier than that is in the past for everyone. */
+function notBeforeYesterdayUtc(value: string): boolean {
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return value >= yesterday;
+}
 
 type BountyRow = {
   id: string;
@@ -22,6 +57,9 @@ type BountyRow = {
   title: string;
   description: string;
   reward: string;
+  tags: string; // JSON array (migration 011)
+  difficulty: BountyDifficulty | null; // NULL only for bounties opened before migration 011
+  deadline: string | null;
   opened_by: string;
   opened_at: string;
   claimed_submission_id: string | null;
@@ -45,6 +83,12 @@ type SubmissionRow = { id: string; bounty_id: string; submitted_by: string; pr_u
 const DEPOSIT_SIGNER: Record<Exclude<DepositChain, "bitcoin">, WalletChain> = { solana: "solana", ethereum: "ethereum", bnb: "ethereum", robinhood: "ethereum" };
 
 type DepositRow = { id: string; bounty_id: string; chain: DepositChain; asset_contract: string | null; amount: string; tx_ref: string; from_address: string; to_wallet: string; memo: string | null; recorded_by: string; recorded_at: string };
+
+/** Only ever written by this route (validated), but read defensively: an unknown entry is dropped, never shown as a tag. */
+function parseTags(raw: string): BountyTag[] {
+  const parsed: unknown = JSON.parse(raw);
+  return Array.isArray(parsed) ? BOUNTY_TAGS.filter((t) => parsed.includes(t)) : [];
+}
 
 const toSubmission = (r: SubmissionRow): BountySubmission => ({ id: r.id, bountyId: r.bounty_id, submittedBy: r.submitted_by, prUrl: r.pr_url, note: r.note, submittedAt: r.submitted_at, outcome: r.outcome });
 const toDeposit = (r: DepositRow): BountyDeposit => ({
@@ -73,6 +117,9 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
       title: r.title,
       description: r.description,
       reward: r.reward,
+      tags: parseTags(r.tags),
+      ...(r.difficulty ? { difficulty: r.difficulty } : {}),
+      ...(r.deadline ? { deadline: r.deadline } : {}),
       openedBy: r.opened_by,
       openedAt: r.opened_at,
       ...(r.claimed_submission_id ? { claimedSubmissionId: r.claimed_submission_id } : {}),
@@ -113,11 +160,14 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
     const id = randomUUID();
     const now = nowIso();
     db.run(
-      "INSERT INTO bounties (id, status, title, description, reward, opened_by, opened_at) VALUES (?, 'open', ?, ?, ?, ?, ?)",
+      "INSERT INTO bounties (id, status, title, description, reward, tags, difficulty, deadline, opened_by, opened_at) VALUES (?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)",
       id,
       body.title,
       body.description,
       body.reward,
+      JSON.stringify(body.tags),
+      body.difficulty,
+      body.deadline ?? null,
       u.id,
       now,
     );

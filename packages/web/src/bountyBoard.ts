@@ -1,4 +1,4 @@
-// The bounty board's pure logic: per-asset funding totals, and the list's filter/sort. No React, no
+// The bounty board's pure logic: per-asset funding totals, deadlines, and the list's filter/sort. No React, no
 // network, no chain SDK -- BountiesView renders what these return, and the board's tests exercise
 // them directly as well as through the real UI.
 //
@@ -6,7 +6,17 @@
 //  - `reward` is the opener's own free text. It is never parsed, summed or sorted as a number.
 //  - Verified deposits are summed per asset, never converted between assets or to a dollar figure.
 //    So "most funded" can only ever mean "most funded in one chosen asset".
-import { CHAIN_NAMES, NATIVE_SYMBOLS, type Bounty, type BountyAsset, type BountyDeposit, type BountyStatus, type DepositChain } from "@osstrace/contract";
+import {
+  CHAIN_NAMES,
+  NATIVE_SYMBOLS,
+  type Bounty,
+  type BountyAsset,
+  type BountyDeposit,
+  type BountyDifficulty,
+  type BountyStatus,
+  type BountyTag,
+  type DepositChain,
+} from "@osstrace/contract";
 import { compareDecimalAmounts, sumDecimalAmounts } from "./decimalAmount.ts";
 
 export const DEPOSIT_NATIVE_SYMBOL: Record<DepositChain, string> = { ...NATIVE_SYMBOLS, bitcoin: "BTC" };
@@ -84,11 +94,44 @@ export function boardAssets(bounties: readonly Bounty[]): { key: string; chain: 
 export type StatusFilter = BountyStatus | "all";
 export const STATUS_FILTERS: readonly StatusFilter[] = ["open", "claimed", "cancelled", "all"];
 
-/** "newest" / "oldest" by when it was opened, or `funded:<assetKey>` -- most funded in that one asset first. */
-export type BountySort = "newest" | "oldest" | `funded:${string}`;
+export const TAG_TEXT: Record<BountyTag, string> = { frontend: "Frontend", backend: "Backend", docs: "Docs", data: "Data", other: "Other" };
+export const DIFFICULTY_TEXT: Record<BountyDifficulty, string> = { small: "Small", medium: "Medium", large: "Large" };
 
-export type BoardQuery = { status: StatusFilter; sort: BountySort };
-export const DEFAULT_QUERY: BoardQuery = { status: "open", sort: "newest" };
+/**
+ * "newest" / "oldest" by when it was opened; "deadline" -- soonest upcoming deadline first, then
+ * passed ones, then open-ended ones; or `funded:<assetKey>` -- most funded in that one asset first.
+ */
+export type BountySort = "newest" | "oldest" | "deadline" | `funded:${string}`;
+
+export type BoardQuery = {
+  status: StatusFilter;
+  sort: BountySort;
+  /** Matches a bounty carrying ANY of these; empty = no tag filter. */
+  tags: BountyTag[];
+  difficulty: BountyDifficulty | "any";
+};
+export const DEFAULT_QUERY: BoardQuery = { status: "open", sort: "newest", tags: [], difficulty: "any" };
+
+/** Today's calendar date where the viewer is (a deadline is a date, not an instant). */
+function localDay(now: Date): number {
+  return Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function dayOf(date: string): number {
+  const [y, m, d] = date.split("-").map(Number) as [number, number, number];
+  return Date.UTC(y, m - 1, d);
+}
+
+export type DeadlineInfo = { daysLeft: number; passed: boolean; dateText: string; text: string };
+
+/** How a YYYY-MM-DD deadline reads today, e.g. "Due Nov 3, 2026" / "9 days left". */
+export function deadlineInfo(deadline: string, now: Date = new Date()): DeadlineInfo {
+  const daysLeft = Math.round((dayOf(deadline) - localDay(now)) / 86_400_000);
+  const [y, m, d] = deadline.split("-").map(Number) as [number, number, number];
+  const dateText = new Date(y, m - 1, d).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  const text = daysLeft < 0 ? "deadline passed" : daysLeft === 0 ? "due today" : daysLeft === 1 ? "1 day left" : `${daysLeft} days left`;
+  return { daysLeft, passed: daysLeft < 0, dateText, text };
+}
 
 export function statusCounts(bounties: readonly Bounty[]): Record<StatusFilter, number> {
   const counts: Record<StatusFilter, number> = { open: 0, claimed: 0, cancelled: 0, all: bounties.length };
@@ -103,10 +146,29 @@ function fundedIn(b: Bounty, key: string): string | null {
   return amounts.length ? sumDecimalAmounts(amounts) : null;
 }
 
-export function sortBounties(bounties: readonly Bounty[], sort: BountySort): Bounty[] {
+/** 0 = upcoming (incl. today), 1 = passed, 2 = open-ended. */
+function deadlineBucket(b: Bounty, today: number): 0 | 1 | 2 {
+  if (!b.deadline) return 2;
+  return dayOf(b.deadline) >= today ? 0 : 1;
+}
+
+export function sortBounties(bounties: readonly Bounty[], sort: BountySort, now: Date = new Date()): Bounty[] {
   const list = [...bounties];
   if (sort === "newest") return list.sort(byNewest);
   if (sort === "oldest") return list.sort((a, b) => byNewest(b, a));
+  if (sort === "deadline") {
+    const today = localDay(now);
+    return list.sort((a, b) => {
+      const x = deadlineBucket(a, today);
+      const y = deadlineBucket(b, today);
+      if (x !== y) return x - y;
+      if (x === 2) return byNewest(a, b);
+      const da = dayOf(a.deadline!);
+      const db = dayOf(b.deadline!);
+      // Upcoming: soonest first. Passed: most recently passed first.
+      return (x === 0 ? da - db : db - da) || byNewest(a, b);
+    });
+  }
   const key = sort.slice("funded:".length);
   const totals = new Map(list.map((b) => [b.id, fundedIn(b, key)]));
   return list.sort((a, b) => {
@@ -119,7 +181,23 @@ export function sortBounties(bounties: readonly Bounty[], sort: BountySort): Bou
   });
 }
 
-export function applyQuery(bounties: readonly Bounty[], query: BoardQuery): Bounty[] {
-  const filtered = bounties.filter((b) => query.status === "all" || b.status === query.status);
-  return sortBounties(filtered, query.sort);
+export function matchesQuery(b: Bounty, query: BoardQuery): boolean {
+  if (query.status !== "all" && b.status !== query.status) return false;
+  if (query.tags.length > 0 && !b.tags.some((t) => query.tags.includes(t))) return false;
+  // A bounty opened before difficulty existed has none -- it never matches a specific size.
+  if (query.difficulty !== "any" && b.difficulty !== query.difficulty) return false;
+  return true;
+}
+
+export function applyQuery(bounties: readonly Bounty[], query: BoardQuery, now: Date = new Date()): Bounty[] {
+  return sortBounties(
+    bounties.filter((b) => matchesQuery(b, query)),
+    query.sort,
+    now,
+  );
+}
+
+/** Whether any filter beyond the default "Open" status view is narrowing the list. */
+export function hasNarrowingFilters(query: BoardQuery): boolean {
+  return query.tags.length > 0 || query.difficulty !== "any";
 }

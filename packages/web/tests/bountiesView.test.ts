@@ -139,11 +139,17 @@ async function backToBoard(): Promise<void> {
   await waitFor(() => [...document.querySelectorAll("button")].some((b) => text(b).trim() === "Refresh"), "the board's refresh to finish");
 }
 
-async function openBounty(bounty: typeof ALPHA): Promise<void> {
+type NewBounty = typeof ALPHA & { tags?: string[]; difficulty?: string; deadline?: string };
+
+/** Fills the "Open a bounty" form through its real controls; tags default to Backend, size to Medium. */
+async function openBounty(bounty: NewBounty): Promise<void> {
   await click(getButton("Open a bounty"));
   await fill(getByPlaceholder("Title"), bounty.title);
   await fill(getByPlaceholder("The feature, in depth"), bounty.description);
   await fill(getByPlaceholder("Your reward offer"), bounty.reward);
+  for (const tag of bounty.tags ?? ["Backend"]) await click(getControl<HTMLInputElement>(`Tag: ${tag}`));
+  await choose(getControl<HTMLSelectElement>("Difficulty"), bounty.difficulty ?? "medium");
+  if (bounty.deadline) await fill(getControl<HTMLInputElement>("Deadline"), bounty.deadline);
   await click(getButton("Open bounty"));
   await waitFor(() => row(bounty.title), `"${bounty.title}" on the board`);
 }
@@ -437,7 +443,7 @@ test("Sort by funded amount: ranks by verified SOL deposits only (never the free
     [BIG, "1 SOL"],
     [NONE, "1,000,000 SOL"],
   ] as const) {
-    ids[title] = (await api<{ id: string }>("/api/bounties", { title, description: ALPHA.description, reward })).id;
+    ids[title] = (await api<{ id: string }>("/api/bounties", { title, description: ALPHA.description, reward, tags: ["backend"], difficulty: "small" })).id;
   }
 
   // Real deposits through the real route: 0.5 SOL to SMALL; 1.5 + 1 SOL (two deposits) to BIG.
@@ -474,5 +480,89 @@ test("Sort by funded amount: ranks by verified SOL deposits only (never the free
   await showStatus("Cancelled");
   assert.deepEqual(rowOrder(titles), [SMALL]);
   assert.match(text(row(SMALL)!).trim(), /Cancelled$/);
+  assert.deepEqual(consoleErrors, []);
+});
+
+// --- Metadata: tags / difficulty / deadline ------------------------------------------------------
+
+/** A local calendar date `days` from today, as a date input holds it. */
+function localDate(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Clicks one of the list's "Filter by tag" toggles. */
+async function toggleTagFilter(label: string): Promise<void> {
+  const group = await waitFor(() => document.querySelector('[role="group"][aria-label="Filter by tag"]'), "the tag filter");
+  await click(getButton(label, group));
+}
+
+test("Metadata: the form needs a tag; tags, size and deadline show on the board and the detail view, and drive the tag/size filters and the deadline sort", async () => {
+  const DATED = "Meta check: dated docs+frontend";
+  const OPEN_ENDED = "Meta check: open-ended data";
+  const titles = [DATED, OPEN_ENDED];
+
+  await render(createElement(BountiesView));
+  await logInAs("meta-opener");
+
+  // No tag picked: refused in the form, nothing is created.
+  await click(getButton("Open a bounty"));
+  await fill(getByPlaceholder("Title"), DATED);
+  await fill(getByPlaceholder("The feature, in depth"), ALPHA.description);
+  await fill(getByPlaceholder("Your reward offer"), "500 USDC, paid by me");
+  await choose(getControl<HTMLSelectElement>("Difficulty"), "large");
+  await click(getButton("Open bounty"));
+  await waitFor(() => text().includes("Pick at least one tag."), "the missing-tag error");
+  assert.equal(((await (await fetch(`${server.url}/api/bounties`)).json()) as { title: string }[]).filter((b) => b.title === DATED).length, 0);
+
+  // Same form, now with two tags and a deadline nine days out.
+  await click(getControl<HTMLInputElement>("Tag: Frontend"));
+  await click(getControl<HTMLInputElement>("Tag: Docs"));
+  await fill(getControl<HTMLInputElement>("Deadline"), localDate(9));
+  await click(getButton("Open bounty"));
+  await waitFor(() => row(DATED), "the dated bounty on the board");
+  await openBounty({ title: OPEN_ENDED, description: ALPHA.description, reward: "a pizza", tags: ["Data"], difficulty: "small" });
+
+  const datedRow = row(DATED)!;
+  assert.equal(text(datedRow.querySelector('[aria-label="Bounty details"]')!).trim(), "Large Frontend Docs");
+  assert.match(text(datedRow.querySelector('[aria-label="Deadline"]')!).trim(), /^Due .+ · 9 days left$/);
+  assert.equal(text(row(OPEN_ENDED)!.querySelector('[aria-label="Bounty details"]')!).trim(), "Small Data");
+  assert.equal(row(OPEN_ENDED)!.querySelector('[aria-label="Deadline"]'), null, "no deadline, no countdown");
+
+  // What the server stored is exactly what was picked.
+  const stored = ((await (await fetch(`${server.url}/api/bounties`)).json()) as { title: string; tags: string[]; difficulty: string; deadline?: string }[]).filter((b) => titles.includes(b.title));
+  assert.deepEqual(
+    stored.map((b) => [b.title, b.tags, b.difficulty, b.deadline ?? null]),
+    [
+      [OPEN_ENDED, ["data"], "small", null],
+      [DATED, ["frontend", "docs"], "large", localDate(9)],
+    ],
+  );
+
+  // Tag filter (any-of), size filter, and clearing them.
+  await toggleTagFilter("Docs");
+  await waitFor(() => !row(OPEN_ENDED), "the data bounty filtered out");
+  assert.deepEqual(rowOrder(titles), [DATED]);
+  await toggleTagFilter("Data");
+  assert.deepEqual(rowOrder(titles), [OPEN_ENDED, DATED], "Docs OR Data");
+  await click(getButton("Clear filters"));
+  await choose(getControl<HTMLSelectElement>("Filter by difficulty"), "small");
+  assert.deepEqual(rowOrder(titles), [OPEN_ENDED]);
+  await choose(getControl<HTMLSelectElement>("Filter by difficulty"), "any");
+
+  // Deadline sort: the dated bounty ahead of the open-ended (and newer) one.
+  assert.deepEqual(rowOrder(titles), [OPEN_ENDED, DATED], "newest first by default");
+  await choose(getControl<HTMLSelectElement>("Sort bounties"), "deadline");
+  assert.deepEqual(rowOrder(titles), [DATED, OPEN_ENDED]);
+
+  // The detail view carries the same metadata.
+  await openRow(OPEN_ENDED);
+  assert.ok(text().includes("No deadline: open-ended."));
+  assert.equal(text(document.querySelector('[aria-label="Bounty details"]')!).trim(), "Small Data");
+  await backToBoard();
+  await openRow(DATED);
+  assert.match(text(document.querySelector('[aria-label="Deadline"]')!).trim(), /9 days left$/);
+  await backToBoard();
   assert.deepEqual(consoleErrors, []);
 });

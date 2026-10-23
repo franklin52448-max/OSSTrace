@@ -796,6 +796,18 @@ describe("tracer agent", () => {
     expect(seen[3]!.body.messages.filter((m) => m.role !== "system")).toHaveLength(1);
   });
 
+  it("the next turn's history records every argument a tool ran with, so 'same, but the week before' has the window to go on", async () => {
+    const seen: Seen[] = [];
+    await setup([{ tools: [{ name: "list_transfers", args: { chain: "ethereum", address: ETH_A, flow: "in", timeLast: "7d", sortBy: "usd", asset: "", limit: 5 } }] }, { content: "Listed." }, { content: "ok" }], seen);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    await c.post("/api/tracer-agent/chat", { docId: id, message: "biggest inflows this week" });
+    await c.post("/api/tracer-agent/chat", { docId: id, message: "same, but the week before" });
+    const prior = seen[2]!.body.messages.find((m) => m.role === "assistant")!.content!;
+    expect(prior).toMatch(/list_transfers\(chain=ethereum, address=0x[0-9a-fA-F]{40}, flow=in, sortBy=usd, sortDir=desc, timeLast=7d, limit=5\) -> ok/);
+    expect(prior).not.toMatch(/asset=/); // an argument sent blank isn't recorded as if it had a value
+  });
+
   it("one message at a time per caller", async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));

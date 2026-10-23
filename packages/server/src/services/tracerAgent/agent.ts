@@ -46,10 +46,16 @@ function actionsLine(calls: AgentToolCall[]): string {
   if (calls.length === 0) return "";
   const parts = calls.slice(0, 12).map((c) => {
     const r = c.result as { ok?: boolean; nodeId?: string; error?: string };
-    const arg = Object.entries(c.args)
-      .slice(0, 3)
-      .map(([k, v]) => `${k}=${safeText(typeof v === "string" ? v : JSON.stringify(v), 70)}`)
-      .join(", ");
+    // Every argument, not just the first few: list_transfers' first three are always chain, address
+    // and flow, so its time window, sort, asset and limit were dropped and a follow-up ("now the week
+    // before", "same but sorted by USD") had nothing to go on. Bounded per value and per call instead.
+    const arg = safeText(
+      Object.entries(c.args)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => `${k}=${safeText(typeof v === "string" ? v : JSON.stringify(v), 70)}`)
+        .join(", "),
+      360,
+    );
     return `${c.tool}(${arg}) -> ${r.ok === false ? `error: ${safeText(r.error, 80)}` : r.nodeId ? `ok nodeId=${r.nodeId}` : "ok"}`;
   });
   return `\n[tools run: ${parts.join("; ")}]`;

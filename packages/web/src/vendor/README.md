@@ -34,3 +34,15 @@ application or website, as long as the copyright notice is kept. The component i
 sold, sublicensed or redistributed on its own. That restriction is stricter than the AGPL-3.0 the
 rest of OSSTrace uses, so this file is not covered by the project's AGPL grant. Remove it (the home
 page works without it) before redistributing OSSTrace in a way the Commons Clause forbids.
+
+## Chain marks on the home page
+
+The unsupported-chain logos under "Add a chain" in `src/HomeFeatures.tsx` (`WANTED_CHAINS`) are single SVG paths
+copied in, not a dependency:
+
+- Bitcoin and Robinhood: [Simple Icons](https://simpleicons.org) 16.35.0, **CC0-1.0** (the same
+  set `src/ChainSelect.tsx` uses for Ethereum and Solana).
+- Tron and Monad: [Web3 Icons](https://web3icons.io) (`@web3icons/core` 4.0.58, branded network
+  icons) by 0xa3k5, **MIT**, which allows this as long as the credit is kept.
+
+The marks are trademarks of their projects, shown only to name chains OSSTrace doesn't support yet.

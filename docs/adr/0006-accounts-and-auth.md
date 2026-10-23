@@ -1,6 +1,10 @@
 # ADR 0006 — Accounts and auth: self-hosted email + password, opaque sessions, CLI-granted first admin
 
-Status: Decided 2026-10-21 (implemented in `packages/features/accounts/`)
+Status: Decided 2026-10-21 (implemented in `packages/features/accounts/`). **Superseded 2026-10-22
+by [ADR 0023](0023-wallet-sign-in-replaces-accounts-and-moderation.md)** for the unified server
+(`packages/server`) and the live site — this email+password design is no longer how a visitor
+signs in. `packages/features/accounts/` itself is kept running only for retired-component test
+coverage (see ADR 0023's Consequences); this document otherwise describes the old architecture.
 
 ## Context
 

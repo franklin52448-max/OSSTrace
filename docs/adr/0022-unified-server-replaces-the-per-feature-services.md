@@ -1,14 +1,18 @@
 # ADR 0022 — A single unified server replaces the per-feature microservices
 
-Status: In progress. First chunk landed 2026-10-22: `packages/contract` and `packages/server`
-exist, fully typecheck and test green. Second chunk landed the same day: `packages/web` now has a
-real, working connection to the new server — a **Workbench** tab (`src/WorkbenchView.tsx` +
-`src/serverSession.ts`) where signing up/logging in (its own cookie session, separate from the
-rest of the site's) and looking up a real address shows real balances and real transfers, straight
-from `packages/server`, over real cross-origin requests (which needed real CORS added to the
-server — see §6). This is additive, next to the existing nav, not a replacement of it: Explorer,
-Visualizer, Tracer and the nine original per-feature services are all still untouched and still
-serve the rest of the live site. This ADR will be updated as later chunks land.
+Status: Largely landed, 2026-10-22. `packages/contract` and `packages/server` exist and are what
+the live site actually runs on. Explorer, Visualizer and Tracer are now wired to the new server
+(no longer the nine old per-feature services for anything reachable from the live nav). Auth was
+rebuilt on wallet sign-in rather than carried over from the old accounts service — see
+[ADR 0023](0023-wallet-sign-in-replaces-accounts-and-moderation.md), which also covers why
+Confirmed-tier/community label moderation was dropped rather than ported. Bounties (ADR 0020) was
+ported onto `packages/server` too. Cases was retired from the nav rather than ported (the canvas
+was always its intended replacement, per §"What this chunk does not do" below; retiring it turned
+out to be simpler than finishing that port). The **Workbench** tab mentioned in this ADR's earlier
+drafts was the scratch page used to prove the server connection before any of the above landed;
+it's deleted now that Explorer does everything it did. The nine old `packages/features/*` packages
+are not deleted — see this ADR's own Consequences below for which are still genuinely needed and
+why.
 
 ## Context
 
@@ -142,26 +146,31 @@ for the honest account of what is and isn't covered, including why a session sur
 reload could only be verified in a real browser (Node's own `fetch`, what the `node --test` harness
 uses, has no cookie jar at all).
 
-## What this chunk does not do (future chunks, per the agreed plan)
+## What this chunk does not do
 
-- **Explorer/Visualizer/Tracer themselves are not wired yet.** Workbench proves the connection
-  works end to end on a smaller surface; replacing Explorer/Visualizer's own tabs (straight swaps,
-  per the agreed plan) is still a later chunk.
-- **No auto-search inside the canvas yet.** OSSTrace's own multi-hop path-finding and cross-chain
-  (Wormhole) tracing are not ported. The canvas (full ownership of "Tracer" going forward) ships as-is
-  first; the auto-search becomes an action inside it later, once the canvas itself is live.
-- **No roles/moderation, no ingested sanctions/entity labelset, no risk scoring, no bounty funding.**
-  The new server's labels are private-only, same as it shipped. OSSTrace's differentiators — the
-  ingested sanctions/protocol labelset plus a new curated "confirmed entity" registry (exchange
-  cold/hot wallets etc., additions restricted to operators), community submission + moderation,
-  self-attested labels, risk scoring, bounty funding — get built on top of this foundation as their
-  own chunks, each its own ADR update or follow-on ADR as it lands.
-- **Cases is not ported.** The investigation canvas is the intended replacement; `packages/features/
-  case-management` stays running until the canvas is live and proven, then gets retired.
-- **No real-time (websocket push).** Deliberately last/optional per the agreed plan — the new
-  server only polls; OSSTrace's existing websocket-push indexer integration is not reproduced here.
-- **The nine old services are not retired yet.** They keep running and keep serving the live site
-  until each is actually superseded, not before.
+Updated 2026-10-22 against what's actually landed; struck-through items are done, the rest is
+still accurate.
+
+- ~~Explorer/Visualizer/Tracer themselves are not wired yet.~~ Done — all three now run on
+  `packages/server`. Tracer specifically became a real investigation canvas (place addresses,
+  connect them, autosave/undo/redo, share read-only), not a straight swap of the old path-search
+  page.
+- **The old multi-hop path-finding/cross-chain (Wormhole) tracer (`TracerView.tsx`) is kept
+  reachable at `#pathfind/<chain>/<address>`, off the main nav, rather than ported into the
+  canvas yet** — the canvas doesn't have an equivalent auto-search action. Folding it in is still
+  future work; it's not lost, just not unified yet.
+- ~~No roles/moderation... community submission + moderation... get built on top of this
+  foundation.~~ Reversed, not just delayed: see ADR 0023. Roles and the Community/Confirmed
+  moderation pipeline were not ported, and the new auth model (wallet sign-in) has no natural
+  "moderator" concept to build one on top of. The ingested sanctions/protocol labelset, risk
+  scoring and bounty funding (ADR 0020) *were* built on this foundation, each as planned here.
+- ~~Cases is not ported.~~ Retired instead of ported — removed from the nav and home page rather
+  than rebuilt as a canvas feature. `packages/features/case-management` is kept only for
+  `casesView.test.ts`'s retired-component coverage (see Consequences).
+- **No real-time (websocket push).** Still true — the new server only polls.
+- ~~The nine old services are not retired yet.~~ Partially: none of the nine are reachable from
+  the live site's navigation anymore, but none are literally deleted either — see Consequences for
+  which are still genuinely needed (test coverage, or `#pathfind`) versus just not yet cleaned up.
 
 ## Consequences
 
@@ -171,3 +180,15 @@ uses, has no cookie jar at all).
 - Two "shared types" packages exist for a while (`packages/core` for the old architecture,
   `packages/contract` for the new one) until the cutover chunk retires the old services that still
   depend on `packages/core`.
+- **The nine old `packages/features/*` packages are still in the repo, and that's deliberate, not
+  neglect** — but for two different reasons depending on the package: `tracer` is still genuinely
+  live, behind the `#pathfind` route described above. `accounts`, `community-labels`,
+  `private-labels`, `explorer`, `visualizer` and `case-management` are kept running only because
+  specific tests (`lookupRace.test.ts`, `graphView.test.ts`, `casesView.test.ts`, and similar)
+  deliberately exercise retired web components (`Lookup`, `GraphView`, `CasesView` in
+  `packages/web/src/`) against them, for real test coverage of functionality the new server
+  doesn't reproduce yet (sanctions tags, live transaction streaming, private labels, moderation
+  review UI). None of the nine are reachable from the live site's own navigation. `risk-scoring`
+  is the one exception with no current consumer at all (its `RiskPanel.tsx` is only rendered from
+  inside the retired `Lookup`/`Report` chain) — a candidate for outright deletion if nothing comes
+  to depend on it, not yet acted on here.

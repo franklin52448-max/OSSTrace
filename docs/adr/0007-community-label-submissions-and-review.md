@@ -1,6 +1,11 @@
 # ADR 0007 — Community label submissions and Confirmed-tier review
 
-Status: Decided 2026-10-21 (implemented in `packages/features/community-labels/`)
+Status: Decided 2026-10-21 (implemented in `packages/features/community-labels/`). **Superseded
+2026-10-22 by [ADR 0023](0023-wallet-sign-in-replaces-accounts-and-moderation.md)** — the
+moderator role this design depends on no longer exists on the unified server, and the new Labels
+feature (`packages/web/src/labels/`) has no `reviewStatus`/submission-review pipeline. There is
+currently no replacement for public community-sourced label submission; this document describes
+the old architecture's design for when/if that's rebuilt.
 
 ## Context
 

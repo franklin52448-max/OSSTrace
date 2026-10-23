@@ -14,20 +14,8 @@ It renders through `vgpu` (vercel-labs, MIT), pinned to 0.3.1 — the version up
 `vgpu` lists its Node adapter as a regular dependency, which installs the native `webgpu` package
 (~70 MB, with a postinstall script); none of that reaches the browser bundle.
 
-Where WebGPU is unavailable (or fails to start), `HeroBackground` falls back to Ferrofluid below.
-
-License: **MIT + Commons Clause v1.0**, same terms and caveat as Ferrofluid below.
-
-## Ferrofluid.tsx
-
-The animated WebGL2 ferrofluid background from [React Bits](https://reactbits.dev/backgrounds/ferrofluid)
-by David Haz ([source](https://github.com/DavidHDev/react-bits/tree/main/src/ts-tailwind/Backgrounds/Ferrofluid)).
-It's the home hero's fallback where WebGPU isn't available (`src/App.tsx`, `HeroBackground`).
-
-One local patch, marked `OSSTrace patch` in the file: upstream's cleanup always calls
-`loseContext()`. Under React StrictMode (dev), the effect is cleaned up and re-run on the same
-canvas, which left it dead and white. The patch only releases the context once the canvas has
-really been removed from the page.
+Where WebGPU is unavailable (or fails to start), `HeroBackground` renders nothing and the page's
+own background shows instead.
 
 License: **MIT + Commons Clause v1.0.** It may be used, modified and distributed as part of an
 application or website, as long as the copyright notice is kept. The component itself may not be
@@ -46,3 +34,9 @@ copied in, not a dependency:
   icons) by 0xa3k5, **MIT**, which allows this as long as the credit is kept.
 
 The marks are trademarks of their projects, shown only to name chains OSSTrace doesn't support yet.
+
+## Wallet marks in the connect dialog
+
+The Phantom and MetaMask logos in `src/AccountPanel.tsx` (`WalletIcon`) are copied SVG paths from
+[Web3 Icons](https://web3icons.io) (`@web3icons/core` 4.0.58, branded wallet icons) by 0xa3k5,
+**MIT**, credit kept here. They're trademarks of their projects, shown only to name the wallet.

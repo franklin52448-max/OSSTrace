@@ -103,11 +103,18 @@ async function renderPanel() {
   return render(createElement(QueryClientProvider, { client: queryClient }, createElement(AccountPanel)));
 }
 
-/** Opens the header account menu's connect-wallet form (the header's own "Connect wallet" trigger, not yet inside any menu). */
+/** Opens the connect-wallet dialog (the header's own "Connect wallet" trigger, not yet inside any menu). */
 async function openConnectMenu(): Promise<HTMLElement> {
   await renderPanel();
   await click(await waitFor(() => (text().includes("Connect wallet") ? getButton("Connect wallet") : null), "the logged-out 'Connect wallet' trigger"));
   return waitFor(() => window.document.querySelector('[aria-label="Connect wallet"]') as HTMLElement | null, "the connect-wallet menu");
+}
+
+/** A detected wallet's row: a button named by the wallet alone (its chain and "Detected" badge sit beside the name). */
+function walletButton(name: string, root: HTMLElement): HTMLButtonElement {
+  const match = root.querySelector(`button[aria-label="${name}"]`);
+  if (!(match instanceof window.HTMLButtonElement)) throw new Error(`no ${name} wallet button`);
+  return match;
 }
 
 /** The menu's one live region: exactly one, so a message can only ever land in it. */
@@ -138,7 +145,7 @@ test("the connect menu offers Phantom and MetaMask, with an Install link when a 
 test("connecting Phantom runs the real challenge/verify flow and shows the signed-in wallet in the header", async () => {
   (window as unknown as { solana: unknown }).solana = mockPhantom("accountpaneltest");
   const menu = await openConnectMenu();
-  await click(getButton("Phantom", menu));
+  await click(walletButton("Phantom", menu));
   await waitFor(() => text().includes("sol_"), "the signed-in handle"); // shortHandle() always starts with sol_
   assert.deepEqual(consoleErrors, []);
 });
@@ -156,7 +163,7 @@ test("a signature failure puts the real error into the alert region that was alr
   const region = alertRegion(menu);
   assert.equal(text(region).trim(), "");
 
-  await click(getButton("Phantom", menu));
+  await click(walletButton("Phantom", menu));
 
   await waitFor(() => text(region).includes("User rejected the request"), "the signature-rejection error");
   assert.equal(alertRegion(menu), region, "the same region received the message");
@@ -166,7 +173,7 @@ test("a signature failure puts the real error into the alert region that was alr
 test("Settings: changing the display name persists through the real server and updates the header", async () => {
   (window as unknown as { solana: unknown }).solana = mockPhantom("settingstest");
   const menu = await openConnectMenu();
-  await click(getButton("Phantom", menu));
+  await click(walletButton("Phantom", menu));
   await waitFor(() => text().includes("sol_"), "the signed-in handle");
 
   await click(getHeaderToggle("sol_"));
@@ -182,7 +189,7 @@ test("connecting MetaMask runs the real challenge/verify flow with a real secp25
   const mm = mockMetaMask("metamasktest");
   (window as unknown as { ethereum: unknown }).ethereum = mm;
   const menu = await openConnectMenu();
-  await click(getButton("MetaMask", menu));
+  await click(walletButton("MetaMask", menu));
   await waitFor(() => text().includes("eth_"), "the signed-in handle"); // shortHandle() always starts with eth_
   assert.deepEqual(consoleErrors, []);
 });
@@ -196,7 +203,7 @@ test("an Ethereum provider returning no accounts puts the real error into the al
   };
   const menu = await openConnectMenu();
   const region = alertRegion(menu);
-  await click(getButton("MetaMask", menu));
+  await click(walletButton("MetaMask", menu));
   await waitFor(() => text(region).includes("the wallet returned no account"), "the no-account error");
   assert.deepEqual(consoleErrors, []);
 });
@@ -211,7 +218,7 @@ test("a Solana wallet without signMessage support puts the real error into the a
   };
   const menu = await openConnectMenu();
   const region = alertRegion(menu);
-  await click(getButton("Phantom", menu));
+  await click(walletButton("Phantom", menu));
   await waitFor(() => text(region).includes("this wallet doesn't support message signing"), "the unsupported-signMessage error");
   assert.deepEqual(consoleErrors, []);
 });

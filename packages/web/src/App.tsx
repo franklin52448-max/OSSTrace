@@ -12,7 +12,7 @@ import PrivateLabelPanel from "./PrivateLabelPanel.tsx";
 import RiskPanel from "./RiskPanel.tsx";
 import AccountPanel from "./AccountPanel.tsx";
 import ThemeCustomizer from "./ThemeCustomizer.tsx";
-import { useTheme } from "./theme.ts";
+import { useTheme, useThemeMode } from "./theme.ts";
 import { scrollBehavior, useReduceMotion } from "./motion.ts";
 import { LabelSubmitForm, ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
 import { useSession } from "./session.ts";
@@ -189,18 +189,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-ground text-ink">
-      {/* Top bar: wordmark, views, global address search, account. The same fixed dark "rail" bar
-          on every route including home (see RAIL_PINNED_STYLE) -- independent of the site's live
-          light/dark setting, so there's no header color/height jump navigating in from home. Only
-          the content below the header still pins to its own look on home (see HOME_PINNED_STYLE on
-          Home() itself) -- just the bar itself is unified. The theme toggle, customize and account
-          controls are untouched, just recoloured by the pin like everything else in the bar. */}
-      <header
-        ref={headerRef}
-        className="sticky top-0 z-30 border-b border-[var(--trace-rail-border)] bg-[var(--trace-rail)]"
-        style={RAIL_PINNED_STYLE}
-      >
-        <div className="mx-auto flex h-14 w-full max-w-[96rem] items-center gap-4 px-4 sm:px-6">
+      {/* Top bar: wordmark, views, global address search, theme, account. */}
+      <header ref={headerRef} className="sticky top-0 z-30 border-b border-line bg-ground/85 backdrop-blur-md">
+        <div className="mx-auto flex h-16 w-full max-w-[96rem] items-center gap-4 px-4 sm:px-6">
           <a href="#" className="shrink-0 rounded-md transition-opacity duration-150 hover:opacity-85">
             <Wordmark />
           </a>
@@ -261,10 +252,8 @@ function NavLink({ tab, active }: { tab: (typeof NAV)[number]; active: boolean }
       href={tab.href}
       aria-current={active ? "page" : undefined}
       className={cx(
-        "relative inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-md px-3 text-[13.5px] font-medium transition-colors duration-150",
-        active
-          ? "text-ink after:absolute after:inset-x-3 after:-bottom-[10px] after:h-0.5 after:rounded-full after:bg-[var(--color-helium)]"
-          : "text-ink-dim hover:bg-[var(--helium-elevated-7)] hover:text-ink",
+        "button transparent small shrink-0",
+        active ? "!bg-[var(--helium-elevated-10)] text-ink" : "!text-ink-dim hover:!text-ink",
       )}
     >
       {tab.label}
@@ -321,17 +310,12 @@ const HERO_SHARDS_NORD = {
   glow: 0.4,
 } satisfies AeroShardsProps;
 
-/** Only ever used on the home page, which keeps its original dark look regardless of the site's
- * live theme (see HOME_PINNED_STYLE) -- so unlike a CSS-token-driven element, this reads a fixed
- * mode rather than the live theme, since its lighting model runs on the GPU, not through CSS vars.
- * The one thing it DOES read from the live theme is which color variant to show (Nord gets its
- * own Frost-blue field) -- that's just picking a palette, not un-pinning the page's own darkness.
- * Needs WebGPU; where a visitor's browser can't start it (older browsers, or Brave/others that
- * gate WebGPU behind a flag by default), nothing renders here rather than falling back to a
- * different-looking background -- the shard field is the one look this hero has. */
+/** Needs WebGPU; where a visitor's browser can't start it (older browsers, or Brave and others that
+ * gate WebGPU behind a flag), nothing renders here and the page's own background shows instead.
+ * It lights itself on the GPU, so it reads the theme's dark/light mode rather than CSS tokens. */
 function HeroBackground() {
   const [webgpuFailed, setWebgpuFailed] = useState(false);
-  const lightMode = false;
+  const lightMode = useThemeMode() === "light";
   const shards = useTheme().preset === "nord" ? HERO_SHARDS_NORD : HERO_SHARDS;
   // Reduce motion holds the field still (no fly-in either) and stops it reacting to the pointer.
   const still = useReduceMotion();
@@ -343,98 +327,9 @@ function HeroBackground() {
   );
 }
 
-/**
- * The home page (header included) keeps its original look regardless of the rest of the site's
- * theme, including live customization via the theme panel: every token it reads is pinned here to
- * the exact values the site shipped with, via a local CSS-variable override that cascades to
- * everything in whichever subtree it's applied to (the same mechanism the theme system itself
- * uses). This has to include prism.css's own alias variables (--primary, --helium-blue, the
- * --helium-elevated-N family, ...), not just the --color-* tokens they're aliased from: those
- * aliases are declared only once, at :root, as `var(--color-x)` -- and a custom property inherits
- * its *computed* value, not its declaration, so :root's own alias already resolved against
- * :root's --color-x before this override ever applies; redefining --color-x here doesn't reach
- * back into it. Redefining the alias itself, right here, does.
- */
-const HOME_PINNED_STYLE = {
-  "--font": "Instrument Sans Variable, system-ui, Helvetica, Arial, sans-serif",
-  "--font-sans": "Instrument Sans Variable, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif",
-  "--radius-card": "16px",
-  "--radius-ctl": "12px",
-  "--color-ground": "#000000",
-  "--color-ground-deep": "#000000",
-  "--color-panel": "#0a0a0b",
-  "--color-raised": "#131315",
-  "--color-line": "#1c1c1f",
-  "--color-line-strong": "#2a2a2e",
-  "--color-ink": "#ededef",
-  "--color-ink-dim": "#a1a1a8",
-  "--color-ink-faint": "#75757c",
-  "--color-signal": "#8ea2ff",
-  "--color-helium": "#3450d1",
-  "--color-inbound": "#4ad6a0",
-  "--color-outbound": "#f5a35c",
-  "--color-warn": "#f4c76a",
-  "--color-danger": "#f47b7b",
-  "--color-info": "#7cc4f5",
-  "--color-private": "#b7a6f8",
-  // prism.css's own aliases onto the tokens above (see prism/prism.css) -- pinned directly, for
-  // exactly the reason explained above.
-  "--primary": "#ededef",
-  "--secondary": "#a1a1a8",
-  "--tertiary": "#75757c",
-  "--helium-blue": "#3450d1",
-  "--helium-blue-hover": "color-mix(in srgb, #3450d1 88%, white)",
-  "--helium-blue-press": "color-mix(in srgb, #3450d1 88%, black)",
-  "--bg-surface": "#000000",
-  "--background": "#000000",
-  "--tooltip-bg": "#131315",
-  "--tooltip-shadow": "color-mix(in srgb, #131315 40%, transparent)",
-  "--helium-elevated": "#ededef",
-  "--helium-elevated-5": "color-mix(in srgb, #ededef 5%, transparent)",
-  "--helium-elevated-7": "color-mix(in srgb, #ededef 7%, transparent)",
-  "--helium-elevated-10": "color-mix(in srgb, #ededef 10%, transparent)",
-  "--helium-elevated-15": "color-mix(in srgb, #ededef 15%, transparent)",
-  "--helium-elevated-20": "color-mix(in srgb, #ededef 20%, transparent)",
-  "--helium-elevated-25": "color-mix(in srgb, #ededef 25%, transparent)",
-  "--helium-elevated-30": "color-mix(in srgb, #ededef 30%, transparent)",
-  "--helium-elevated-40": "color-mix(in srgb, #ededef 40%, transparent)",
-  "--helium-elevated-50": "color-mix(in srgb, #ededef 50%, transparent)",
-} as React.CSSProperties;
-
-/**
- * The header's own bar on every route except home: a fixed dark "rail" surface, the same idea
- * as a sidebar's activity rail, that stays dark regardless of the site's live light/dark setting
- * -- same CSS-variable-pinning mechanism as HOME_PINNED_STYLE above, just a different fixed
- * palette, and only applied to the <header>, not the page below it. --color-signal/--helium-blue
- * are deliberately left un-pinned so the active-tab underline and primary buttons still track
- * the real accent color (including user customization), only ink/surface tokens are fixed.
- */
-const RAIL_PINNED_STYLE = {
-  "--color-ink": "#e4eded",
-  "--color-ink-dim": "#8e9d9e",
-  "--color-ink-faint": "#6b7879",
-  "--primary": "#e4eded",
-  "--secondary": "#8e9d9e",
-  "--tertiary": "#6b7879",
-  "--bg-surface": "#0c1b1e",
-  "--background": "#0c1b1e",
-  "--tooltip-bg": "#182a2e",
-  "--tooltip-shadow": "color-mix(in srgb, #182a2e 40%, transparent)",
-  "--helium-elevated": "#e4eded",
-  "--helium-elevated-5": "color-mix(in srgb, #e4eded 5%, transparent)",
-  "--helium-elevated-7": "color-mix(in srgb, #e4eded 7%, transparent)",
-  "--helium-elevated-10": "color-mix(in srgb, #e4eded 10%, transparent)",
-  "--helium-elevated-15": "color-mix(in srgb, #e4eded 15%, transparent)",
-  "--helium-elevated-20": "color-mix(in srgb, #e4eded 20%, transparent)",
-  "--helium-elevated-25": "color-mix(in srgb, #e4eded 25%, transparent)",
-  "--helium-elevated-30": "color-mix(in srgb, #e4eded 30%, transparent)",
-  "--helium-elevated-40": "color-mix(in srgb, #e4eded 40%, transparent)",
-  "--helium-elevated-50": "color-mix(in srgb, #e4eded 50%, transparent)",
-} as React.CSSProperties;
-
 function Home() {
   return (
-    <div className="pb-16" style={HOME_PINNED_STYLE}>
+    <div className="pb-16">
       {/* Full-bleed hero: the shard field, scrims for legibility, then the search on top. */}
       <section className="relative isolate overflow-hidden border-b border-line">
         <div className="absolute inset-0 -z-10">
@@ -444,18 +339,16 @@ function Home() {
           className="pointer-events-none absolute inset-0 -z-10"
           style={{
             background:
-              "radial-gradient(48% 42% at 50% 46%, rgb(0 0 0 / 0.9) 0%, rgb(0 0 0 / 0.6) 55%, transparent 100%), linear-gradient(to bottom, var(--color-ground) 0%, transparent 18%, transparent 70%, var(--color-ground) 100%)",
+              "radial-gradient(48% 42% at 50% 46%, color-mix(in srgb, var(--color-ground) 90%, transparent) 0%, color-mix(in srgb, var(--color-ground) 60%, transparent) 55%, transparent 100%), linear-gradient(to bottom, var(--color-ground) 0%, transparent 18%, transparent 70%, var(--color-ground) 100%)",
           }}
           aria-hidden="true"
         />
         {/* Fills the screen under the sticky header (103px tall while the nav wraps below lg, 65px above). */}
         <div className="mx-auto flex min-h-[max(560px,calc(100svh-103px))] max-w-3xl flex-col justify-center px-4 py-20 text-center lg:min-h-[max(560px,calc(100svh-65px))]">
-          {/* The scrim behind this text is a fixed black vignette (for legibility over the shard animation) in both
-              themes, so the text itself stays fixed white rather than following --color-ink into near-black on Light. */}
-          <Text variant="display" tone="primary" center className="!text-white [text-shadow:0_2px_24px_rgb(0_0_0/0.9)] sm:!text-[52px]">
+          <Text variant="display" tone="primary" center className="[text-shadow:0_2px_24px_var(--color-ground)] sm:!text-[52px]">
             On-chain intelligence, in the open.
           </Text>
-          <Text tone="secondary" center className="mx-auto mt-4 max-w-xl !text-white/70 [text-shadow:0_1px_12px_rgb(0_0_0),0_0_4px_rgb(0_0_0)]">
+          <Text tone="secondary" center className="mx-auto mt-4 max-w-xl [text-shadow:0_1px_12px_var(--color-ground),0_0_4px_var(--color-ground)]">
             Look up any Ethereum or Solana address: real balances, recent transactions, and only labels with a cited public
             source.
           </Text>
@@ -466,7 +359,7 @@ function Home() {
         <button
           type="button"
           onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: scrollBehavior() })}
-          className="group absolute inset-x-0 bottom-6 mx-auto flex w-fit flex-col items-center gap-1 text-xs font-medium !text-white/60 transition-colors duration-150 hover:!text-white"
+          className="group absolute inset-x-0 bottom-6 mx-auto flex w-fit flex-col items-center gap-1 text-xs font-medium text-ink-faint transition-colors duration-150 hover:text-ink"
         >
           How it works
           <IconChevronDown className="h-5 w-5 motion-safe:animate-bounce" />

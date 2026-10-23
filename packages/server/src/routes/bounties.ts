@@ -164,21 +164,31 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
     const u = requireUser(req);
     const body = parse(depositBody, req.body);
     const bounty = getOr404(req.params.id);
+    // A deposit against a bounty that's already claimed or cancelled would show as "funding"
+    // something that's no longer live -- a deposit can still be made at any point in an OPEN
+    // bounty's life (ADR 0020 §5), just not after it's resolved one way or the other.
+    if (bounty.status !== "open") throw conflict("This bounty is no longer open; deposits can't be recorded against it");
     const wallet = config.depositWallets[body.chain];
     if (!wallet) throw badRequest(`No ${body.chain} deposit wallet is configured on this server`);
-    if (db.get("SELECT 1 FROM bounty_deposits WHERE chain = ? AND tx_ref = ?", body.chain, body.txRef)) throw conflict("This payment has already been recorded");
+    // An Ethereum tx hash is hex and case-insensitive on-chain (0xABC... and 0xabc... are the same
+    // real transaction) -- lowercase it before every lookup/insert so the real sender can't get one
+    // real payment counted multiple times by resubmitting it with different letter-casing. Solana
+    // signatures are base58, already case-sensitive with one canonical form, so left as-is.
+    const txRef = body.chain === "ethereum" ? body.txRef.toLowerCase() : body.txRef;
+    if (db.get("SELECT 1 FROM bounty_deposits WHERE chain = ? AND tx_ref = ?", body.chain, txRef)) throw conflict("This payment has already been recorded");
 
     const budget = budgetMs(8000);
     const verified =
       body.chain === "solana"
-        ? await verifySolanaDeposit(http, config.solanaRpcUrl, body.txRef, wallet, budget)
-        : await verifyEthereumDeposit(http, config.ethBlockscoutUrl, config.ethRpcUrl, body.txRef, wallet, budget);
+        ? await verifySolanaDeposit(http, config.solanaRpcUrl, txRef, wallet, config.depositAllowedTokens.solana, budget)
+        : await verifyEthereumDeposit(http, config.ethBlockscoutUrl, config.ethRpcUrl, txRef, wallet, config.depositAllowedTokens.ethereum, budget);
     if (!verified.ok) {
       const messages: Record<typeof verified.reason, string> = {
         not_configured: "No deposit wallet is configured for this chain",
         not_found: "That transaction wasn't found",
         not_confirmed: "That transaction didn't succeed on-chain",
         wrong_wallet: "That transaction doesn't pay the configured deposit wallet",
+        unsupported_asset: "That transaction pays the right wallet, but not in an asset this server tracks for deposits (native SOL/ETH, USDC or USDT)",
         malformed_reference: body.chain === "solana" ? "That doesn't look like a real Solana signature" : "That doesn't look like a real Ethereum transaction hash",
       };
       throw badRequest(messages[verified.reason]);
@@ -194,20 +204,27 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
 
     const id = randomUUID();
     const now = nowIso();
-    db.run(
-      "INSERT INTO bounty_deposits (id, bounty_id, chain, asset_contract, amount, tx_ref, from_address, to_wallet, memo, recorded_by, recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      id,
-      bounty.id,
-      body.chain,
-      d.asset === "native" ? null : d.asset.contract,
-      d.amount,
-      body.txRef,
-      d.fromAddress,
-      d.toWallet,
-      d.memo ?? null,
-      u.id,
-      now,
-    );
+    try {
+      db.run(
+        "INSERT INTO bounty_deposits (id, bounty_id, chain, asset_contract, amount, tx_ref, from_address, to_wallet, memo, recorded_by, recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        id,
+        bounty.id,
+        body.chain,
+        d.asset === "native" ? null : d.asset.contract,
+        d.amount,
+        txRef,
+        d.fromAddress,
+        d.toWallet,
+        d.memo ?? null,
+        u.id,
+        now,
+      );
+    } catch (err) {
+      // Two concurrent submissions of the same payment can both pass the SELECT check above before
+      // either INSERTs -- the UNIQUE index is the real backstop; surface it as the same 409, not a 500.
+      if (err instanceof Error && /UNIQUE constraint failed/.test(err.message)) throw conflict("This payment has already been recorded");
+      throw err;
+    }
     const res: BountyDeposit = toDeposit(db.get<DepositRow>("SELECT * FROM bounty_deposits WHERE id = ?", id)!);
     return reply.status(201).send(res);
   });

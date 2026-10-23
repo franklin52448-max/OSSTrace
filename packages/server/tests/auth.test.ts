@@ -69,6 +69,21 @@ describe("wallet auth API", () => {
     expect(message).toMatch(/\nIssued At: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
   });
 
+  it("solana: the challenge message is a Sign-In-With-Solana (SIWS) message with the real domain fixed into the signed text -- without this, a phishing site can relay a real challenge and steal the resulting session", async () => {
+    const { address } = testWallet("domain-binding-check");
+    const c = new Client(t.app);
+    const chal = await c.post("/api/auth/challenge", { chain: "solana", address });
+    const { message } = chal.json() as { message: string };
+    const host = new URL(ORIGIN).host;
+    expect(message.split("\n")[0]).toBe(`${host} wants you to sign in with your Solana account:`);
+    expect(message).toContain(`\n${address}\n\n`);
+    expect(message).toMatch(/\nURI: http:\/\/127\.0\.0\.1:5301\n/);
+    expect(message).toContain("\nVersion: 1\n");
+    expect(message).toContain("\nChain ID: mainnet\n");
+    expect(message).toMatch(/\nNonce: [0-9a-f]{32}\n/);
+    expect(message).toMatch(/\nIssued At: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
+  });
+
   it("signing in again with the same wallet returns the same user, not a new one", async () => {
     const c1 = new Client(t.app);
     const first = (await solanaLogin(c1, "carol")).res.json().user;

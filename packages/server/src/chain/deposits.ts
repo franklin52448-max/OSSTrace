@@ -26,11 +26,28 @@ export interface VerifiedDeposit {
 
 export type DepositVerification =
   | { ok: true; deposit: VerifiedDeposit }
-  | { ok: false; reason: "not_configured" | "not_found" | "not_confirmed" | "wrong_wallet" | "malformed_reference" };
+  | { ok: false; reason: "not_configured" | "not_found" | "not_confirmed" | "wrong_wallet" | "unsupported_asset" | "malformed_reference" };
 
 const SOLANA_SIGNATURE_FORMAT = /^[1-9A-HJ-NP-Za-km-z]{64,88}$/;
 const ETH_TX_HASH_FORMAT = /^0x[0-9a-fA-F]{64}$/;
 const sameAddress = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** The real USDC/USDT mint (Solana) and contract (Ethereum) addresses -- not this project's own
+ * invention. `verifySolanaDeposit`/`verifyEthereumDeposit` only count a token deposit toward a
+ * bounty when its asset is on this list (native SOL/ETH is always allowed): without it, anyone can
+ * deploy a worthless token, send a huge raw amount of it to the deposit wallet for a fraction of a
+ * cent, and have it show as a "verified" deposit chip indistinguishable from a real one -- "verified"
+ * is supposed to mean the deposit is actually worth something, not just that a transfer happened
+ * (ADR 0020). An operator can allow more assets via config (see config.ts's depositAllowedTokens). */
+export const DEFAULT_ALLOWED_TOKENS_ETHEREUM = new Set<string>([
+  "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC
+  "0xdAC17F958D2ee523a2206206994597C13D831ec7", // USDT
+]);
+export const DEFAULT_ALLOWED_TOKENS_SOLANA = new Set<string>([
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+  "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
+]);
+const isAllowedEthToken = (allowed: Set<string>, contract: string) => [...allowed].some((a) => sameAddress(a, contract));
 
 /** The real, public SPL Memo program -- not this project's own invention. */
 const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
@@ -66,7 +83,7 @@ function extractMemo(tx: SolTx): string | undefined {
  * the real pre/post balance delta of the configured wallet's account; an SPL/Token-2022 transfer
  * is read off the real pre/post token-balance delta for an account owned by that wallet.
  */
-export async function verifySolanaDeposit(http: HttpClient, rpcUrl: string, signature: string, wallet: string | undefined, budget: Budget): Promise<DepositVerification> {
+export async function verifySolanaDeposit(http: HttpClient, rpcUrl: string, signature: string, wallet: string | undefined, allowedTokens: Set<string>, budget: Budget): Promise<DepositVerification> {
   if (!wallet) return { ok: false, reason: "not_configured" };
   if (!SOLANA_SIGNATURE_FORMAT.test(signature)) return { ok: false, reason: "malformed_reference" };
 
@@ -95,19 +112,26 @@ export async function verifySolanaDeposit(http: HttpClient, rpcUrl: string, sign
   }
 
   const pre = new Map((tx.meta.preTokenBalances ?? []).filter((b) => b.owner === wallet).map((b) => [`${b.accountIndex}:${b.mint}`, BigInt(b.uiTokenAmount.amount)]));
+  let sawDisallowedIncrease = false;
   for (const post of (tx.meta.postTokenBalances ?? []).filter((b) => b.owner === wallet)) {
     const key = `${post.accountIndex}:${post.mint}`;
     const before = pre.get(key) ?? 0n;
     const after = BigInt(post.uiTokenAmount.amount);
-    if (after > before) {
-      return {
-        ok: true,
-        deposit: { asset: { contract: post.mint }, amount: formatUnits(String(after - before), post.uiTokenAmount.decimals), fromAddress: keys[0] ?? "unknown", toWallet: wallet, ...(memo ? { memo } : {}) },
-      };
+    if (after <= before) continue;
+    // Don't take the first increase regardless of asset -- a tx can carry an unrelated/junk token
+    // transfer alongside (or instead of) a real one; keep scanning for an allowed asset before
+    // giving up, same reasoning as the Ethereum paths below.
+    if (!allowedTokens.has(post.mint)) {
+      sawDisallowedIncrease = true;
+      continue;
     }
+    return {
+      ok: true,
+      deposit: { asset: { contract: post.mint }, amount: formatUnits(String(after - before), post.uiTokenAmount.decimals), fromAddress: keys[0] ?? "unknown", toWallet: wallet, ...(memo ? { memo } : {}) },
+    };
   }
 
-  return { ok: false, reason: "wrong_wallet" };
+  return { ok: false, reason: sawDisallowedIncrease ? "unsupported_asset" : "wrong_wallet" };
 }
 
 type BsTx = { status: string | null; value: string; to: { hash: string } | null; from: { hash: string } | null };
@@ -121,7 +145,7 @@ type BsPage<T> = { items: T[] };
  * transaction, which already includes the token's real decimals -- no separate `decimals()` call
  * needed.
  */
-async function verifyEthereumDepositViaBlockscout(http: HttpClient, blockscoutUrl: string, txHash: string, wallet: string, budget: Budget): Promise<DepositVerification> {
+async function verifyEthereumDepositViaBlockscout(http: HttpClient, blockscoutUrl: string, txHash: string, wallet: string, allowedTokens: Set<string>, budget: Budget): Promise<DepositVerification> {
   let tx: BsTx;
   try {
     const { data } = await http.json<BsTx>(`${blockscoutUrl}/api/v2/transactions/${txHash}`, { budget });
@@ -142,8 +166,10 @@ async function verifyEthereumDepositViaBlockscout(http: HttpClient, blockscoutUr
   } catch {
     return { ok: false, reason: "wrong_wallet" };
   }
-  const match = transfers.items.find((t) => t.to && sameAddress(t.to.hash, wallet) && t.total?.value);
-  if (!match) return { ok: false, reason: "wrong_wallet" };
+  const candidates = transfers.items.filter((t) => t.to && sameAddress(t.to.hash, wallet) && t.total?.value);
+  if (candidates.length === 0) return { ok: false, reason: "wrong_wallet" };
+  const match = candidates.find((t) => isAllowedEthToken(allowedTokens, t.token.address_hash));
+  if (!match) return { ok: false, reason: "unsupported_asset" };
   return {
     ok: true,
     deposit: {
@@ -188,7 +214,7 @@ async function fetchDecimals(http: HttpClient, rpcUrl: string, contract: string,
  * is read off the real Transfer event log in the transaction's receipt, with the token's real
  * decimals resolved via its own `decimals()`.
  */
-async function verifyEthereumDepositViaRpc(http: HttpClient, rpcUrl: string, txHash: string, wallet: string, budget: Budget): Promise<DepositVerification> {
+async function verifyEthereumDepositViaRpc(http: HttpClient, rpcUrl: string, txHash: string, wallet: string, allowedTokens: Set<string>, budget: Budget): Promise<DepositVerification> {
   let tx: EthRpcTx;
   let receipt: EthRpcReceipt;
   try {
@@ -206,8 +232,10 @@ async function verifyEthereumDepositViaRpc(http: HttpClient, rpcUrl: string, txH
     return { ok: true, deposit: { asset: "native", amount: formatUnits(BigInt(tx.value).toString(), 18), fromAddress: tx.from, toWallet: wallet } };
   }
 
-  const match = receipt.logs.find((l) => l.topics[0] === ERC20_TRANSFER_TOPIC && l.topics.length === 3 && sameAddress(topicToAddress(l.topics[2]!), wallet));
-  if (!match) return { ok: false, reason: "wrong_wallet" };
+  const candidates = receipt.logs.filter((l) => l.topics[0] === ERC20_TRANSFER_TOPIC && l.topics.length === 3 && sameAddress(topicToAddress(l.topics[2]!), wallet));
+  if (candidates.length === 0) return { ok: false, reason: "wrong_wallet" };
+  const match = candidates.find((l) => isAllowedEthToken(allowedTokens, l.address));
+  if (!match) return { ok: false, reason: "unsupported_asset" };
   const decimals = await fetchDecimals(http, rpcUrl, match.address, budget);
   return {
     ok: true,
@@ -217,8 +245,10 @@ async function verifyEthereumDepositViaRpc(http: HttpClient, rpcUrl: string, txH
 
 /** Prefers `ethRpcUrl` when the operator configured one; falls back to Blockscout (no key needed)
  *  otherwise -- the same configured-RPC-with-a-zero-config-fallback shape as Solana already uses. */
-export async function verifyEthereumDeposit(http: HttpClient, blockscoutUrl: string, ethRpcUrl: string | null, txHash: string, wallet: string | undefined, budget: Budget): Promise<DepositVerification> {
+export async function verifyEthereumDeposit(http: HttpClient, blockscoutUrl: string, ethRpcUrl: string | null, txHash: string, wallet: string | undefined, allowedTokens: Set<string>, budget: Budget): Promise<DepositVerification> {
   if (!wallet) return { ok: false, reason: "not_configured" };
   if (!ETH_TX_HASH_FORMAT.test(txHash)) return { ok: false, reason: "malformed_reference" };
-  return ethRpcUrl ? verifyEthereumDepositViaRpc(http, ethRpcUrl, txHash, wallet, budget) : verifyEthereumDepositViaBlockscout(http, blockscoutUrl, txHash, wallet, budget);
+  return ethRpcUrl
+    ? verifyEthereumDepositViaRpc(http, ethRpcUrl, txHash, wallet, allowedTokens, budget)
+    : verifyEthereumDepositViaBlockscout(http, blockscoutUrl, txHash, wallet, allowedTokens, budget);
 }

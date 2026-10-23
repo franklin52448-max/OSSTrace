@@ -164,6 +164,91 @@ describe("bounties", () => {
     }
   });
 
+  it("ETH dedupe is case-insensitive -- the real sender can't get one real payment recorded twice by resubmitting it with different letter-casing", async () => {
+    const stub = new FakeProvider("ethereum");
+    const wallet = new Wallet("0x" + "7".repeat(64));
+    const sender = wallet.address;
+    const bsTx = { status: "ok", value: "0", to: { hash: ETH_WALLET }, from: { hash: sender } };
+    const bsTransfers = { items: [{ to: { hash: ETH_WALLET }, from: { hash: sender }, token: { address_hash: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: "6" }, total: { value: "5500000" } }] };
+    const { app, close } = await makeBountyApp(depositFetch({ bsTx, bsTransfers }), stub, stub);
+    try {
+      const u = await signupEthereum(app, wallet);
+      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+      const hashLower = `0x${"c".repeat(64)}`;
+      const first = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "ethereum", txRef: hashLower });
+      expect(first.statusCode).toBe(201);
+      const hashUpper = `0x${"C".repeat(64)}`; // same tx hash, different letter-casing -- same real on-chain transaction
+      const second = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "ethereum", txRef: hashUpper });
+      expect(second.statusCode).toBe(409);
+      expect(second.json().error.message).toMatch(/already been recorded/i);
+    } finally {
+      await close();
+    }
+  });
+
+  it("a deposit in a token this server doesn't track (not native, not an allowlisted USDC/USDT) is rejected, even though a real transfer happened", async () => {
+    const stub = new FakeProvider("ethereum");
+    const wallet = new Wallet("0x" + "7".repeat(64));
+    const sender = wallet.address;
+    const JUNK_TOKEN = "0xBAD0000000000000000000000000000000bAd0";
+    const bsTx = { status: "ok", value: "0", to: { hash: ETH_WALLET }, from: { hash: sender } };
+    const bsTransfers = { items: [{ to: { hash: ETH_WALLET }, from: { hash: sender }, token: { address_hash: JUNK_TOKEN, decimals: "18" }, total: { value: "1000000000000000000000000" } }] };
+    const { app, close } = await makeBountyApp(depositFetch({ bsTx, bsTransfers }), stub, stub);
+    try {
+      const u = await signupEthereum(app, wallet);
+      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+      const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "ethereum", txRef: `0x${"d".repeat(64)}` });
+      expect(r.statusCode).toBe(400);
+      expect(r.json().error.message).toMatch(/not.*an asset this server tracks/i);
+    } finally {
+      await close();
+    }
+  });
+
+  it("a tx carrying both a junk transfer and a real allowlisted one still finds the real one, instead of taking whichever comes first", async () => {
+    const stub = new FakeProvider("ethereum");
+    const wallet = new Wallet("0x" + "7".repeat(64));
+    const sender = wallet.address;
+    const JUNK_TOKEN = "0xBAD0000000000000000000000000000000bAd0";
+    const bsTx = { status: "ok", value: "0", to: { hash: ETH_WALLET }, from: { hash: sender } };
+    const bsTransfers = {
+      items: [
+        { to: { hash: ETH_WALLET }, from: { hash: sender }, token: { address_hash: JUNK_TOKEN, decimals: "18" }, total: { value: "999999999999999999999999" } },
+        { to: { hash: ETH_WALLET }, from: { hash: sender }, token: { address_hash: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: "6" }, total: { value: "5500000" } },
+      ],
+    };
+    const { app, close } = await makeBountyApp(depositFetch({ bsTx, bsTransfers }), stub, stub);
+    try {
+      const u = await signupEthereum(app, wallet);
+      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+      const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "ethereum", txRef: `0x${"e".repeat(64)}` });
+      expect(r.statusCode).toBe(201);
+      expect(r.json()).toMatchObject({ asset: { contract: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" }, amount: "5.5" });
+    } finally {
+      await close();
+    }
+  });
+
+  it("a deposit can't be recorded against a bounty that's no longer open", async () => {
+    const stub = new FakeProvider("ethereum");
+    const wallet = new Wallet("0x" + "7".repeat(64));
+    const sender = wallet.address;
+    const bsTx = { status: "ok", value: "0", to: { hash: ETH_WALLET }, from: { hash: sender } };
+    const bsTransfers = { items: [{ to: { hash: ETH_WALLET }, from: { hash: sender }, token: { address_hash: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: "6" }, total: { value: "5500000" } }] };
+    const { app, close } = await makeBountyApp(depositFetch({ bsTx, bsTransfers }), stub, stub);
+    try {
+      const u = await signupEthereum(app, wallet);
+      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+      const cancelled = await u.post(`/api/bounties/${b.id}/cancel`, { reason: "no longer needed" });
+      expect(cancelled.statusCode).toBe(200);
+      const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "ethereum", txRef: `0x${"f".repeat(64)}` });
+      expect(r.statusCode).toBe(409);
+      expect(r.json().error.message).toMatch(/no longer open/i);
+    } finally {
+      await close();
+    }
+  });
+
   it("deposit is refused with a clear error when no wallet is configured for that chain", async () => {
     const stub = new FakeProvider("ethereum");
     const { app, close } = await makeBountyApp(depositFetch({}), stub, stub, { depositWallets: {} });

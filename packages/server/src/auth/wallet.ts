@@ -55,23 +55,36 @@ function buildEthereumMessage(host: string, address: string, uri: string, nonce:
   );
 }
 
+/** Sign-In With Solana (SIWS) text format -- the same shape phantom/Solflare already parse and
+ * check the requesting site's domain against, mirroring what EIP-4361 gets Ethereum. The prior
+ * plain-text message (no domain field at all) let a phishing site's own backend request a real
+ * challenge for a victim's address from this server, show it to the victim on the phishing domain
+ * with nothing looking wrong, and take the resulting signature straight to this server's real
+ * /api/auth/verify to log in as them -- the wallet had no domain to compare, so it showed no
+ * mismatch warning. A SIWS-format message fixes the domain into the signed text itself, so a
+ * wallet that supports it warns when the signing site doesn't match. */
+function buildSolanaMessage(host: string, address: string, uri: string, nonce: string, issuedAt: string): string {
+  return (
+    `${host} wants you to sign in with your Solana account:\n` +
+    `${address}\n\n` +
+    `Sign in to OSSTrace.\n\n` +
+    `URI: ${uri}\n` +
+    `Version: 1\n` +
+    `Chain ID: mainnet\n` +
+    `Nonce: ${nonce}\n` +
+    `Issued At: ${issuedAt}`
+  );
+}
+
 /** Creates (overwriting any prior pending one) a single-use, 5-minute challenge for this wallet.
  * `origin` is this request's already-validated Origin (e.g. "https://opensourcetrace.org") -- used
- * as EIP-4361's domain/uri for Ethereum. Solana has no equivalent wallet-trust benefit from message
- * formatting alone (see wallet.ts's module comment / the auth commit this came from for why), so its
- * message keeps its prior plain-text shape. */
+ * as EIP-4361's domain/uri for Ethereum, and the equivalent SIWS fields for Solana. */
 export function createChallenge(chain: WalletChain, address: string, origin: string): string {
   const normalized = normalizeAddress(chain, address);
   const nonce = randomBytes(16).toString("hex");
   const issuedAt = nowIso();
   const host = origin.replace(/^https?:\/\//, "");
-  const message =
-    chain === "ethereum"
-      ? buildEthereumMessage(host, address, origin, nonce, issuedAt)
-      : `OSSTrace wants you to sign in with your Solana wallet.\n\n` +
-        `Address: ${address}\n` +
-        `Nonce: ${nonce}\n` +
-        `Issued: ${issuedAt}`;
+  const message = chain === "ethereum" ? buildEthereumMessage(host, address, origin, nonce, issuedAt) : buildSolanaMessage(host, address, origin, nonce, issuedAt);
   const now = Date.now();
   sweep(now);
   pending.set(key(chain, normalized), { message, expiresAt: now + CHALLENGE_TTL_MS });

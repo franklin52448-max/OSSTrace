@@ -23,6 +23,7 @@
 // (ETH, ETH, ETH, GHO and DATA respectively). Gnosis Chain, Ronin and Rootstock too -- 18-decimal
 // xDAI, RON and RBTC. Rootstock's RPC returns legacy transactions with no `chainId` field at all, so
 // for any tx that doesn't carry one the pin is checked against the RPC's own `eth_chainId` instead.
+// ZetaChain, Mythos and the HyperEVM too -- 18-decimal ZETA, ETH and HYPE.
 //
 // Ethereum has two verification paths now. When a dedicated `ETH_RPC_URL` is configured (see
 // config.ts), deposits are checked via real `eth_getTransactionByHash`/`eth_getTransactionReceipt`
@@ -120,6 +121,19 @@ export const DEFAULT_ALLOWED_TOKENS_STORY = new Set<string>();
 export const DEFAULT_ALLOWED_TOKENS_GNOSIS = new Set<string>();
 export const DEFAULT_ALLOWED_TOKENS_RONIN = new Set<string>();
 export const DEFAULT_ALLOWED_TOKENS_ROOTSTOCK = new Set<string>();
+/** ZetaChain and Mythos: native only by default, the same call again. Neither is on Circle's USDC
+ *  contract-address list (checked 2026-10-23); ZetaChain's dollar tokens are ZRC-20 bridge
+ *  representations (USDC.ETH, USDT.ETH and the like, each minted by ZetaChain's own cross-chain
+ *  gateway), and Mythos's USDC is bridged USDC.e. An operator who wants one adds it deliberately via
+ *  DEPOSIT_ALLOWED_TOKENS_ZETACHAIN/_MYTHOS. */
+export const DEFAULT_ALLOWED_TOKENS_ZETACHAIN = new Set<string>();
+export const DEFAULT_ALLOWED_TOKENS_MYTHOS = new Set<string>();
+/** The HyperEVM: Circle's own native USDC -- the address Circle's "USDC contract addresses" page lists
+ *  for HyperEVM mainnet, and on-chain symbol() "USDC", decimals() 6 (read through Alchemy's HyperEVM
+ *  endpoint 2026-10-23). No USDT default, the same call as Base's: an operator who wants one adds it. */
+export const DEFAULT_ALLOWED_TOKENS_HYPERLIQUID = new Set<string>([
+  "0xb88339CB7199b77E23DB6E890353E22632Ba630f", // USDC
+]);
 const isAllowedEvmToken = (allowed: Set<string>, contract: string) => [...allowed].some((a) => sameAddress(a, contract));
 
 /** The real, public SPL Memo program -- not this project's own invention. */
@@ -437,11 +451,11 @@ export async function verifyBaseDeposit(http: HttpClient, baseRpcUrl: string, tx
 }
 
 /** EIP-155 chain ids of the EVM chains verified through verifyPinnedEvmDeposit. */
-export const PINNED_EVM_CHAIN_IDS = { arbitrum: 42161n, optimism: 10n, zora: 7777777n, lens: 232n, story: 1514n, gnosis: 100n, ronin: 2020n, rootstock: 30n } as const;
+export const PINNED_EVM_CHAIN_IDS = { arbitrum: 42161n, optimism: 10n, zora: 7777777n, lens: 232n, story: 1514n, gnosis: 100n, ronin: 2020n, rootstock: 30n, zetachain: 7000n, mythos: 42018n, hyperliquid: 999n } as const;
 export type PinnedEvmChain = keyof typeof PINNED_EVM_CHAIN_IDS;
 
-/** Arbitrum One, OP Mainnet, Zora, Lens Chain, the Data Network, Gnosis Chain, Ronin and Rootstock:
- *  the same EVM RPC verification as Base's, against that chain's own `rpcUrl`, with that chain's own
+/** Arbitrum One, OP Mainnet, Zora, Lens Chain, the Data Network, Gnosis Chain, Ronin, Rootstock,
+ *  ZetaChain, Mythos and the HyperEVM: the same EVM RPC verification as Base's, against that chain's own `rpcUrl`, with that chain's own
  *  token allowlist, pinned to that chain's id -- so a payment on any other chain (the same wallet address exists on all of them)
  *  never verifies as one on this chain, even through a mis-set RPC URL. */
 export async function verifyPinnedEvmDeposit(

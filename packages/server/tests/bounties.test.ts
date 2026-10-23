@@ -980,11 +980,11 @@ describe("Base deposits (EVM JSON-RPC against Base's own RPC, sender matched to 
   });
 });
 
-// Arbitrum One, OP Mainnet, Zora, Lens Chain, the Data Network ("story"), Gnosis Chain, Ronin and
-// Rootstock: the same EVM JSON-RPC verification as Base, each against its own RPC, pinned to its own
-// chain id, with its own allowlist (Circle's native USDC on Arbitrum One / OP Mainnet; native only on
-// the other six).
-type PinnedChain = "arbitrum" | "optimism" | "zora" | "lens" | "story" | "gnosis" | "ronin" | "rootstock";
+// Arbitrum One, OP Mainnet, Zora, Lens Chain, the Data Network ("story"), Gnosis Chain, Ronin,
+// Rootstock, ZetaChain, Mythos and the HyperEVM ("hyperliquid"): the same EVM JSON-RPC verification as
+// Base, each against its own RPC, pinned to its own chain id, with its own allowlist (Circle's native
+// USDC on Arbitrum One / OP Mainnet / HyperEVM; native only on the other eight).
+type PinnedChain = "arbitrum" | "optimism" | "zora" | "lens" | "story" | "gnosis" | "ronin" | "rootstock" | "zetachain" | "mythos" | "hyperliquid";
 type DepositCase = { chain: PinnedChain; name: string; chainIdHex: string; rpcKey: `${PinnedChain}RpcUrl`; env: string; usdc: string | null; tracked: string };
 const DEPOSIT_CASES: DepositCase[] = [
   { chain: "arbitrum", name: "Arbitrum One", chainIdHex: "0xa4b1", rpcKey: "arbitrumRpcUrl", env: "ARBITRUM", usdc: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", tracked: "native ETH or USDC" },
@@ -995,6 +995,10 @@ const DEPOSIT_CASES: DepositCase[] = [
   { chain: "gnosis", name: "Gnosis Chain", chainIdHex: "0x64", rpcKey: "gnosisRpcUrl", env: "GNOSIS", usdc: null, tracked: "native xDAI" },
   { chain: "ronin", name: "Ronin", chainIdHex: "0x7e4", rpcKey: "roninRpcUrl", env: "RONIN", usdc: null, tracked: "native RON" },
   { chain: "rootstock", name: "Rootstock", chainIdHex: "0x1e", rpcKey: "rootstockRpcUrl", env: "ROOTSTOCK", usdc: null, tracked: "native RBTC" },
+  { chain: "zetachain", name: "ZetaChain", chainIdHex: "0x1b58", rpcKey: "zetachainRpcUrl", env: "ZETACHAIN", usdc: null, tracked: "native ZETA" },
+  // Mythos pays gas in ETH (not MYTH): an OP Stack chain with no custom gas token.
+  { chain: "mythos", name: "Mythos", chainIdHex: "0xa422", rpcKey: "mythosRpcUrl", env: "MYTHOS", usdc: null, tracked: "native ETH" },
+  { chain: "hyperliquid", name: "HyperEVM", chainIdHex: "0x3e7", rpcKey: "hyperliquidRpcUrl", env: "HYPERLIQUID", usdc: "0xb88339CB7199b77E23DB6E890353E22632Ba630f", tracked: "native HYPE or USDC" },
 ];
 
 describe.each(DEPOSIT_CASES)("$name deposits (EVM JSON-RPC against its own RPC, pinned chain id, Ethereum sign-in owns the sender)", (k) => {
@@ -1238,6 +1242,35 @@ describe("migration 018 (bounty_deposits.chain CHECK widened to Gnosis Chain, Ro
       expect(() => insert("d-dup", "gnosis", "0xBB")).toThrow(/UNIQUE constraint failed/);
       expect(() => insert("d-bad", "rsk", "0xdd")).toThrow(/CHECK constraint failed/);
       expect(() => insert("d-bad2", "xdai", "0xdd")).toThrow(/CHECK constraint failed/);
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("migration 020 (bounty_deposits.chain CHECK widened to ZetaChain, Mythos and the HyperEVM)", () => {
+  it("keeps every recorded deposit -- including 018's chains' -- and its dedupe index across the rebuild, and accepts each new chain", async () => {
+    const { app, db, close } = await makeBountyApp(depositFetch({}), new FakeProvider("ethereum"), new FakeProvider("solana"));
+    try {
+      const u = await signup(app, "migrator-020");
+      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
+      const user = db.get<{ id: string }>("SELECT id FROM users LIMIT 1")!;
+      const insert = (id: string, chain: string, txRef: string) =>
+        db.run(
+          "INSERT INTO bounty_deposits (id, bounty_id, chain, asset_contract, amount, tx_ref, from_address, to_wallet, memo, recorded_by, recorded_at) VALUES (?, ?, ?, NULL, '1', ?, '0xfrom', '0xto', NULL, ?, '2026-10-23T00:00:00.000Z')",
+          id, b.id, chain, txRef, user.id,
+        );
+      insert("d-rootstock", "rootstock", "0xaa");
+      insert("d-zetachain", "zetachain", "0xbb");
+      db.tx(() => db.exec(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/db/migrations/020_bounty_deposits_zetachain_mythos_hyperliquid.sql"), "utf8")));
+      expect(db.all("SELECT id, chain FROM bounty_deposits ORDER BY id")).toEqual([
+        { id: "d-rootstock", chain: "rootstock" },
+        { id: "d-zetachain", chain: "zetachain" },
+      ]);
+      for (const chain of ["mythos", "hyperliquid"]) insert(`d-${chain}`, chain, "0xcc");
+      // The case-insensitive (chain, tx_ref) dedupe index came back with the table.
+      expect(() => insert("d-dup", "zetachain", "0xBB")).toThrow(/UNIQUE constraint failed/);
+      for (const alias of ["zeta", "hyperevm", "myth"]) expect(() => insert(`d-${alias}`, alias, "0xdd")).toThrow(/CHECK constraint failed/);
     } finally {
       await close();
     }

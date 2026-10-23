@@ -8,13 +8,16 @@ import {
   DEFAULT_ALLOWED_TOKENS_BNB,
   DEFAULT_ALLOWED_TOKENS_ETHEREUM,
   DEFAULT_ALLOWED_TOKENS_GNOSIS,
+  DEFAULT_ALLOWED_TOKENS_HYPERLIQUID,
   DEFAULT_ALLOWED_TOKENS_LENS,
+  DEFAULT_ALLOWED_TOKENS_MYTHOS,
   DEFAULT_ALLOWED_TOKENS_OPTIMISM,
   DEFAULT_ALLOWED_TOKENS_ROBINHOOD,
   DEFAULT_ALLOWED_TOKENS_RONIN,
   DEFAULT_ALLOWED_TOKENS_ROOTSTOCK,
   DEFAULT_ALLOWED_TOKENS_SOLANA,
   DEFAULT_ALLOWED_TOKENS_STORY,
+  DEFAULT_ALLOWED_TOKENS_ZETACHAIN,
   DEFAULT_ALLOWED_TOKENS_ZORA,
 } from "./chain/deposits.ts";
 
@@ -100,11 +103,11 @@ export type Config = {
   /** Public wallet addresses bounty depositors pay into -- never a key this server holds (ADR 0020). */
   depositWallets: Partial<Record<DepositChain, string>>;
   /** Assets a bounty deposit may be verified in, beyond each chain's own native currency (always
-   *  allowed) -- defaults to real USDC/USDT (Base, Arbitrum One, OP Mainnet: USDC only; Robinhood
-   *  Chain: USDG; Zora, Lens Chain, Data Network, Gnosis Chain, Ronin, Rootstock: none, native only),
-   *  extendable per-deployment via DEPOSIT_ALLOWED_TOKENS_<CHAIN> (ETHEREUM, SOLANA, BNB, ROBINHOOD,
-   *  BASE, ARBITRUM, OPTIMISM, ZORA, LENS, STORY, GNOSIS, RONIN, ROOTSTOCK; comma-separated, added to
-   *  the defaults, never replacing them). Without this, any
+   *  allowed) -- defaults to real USDC/USDT (Base, Arbitrum One, OP Mainnet, HyperEVM: USDC only;
+   *  Robinhood Chain: USDG; Zora, Lens Chain, Data Network, Gnosis Chain, Ronin, Rootstock, ZetaChain,
+   *  Mythos: none, native only), extendable per-deployment via DEPOSIT_ALLOWED_TOKENS_<CHAIN> (ETHEREUM,
+   *  SOLANA, BNB, ROBINHOOD, BASE, ARBITRUM, OPTIMISM, ZORA, LENS, STORY, GNOSIS, RONIN, ROOTSTOCK,
+   *  ZETACHAIN, MYTHOS, HYPERLIQUID; comma-separated, added to the defaults, never replacing them). Without this, any
    *  worthless token a depositor mints themselves would verify as a real "deposit" (see
    *  chain/deposits.ts). */
   depositAllowedTokens: Record<Exclude<DepositChain, "bitcoin">, Set<string>>;
@@ -311,6 +314,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       ...(env.DEPOSIT_WALLET_GNOSIS ? { gnosis: env.DEPOSIT_WALLET_GNOSIS.trim() } : {}),
       ...(env.DEPOSIT_WALLET_RONIN ? { ronin: env.DEPOSIT_WALLET_RONIN.trim() } : {}),
       ...(env.DEPOSIT_WALLET_ROOTSTOCK ? { rootstock: env.DEPOSIT_WALLET_ROOTSTOCK.trim() } : {}),
+      ...(env.DEPOSIT_WALLET_ZETACHAIN ? { zetachain: env.DEPOSIT_WALLET_ZETACHAIN.trim() } : {}),
+      ...(env.DEPOSIT_WALLET_MYTHOS ? { mythos: env.DEPOSIT_WALLET_MYTHOS.trim() } : {}),
+      ...(env.DEPOSIT_WALLET_HYPERLIQUID ? { hyperliquid: env.DEPOSIT_WALLET_HYPERLIQUID.trim() } : {}),
     },
     depositAllowedTokens: {
       ethereum: new Set([
@@ -346,6 +352,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       gnosis: new Set([...DEFAULT_ALLOWED_TOKENS_GNOSIS, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_GNOSIS)]),
       ronin: new Set([...DEFAULT_ALLOWED_TOKENS_RONIN, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_RONIN)]),
       rootstock: new Set([...DEFAULT_ALLOWED_TOKENS_ROOTSTOCK, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_ROOTSTOCK)]),
+      // ZetaChain, Mythos: none by default; the HyperEVM: Circle's native USDC only (see deposits.ts).
+      zetachain: new Set([...DEFAULT_ALLOWED_TOKENS_ZETACHAIN, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_ZETACHAIN)]),
+      mythos: new Set([...DEFAULT_ALLOWED_TOKENS_MYTHOS, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_MYTHOS)]),
+      hyperliquid: new Set([...DEFAULT_ALLOWED_TOKENS_HYPERLIQUID, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_HYPERLIQUID)]),
     },
     testHooks: bool(env.SERVER_TEST_HOOKS, false),
     // The `&& !production` is load-bearing: this must never activate on a deployed instance,

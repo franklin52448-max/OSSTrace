@@ -93,6 +93,19 @@ test("assetLabel: Gnosis Chain's xDAI, Ronin's RON and Rootstock's RBTC are each
   assert.equal(assetLabel("gnosis", { contract: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" }), "0xaf88…5831");
 });
 
+test("assetLabel: ZetaChain's ZETA and the HyperEVM's HYPE are their own symbols; Mythos's ETH says which ETH; HyperEVM's Circle USDC is named", () => {
+  assert.equal(assetLabel("zetachain", "native"), "ZETA");
+  assert.equal(assetLabel("hyperliquid", "native"), "HYPE");
+  // Mythos pays gas in ETH, never MYTH -- so its chip must not read as Ethereum's ETH.
+  assert.equal(assetLabel("mythos", "native"), "ETH (Mythos)");
+  assert.equal(assetDescription("mythos", "native"), "ETH on Mythos");
+  assert.equal(assetDescription("hyperliquid", "native"), "HYPE on HyperEVM");
+  assert.equal(assetLabel("hyperliquid", { contract: "0xb88339CB7199b77E23DB6E890353E22632Ba630f" }), "USDC");
+  assert.equal(assetDescription("hyperliquid", { contract: "0xb88339CB7199b77E23DB6E890353E22632Ba630f" }), "USDC on HyperEVM");
+  // The same address on another chain is not Circle's USDC there.
+  assert.equal(assetLabel("zetachain", { contract: "0xb88339CB7199b77E23DB6E890353E22632Ba630f" }), "0xb883…630f");
+});
+
 test("compareDecimalAmounts: exact, across differing fractional digits", () => {
   assert.equal(compareDecimalAmounts("0.1", "0.10"), 0);
   assert.equal(compareDecimalAmounts("2", "10"), -1);

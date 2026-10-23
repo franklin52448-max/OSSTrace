@@ -255,6 +255,28 @@ test("switchEvmNetwork: Gnosis Chain, Ronin and Rootstock each move a mainnet wa
   }
 });
 
+test("switchEvmNetwork: ZetaChain, Mythos and the HyperEVM each move a mainnet wallet onto that chain's own id, adding it with the chain's real RPC/explorer and its own native currency (ETH on Mythos)", async () => {
+  const { switchEvmNetwork, evmNetworkChainId } = await import("../src/wallets.ts");
+  const cases = [
+    ["zetachain", 7000n, "ZetaChain", { name: "Zeta", symbol: "ZETA", decimals: 18 }, "https://zetachain-evm.blockpi.network/v1/rpc/public", "https://zetascan.com"],
+    ["mythos", 42018n, "Mythos", { name: "Ether", symbol: "ETH", decimals: 18 }, "https://mythos-mainnet.g.alchemy.com/public", "https://mythos-mainnet.explorer.alchemy.com"],
+    ["hyperliquid", 999n, "HyperEVM", { name: "HYPE", symbol: "HYPE", decimals: 18 }, "https://rpc.hyperliquid.xyz/evm", "https://hyperevmscan.io"],
+  ] as const;
+  for (const [chain, id, name, nativeCurrency, rpc, explorer] of cases) {
+    const w = new NetworkWallet("0x1");
+    await switchEvmNetwork(w, chain);
+    assert.equal(BigInt(w.chainId), id, chain);
+    assert.equal(evmNetworkChainId(chain), Number(id));
+    const add = w.calls.find((c) => c.method === "wallet_addEthereumChain")?.params?.[0] as { chainId: string; chainName: string; nativeCurrency: unknown; rpcUrls: string[]; blockExplorerUrls: string[] };
+    assert.equal(BigInt(add.chainId), id);
+    assert.equal(add.chainName, name);
+    assert.deepEqual(add.nativeCurrency, nativeCurrency);
+    assert.deepEqual(add.rpcUrls, [rpc]);
+    assert.deepEqual(add.blockExplorerUrls, [explorer]);
+    await assert.rejects(switchEvmNetwork(new NetworkWallet("0x1", ["0x1", add.chainId], false), chain), new RegExp(`switch it to ${name}`));
+  }
+});
+
 test("sendEthereumNative: builds a plain value transfer with the exact wei amount, no data field", async () => {
   const { sendEthereumNative } = await import("../src/wallets.ts");
   const provider = new FakeEthereumProvider();

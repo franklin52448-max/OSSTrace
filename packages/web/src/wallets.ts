@@ -155,6 +155,32 @@ const EVM_NETWORKS = {
     rpcUrls: ["https://public-node.rsk.co"],
     blockExplorerUrls: ["https://explorer.rootstock.io"],
   },
+  // ZetaChain (7000) pays gas in ZETA, Mythos (42018) in ETH -- the ETH-native trap again, its ecosystem
+  // token MYTH is not its gas -- and the HyperEVM (999) in HYPE. ZetaChain's nativeCurrency is its
+  // chainid.network entry; Mythos isn't on chainid.network, so its explorer's own network config (ETH)
+  // is used; chainid.network lists 999 as an unrelated testnet (Wanchain's), so the HyperEVM's comes
+  // from Hyperliquid's own docs (HYPE, 18 decimals). Each RPC/explorer is the one config.ts/explorers.ts use.
+  zetachain: {
+    chainId: "0x1b58",
+    chainName: "ZetaChain",
+    nativeCurrency: { name: "Zeta", symbol: "ZETA", decimals: 18 },
+    rpcUrls: ["https://zetachain-evm.blockpi.network/v1/rpc/public"],
+    blockExplorerUrls: ["https://zetascan.com"],
+  },
+  mythos: {
+    chainId: "0xa422",
+    chainName: "Mythos",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: ["https://mythos-mainnet.g.alchemy.com/public"],
+    blockExplorerUrls: ["https://mythos-mainnet.explorer.alchemy.com"],
+  },
+  hyperliquid: {
+    chainId: "0x3e7",
+    chainName: "HyperEVM",
+    nativeCurrency: { name: "HYPE", symbol: "HYPE", decimals: 18 },
+    rpcUrls: ["https://rpc.hyperliquid.xyz/evm"],
+    blockExplorerUrls: ["https://hyperevmscan.io"],
+  },
 } as const;
 
 /** The EIP-155 chain id a deposit on `chain` is sent on (decimal), for telling the user which

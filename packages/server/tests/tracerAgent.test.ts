@@ -177,6 +177,32 @@ describe("tracer agent", () => {
     expect(ac).toMatchObject({ transfers: 2, usd: 2000, unpricedTransfers: 1 });
   });
 
+  it("find_connections: a pair's transfer count is its real count, not the page drawn, and a USD sum over part of it says so", async () => {
+    await setup([{ tools: [{ name: "find_connections", args: { addresses: [`ethereum:${ETH_A}`, `ethereum:${ETH_B}`] } }] }, { content: "ok" }]);
+    t.eth.pageSize = 300; // all of it loads in one page: complete history, just more than one drawing page
+    t.eth.add(Array.from({ length: 205 }, (_, i) => ethTransfer(ETH_A, ETH_B, base + i)));
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "how many times did A pay B?" })).json() as TracerAgentChatResponse;
+    const r = res.toolCalls[0]!.result as { connections: Record<string, unknown>[]; edgesAdded: number; note: string; pairsWithPartialHistory?: number };
+    expect(r.pairsWithPartialHistory).toBeUndefined();
+    expect(r.connections[0]).toMatchObject({ transfers: 205, usd: 200 * 2000, usdCoversNewest: 200 }); // not "200 transfers, $400k" as the pair's totals
+    expect(r.edgesAdded).toBe(200);
+    expect(r.note).toMatch(/at most 200 per pair; a connection with usdCoversNewest has a USD sum over only that many of its newest transfers/);
+  });
+
+  it("find_connections: connections found in incompletely loaded history are said to be lower bounds", async () => {
+    await setup([{ tools: [{ name: "find_connections", args: { addresses: [`ethereum:${ETH_A}`, `ethereum:${ETH_B}`] } }] }, { content: "ok" }]);
+    // A paid B long ago and again recently, with 12 transfers to C in between: only the newest page loads.
+    t.eth.add([ethTransfer(ETH_A, ETH_B, base - 9000), ...Array.from({ length: 12 }, (_, i) => ethTransfer(ETH_A, ETH_C, base + i)), ethTransfer(ETH_A, ETH_B, base + 100)]);
+    const anon = new Browser(t.app);
+    const res = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "how many times did A pay B?", doc: emptyScratch() })).json() as TracerAgentChatResponse;
+    const r = res.toolCalls[0]!.result as { connections: Record<string, unknown>[]; note: string; pairsWithPartialHistory?: number };
+    expect(r.pairsWithPartialHistory).toBe(1);
+    expect(r.connections[0]).toMatchObject({ transfers: 1 }); // the one loaded, of the two there are...
+    expect(r.note).toMatch(/History is incomplete for 1 of 1 pair, so their transfer counts and totals cover only what's loaded so far -- lower bounds, not totals\./); // ...and said to be partial
+  });
+
   it("find_connections adds nothing when the addresses never transacted", async () => {
     await setup([{ tools: [{ name: "find_connections", args: { addresses: [`ethereum:${ETH_A}`, `ethereum:${ETH_C}`] } }] }, { content: "No direct transfers found." }]);
     t.eth.add([ethTransfer(ETH_A, ETH_B, base + 10), ethTransfer(ETH_C, ETH_B, base + 20)]);

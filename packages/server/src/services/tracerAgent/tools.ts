@@ -97,6 +97,8 @@ const MAX_EXPAND_SYNCS = 40;
 const MAX_NODES_PER_EXPAND = 50;
 /** find_connections compares at most this many nodes (45 pairs). */
 const MAX_CONNECT_NODES = 10;
+/** find_connections fetches (and draws) at most this many transfers per pair, newest first. */
+const CONNECT_PAGE = 200;
 const MAX_DOC_NODES = 500; // anonTraceDoc's own bound
 /** anonTraceDoc's edge bound. A scratch canvas comes back with every message, so an agent edit that
  *  takes it past this makes the browser's next message (and Share) a 400 -- never grow past it. */
@@ -327,7 +329,7 @@ const findConnections = defineTool({
 
     // Direct: the same counterparty-filtered transfer query the canvas runs, one pair at a time.
     const perPair: Transfer[][] = [];
-    const connections: { a: string; b: string; transfers: number; usd: number | null; unpricedTransfers?: number }[] = [];
+    const connections: { a: string; b: string; transfers: number; transfersCapped?: true; usd: number | null; usdCoversNewest?: number; unpricedTransfers?: number }[] = [];
     let failedPairs = 0;
     let skippedForTime = 0;
     let partialPairs = 0;
@@ -344,7 +346,7 @@ const findConnections = defineTool({
           tokens: [],
           sortKey: "time",
           sortDir: "desc",
-          limit: 200,
+          limit: CONNECT_PAGE,
         });
         perPair.push(res.transfers);
         if (res.sync.state !== "ready") partialPairs++;
@@ -354,7 +356,20 @@ const findConnections = defineTool({
           // whose transfers were later priced at ~$4M.
           const priced = res.transfers.filter((t) => t.usd !== null && t.usd !== undefined);
           const unpriced = res.transfers.length - priced.length;
-          connections.push({ a: a.id, b: b.id, transfers: res.transfers.length, usd: priced.length ? priced.reduce((s, t) => s + t.usd!, 0) : null, ...(unpriced ? { unpricedTransfers: unpriced } : {}) });
+          // The count is the query's own count of every matching transfer, not the length of the
+          // page fetched for drawing: a pair with 350 transfers came out as "200 transfers" with a
+          // USD total over those 200, both reading as the pair's totals. When the page is short
+          // of the count, the USD sum says how many (newest) transfers it covers.
+          const total = Math.max(res.count.value, res.transfers.length);
+          connections.push({
+            a: a.id,
+            b: b.id,
+            transfers: total,
+            ...(res.count.capped ? { transfersCapped: true as const } : {}),
+            usd: priced.length ? priced.reduce((s, t) => s + t.usd!, 0) : null,
+            ...(total > res.transfers.length ? { usdCoversNewest: res.transfers.length } : {}),
+            ...(unpriced ? { unpricedTransfers: unpriced } : {}),
+          });
         }
       } catch {
         failedPairs++; // one pair's provider hiccup shouldn't abort the rest, same as the canvas
@@ -428,7 +443,10 @@ const findConnections = defineTool({
             : partialPairs
               ? `No direct transfers in the history loaded so far, but that history is incomplete for ${partialPairs} of ${pairs.length} pair${pairs.length === 1 ? "" : "s"} -- older transfers aren't loaded yet, so this is NOT proof they never transacted. Tell the user that.`
               : "No direct transfers between any of these pairs (their transfer history is fully loaded)."
-          : "Each connection is a real transfer found on-chain and drawn as an edge.",
+          : `Each connection is a real transfer found on-chain and drawn as an edge (at most ${CONNECT_PAGE} per pair; a connection with usdCoversNewest has a USD sum over only that many of its newest transfers).` +
+            (partialPairs
+              ? ` History is incomplete for ${partialPairs} of ${pairs.length} pair${pairs.length === 1 ? "" : "s"}, so their transfer counts and totals cover only what's loaded so far -- lower bounds, not totals.`
+              : ""),
     };
   },
 });

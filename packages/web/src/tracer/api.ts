@@ -30,14 +30,32 @@ export function useTraces(signedIn: boolean) {
   return useQuery({ queryKey: traceKeys.all, queryFn: () => api<TraceSummary[]>("/traces"), staleTime: 15_000, enabled: signedIn });
 }
 
-export function useTrace(id: string, readOnly: boolean) {
+export function useTrace(id: string | undefined, readOnly: boolean) {
   return useQuery({
-    queryKey: traceKeys.one(id, readOnly),
-    queryFn: () => api<Trace>(readOnly ? `/public/traces/${encodeURIComponent(id)}` : `/traces/${encodeURIComponent(id)}`),
+    queryKey: traceKeys.one(id ?? "", readOnly),
+    queryFn: () => api<Trace>(readOnly ? `/public/traces/${encodeURIComponent(id!)}` : `/traces/${encodeURIComponent(id!)}`),
+    enabled: !!id,
     refetchOnWindowFocus: false,
     retry: 0,
   });
 }
+
+/** Anon Tracer sharing (ADR 0025): a genuinely separate system from saved traces above -- no
+ * account, a 3-hour-expiring snapshot of a local-only canvas, not a live document. */
+export type AnonTraceShareDoc = Pick<Trace, "title" | "notes" | "nodes" | "edges" | "shareable" | "isOwner"> & { expiresAt: string };
+
+export function useAnonTraceShare(id: string | undefined) {
+  return useQuery({
+    queryKey: ["graph", "anon-trace", id ?? ""],
+    queryFn: () => api<AnonTraceShareDoc>(`/anon-traces/${encodeURIComponent(id!)}`),
+    enabled: !!id,
+    refetchOnWindowFocus: false,
+    retry: 0,
+  });
+}
+
+export const createAnonTraceShare = (doc: { title: string; notes: string; nodes: Trace["nodes"]; edges: Trace["edges"] }) =>
+  api<{ id: string; expiresAt: string }>("/anon-traces", { method: "POST", json: doc });
 
 export function useCreateTrace() {
   const qc = useQueryClient();

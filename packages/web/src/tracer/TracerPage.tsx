@@ -20,11 +20,11 @@ import { ErrorNotice } from "../kit/QueryState.tsx";
 import { useServerSession } from "../serverSession.ts";
 import { useSafeToast } from "../panels/parts.tsx";
 import { subjectKey, type CounterpartyRow } from "../panels/model.ts";
-import { refreshTraceEdge, useAggregateSummary } from "./api.ts";
+import { createAnonTraceShare, refreshTraceEdge, useAggregateSummary } from "./api.ts";
 import { ContextMenu, type MenuItem } from "./canvas/ContextMenu.tsx";
 import { NODE_COLORS, nodeTitle } from "./canvas/NodeCard.tsx";
 import { TracerCanvas, type Selection } from "./canvas/TracerCanvas.tsx";
-import { AddNodeDialog, EditLabelDialog, ShareDialog, type AddTarget } from "./dialogs.tsx";
+import { AddNodeDialog, AnonShareDialog, EditLabelDialog, ShareDialog, type AddTarget } from "./dialogs.tsx";
 import { Inspector, readInspectorWidth, NodeHeading, NodeInspector, PairHeading, PairInspector, SummaryInspector, type InspectorController } from "./Inspector.tsx";
 import { groupSegments, summarize } from "./lib/edges.ts";
 import { groupEntityEdit, ungroupEntityEdit } from "./lib/entityOps.ts";
@@ -51,7 +51,7 @@ import { occupiedRects, placeNear, sideForFlow } from "./lib/placement.ts";
 import { boundingBox, clampScale, FIT_PADDING, loadViewport, nodeRect, rectsIntersect, saveViewport, screenRectOfNode, screenToWorld, zoomAt, type Viewport } from "./lib/viewport.ts";
 import { Sidebar } from "./Sidebar.tsx";
 import { Toolbar } from "./Toolbar.tsx";
-import { useTraceDocument } from "./useTraceDocument.ts";
+import { SCRATCH_ID, useTraceDocument, type TraceSource } from "./useTraceDocument.ts";
 import { fitTransform, freeArea, type Insets } from "./lib/freeArea.ts";
 
 /** Fit node rects into the free canvas area (between the floating panels, above the bottom bar); never zooms past 100%. */
@@ -108,9 +108,14 @@ const isTyping = (t: EventTarget | null) => {
   return el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName);
 };
 
-export function TracerPage({ id, readOnly: readOnlyProp = false }: { id: string; readOnly?: boolean }) {
+export function TracerPage({ source }: { source: TraceSource }) {
   const toast = useSafeToast();
-  const { query, trace, store, snap, invalidate } = useTraceDocument(id, readOnlyProp);
+  const { query, trace, store, snap, invalidate } = useTraceDocument(source);
+  const id = source.kind === "saved" || source.kind === "anonShare" ? source.id : SCRATCH_ID;
+  // Mirrors the old prop exactly: true only for a route that was never meant to be edited (a
+  // public saved-trace view, or an anon share -- always read-only, see ADR 0025). A scratch
+  // canvas is the one anon surface that IS editable.
+  const readOnlyProp = source.kind === "saved" ? source.readOnly : source.kind === "anonShare";
   const readOnly = readOnlyProp || trace?.isOwner === false;
   const doc = snap.doc;
   const rootRef = useRef<HTMLDivElement>(null);
@@ -135,7 +140,12 @@ export function TracerPage({ id, readOnly: readOnlyProp = false }: { id: string;
   const [shareOpen, setShareOpen] = useState(false);
   const [labelNode, setLabelNode] = useState<TraceNode | null>(null);
   const reducedMotion = useReducedMotion();
-  const settings = useQuery({ queryKey: ["settings"], queryFn: () => api<Settings>("/settings"), enabled: !readOnlyProp, staleTime: 60_000, retry: 0 });
+  const session = useServerSession();
+  const signedIn = session.status === "signed-in";
+  // Settings are account data -- an anon canvas (scratch or a read-only share) has no session to
+  // fetch them for; the flowDots default below falls back to `true` the same way it already did
+  // for any read-only view.
+  const settings = useQuery({ queryKey: ["settings"], queryFn: () => api<Settings>("/settings"), enabled: signedIn, staleTime: 60_000, retry: 0 });
   const [flowDotsLocal, setFlowDotsLocal] = useState<boolean | null>(readFlowDotsPref);
   const flowDots = (flowDotsLocal ?? settings.data?.preferences.flowDots ?? true) && !reducedMotion;
   const docRef = useRef(doc);
@@ -173,6 +183,19 @@ export function TracerPage({ id, readOnly: readOnlyProp = false }: { id: string;
     const alive = selection.nodeIDs.filter((x) => doc.nodes.some((n) => n.id === x));
     if (alive.length !== selection.nodeIDs.length) setSelection(alive.length ? { type: "nodes", nodeIDs: alive } : { type: "none" });
   }, [doc, selection]);
+
+  // A scratch canvas lives in memory only (ADR 0025) -- nothing autosaves the way a signed-in
+  // trace does, so leaving the page loses real work. Only warns once there's actually something to
+  // lose (one node is enough; an untouched canvas has nothing worth a confirmation for).
+  useEffect(() => {
+    if (source.kind !== "scratch" || !doc || doc.nodes.length === 0) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [source.kind, doc]);
 
   const segments = useMemo(() => groupSegments(doc?.edges ?? []), [doc?.edges]);
   const overview = useMemo(() => summarize(doc?.edges ?? []), [doc?.edges]);
@@ -222,8 +245,7 @@ export function TracerPage({ id, readOnly: readOnlyProp = false }: { id: string;
   const onResizeEnd = useCallback((node: TraceNode, w: number) => void run(sizeEdit(node, w, null)), [run]);
 
   // ---------- find connections ----------
-  const session = useServerSession();
-  const canIndirect = session.status === "signed-in";
+  const canIndirect = signedIn;
   const [indirectOn, setIndirectOn] = useState(false);
   const [finding, setFinding] = useState(false);
   const [indirectResults, setIndirectResults] = useState<{ a: TraceNode; b: TraceNode; shared: { key: string; address: string }[] }[] | null>(null);
@@ -674,7 +696,17 @@ export function TracerPage({ id, readOnly: readOnlyProp = false }: { id: string;
 
       {menu ? <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.node)} onClose={() => setMenu(null)} label="Node actions" /> : null}
       {!readOnly ? <AddNodeDialog open={addOpen} onOpenChange={setAddOpen} onPick={addTarget} /> : null}
-      {!readOnly && doc ? (
+      {!readOnly && doc && source.kind === "scratch" ? (
+        <AnonShareDialog
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          onCreate={async () => {
+            const r = await createAnonTraceShare({ title: doc.title, notes: doc.notes, nodes: doc.nodes, edges: doc.edges });
+            return { url: `${window.location.origin}/#trace/anon/${r.id}`, expiresAt: r.expiresAt };
+          }}
+        />
+      ) : null}
+      {!readOnly && doc && source.kind === "saved" ? (
         <ShareDialog
           open={shareOpen}
           onOpenChange={setShareOpen}

@@ -38,8 +38,13 @@ export function TracerHome() {
   const [share, setShare] = useState<TraceSummary | null>(null);
 
   const start = async (t: AddTarget | null) => {
+    // Anon mode (ADR 0025): no account to save a trace to, so this opens a local-only scratch
+    // canvas instead -- the same shape the Visualizer's own anon mode already uses. A plain
+    // navigation, not an API call, so it already works signed out.
     if (!signedIn) {
-      toast.error("Connect a wallet to start a saved trace.");
+      if (!t) window.location.hash = "#trace/scratch";
+      else if (t.type === "address") window.location.hash = `#trace/${t.chain}/${encodeURIComponent(t.address)}`;
+      else toast.error("Connect a wallet to start a trace from an entity.");
       return;
     }
     try {
@@ -79,7 +84,7 @@ export function TracerHome() {
         error={traces.error}
         onRetry={() => void traces.refetch()}
         signedOut={!signedIn}
-        newLabel="New trace"
+        newLabel={signedIn ? "New trace" : "New scratch trace"}
         newPending={create.isPending}
         onNew={() => void start(null)}
         actions={(it) => [

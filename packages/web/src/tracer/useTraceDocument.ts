@@ -1,8 +1,16 @@
 import { applyTraceOps, type Trace, type TraceDoc, type TraceEdge, type TraceOp } from "@osstrace/contract";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { prepareTraceReplay, sanitizeTraceUndo, useOptimisticDocument } from "../optimistic/index.ts";
-import { postTraceBatch, traceKeys, useTrace } from "./api.ts";
+import { postTraceBatch, traceKeys, useAnonTraceShare, useTrace } from "./api.ts";
+
+/** A new, empty local-only canvas -- no account, nothing saved anywhere (ADR 0025). Mirrors the
+ * Visualizer's scratch mode (useVisualizerDocument.ts) exactly: `localOnly: true`, no `dispatch`,
+ * seeded once and never refetched. */
+export const SCRATCH_ID = "scratch";
+export const emptyTraceDoc = (): TraceDoc => ({ title: "", notes: "", shareable: false, nodes: [], edges: [] });
+
+export type TraceSource = { kind: "scratch"; initial: TraceDoc } | { kind: "saved"; id: string; readOnly: boolean } | { kind: "anonShare"; id: string };
 
 const toDoc = (t: Trace): TraceDoc => ({ title: t.title, notes: t.notes, shareable: t.shareable, nodes: t.nodes ?? [], edges: t.edges ?? [] });
 
@@ -23,24 +31,47 @@ export function decorateTrace(next: TraceDoc, prev: TraceDoc | null): TraceDoc {
   return changed ? { ...next, edges } : next;
 }
 
-export function useTraceDocument(id: string, readOnly: boolean) {
+const EPOCH = new Date(0).toISOString();
+
+export function useTraceDocument(source: TraceSource) {
   const qc = useQueryClient();
-  const q = useTrace(id, readOnly);
-  const remote = useMemo(() => (q.data ? toDoc(q.data) : null), [q.data]);
+  const saved = source.kind === "saved" ? { id: source.id, readOnly: source.readOnly } : null;
+  const anonId = source.kind === "anonShare" ? source.id : undefined;
+
+  const q = useTrace(saved?.id, saved?.readOnly ?? false);
+  const anonQ = useAnonTraceShare(anonId);
+
+  // Scratch doc is seeded once per mount (TracerRoute keys the page by route, so a real navigation
+  // remounts this) -- never refetched, exactly like VisualizerHome's "Scratch" seed.
+  const [scratchSeed] = useState(() => (source.kind === "scratch" ? source.initial : null));
+
+  const remote = useMemo<TraceDoc | null>(() => {
+    if (source.kind === "scratch") return scratchSeed;
+    if (source.kind === "anonShare") return anonQ.data ? { title: anonQ.data.title, notes: anonQ.data.notes, shareable: true, nodes: anonQ.data.nodes, edges: anonQ.data.edges } : null;
+    return q.data ? toDoc(q.data) : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source.kind, scratchSeed, anonQ.data, q.data]);
+
   const invalidate = useCallback(() => {
-    void qc.invalidateQueries({ queryKey: traceKeys.one(id, readOnly) });
+    if (!saved) return;
+    void qc.invalidateQueries({ queryKey: traceKeys.one(saved.id, saved.readOnly) });
     void qc.invalidateQueries({ queryKey: traceKeys.all });
-  }, [qc, id, readOnly]);
+  }, [qc, saved]);
+
+  const readOnly = source.kind === "anonShare" ? true : (saved?.readOnly ?? false);
   const { store, snap } = useOptimisticDocument<TraceDoc, TraceOp>({
-    documentKey: id,
+    documentKey: source.kind === "saved" ? source.id : source.kind === "anonShare" ? `anon:${source.id}` : SCRATCH_ID,
     remote,
-    remoteUpdatedAt: q.data?.updatedAt,
+    remoteUpdatedAt: saved ? q.data?.updatedAt : EPOCH,
+    localOnly: !saved,
     applyOps: (d, ops) => applyTraceOps(d, ops).doc,
-    dispatch: async (ops) => {
-      if (readOnly) throw new Error("This trace is view only.");
-      const r = await postTraceBatch(id, ops);
-      return { updatedAt: r.updatedAt };
-    },
+    dispatch: saved
+      ? async (ops) => {
+          if (saved.readOnly) throw new Error("This trace is view only.");
+          const r = await postTraceBatch(saved.id, ops);
+          return { updatedAt: r.updatedAt };
+        }
+      : undefined,
     maxOpsPerRequest: 500,
     prepareReplay: prepareTraceReplay,
     sanitizeUndo: sanitizeTraceUndo,
@@ -48,5 +79,7 @@ export function useTraceDocument(id: string, readOnly: boolean) {
     invalidate,
     onError: (err, txn) => console.warn(`[tracer] batch failed for "${txn.label}"`, err),
   });
-  return { query: q, trace: q.data, store, snap, invalidate };
+  const query = source.kind === "anonShare" ? anonQ : q;
+  const trace = source.kind === "saved" ? q.data : undefined;
+  return { query, trace, store, snap, invalidate, readOnly };
 }

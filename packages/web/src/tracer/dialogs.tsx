@@ -142,6 +142,61 @@ export function ShareDialog({ open, onOpenChange, shareable, onShareable, url, k
   );
 }
 
+/** Anon Tracer sharing (ADR 0025): genuinely separate from ShareDialog above -- a one-time
+ *  "publish a snapshot" action, not an on/off toggle on a living document (there is no living
+ *  document; a scratch canvas is never saved anywhere). The link it returns expires in 3 hours and
+ *  can't be turned back off or renewed, so this dialog has no "make private" affordance at all. */
+export function AnonShareDialog({ open, onOpenChange, onCreate }: { open: boolean; onOpenChange: (o: boolean) => void; onCreate: () => Promise<{ url: string; expiresAt: string }> }) {
+  const [result, setResult] = useState<{ url: string; expiresAt: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) {
+      setResult(null);
+      setError(null);
+    }
+  }, [open]);
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Share this trace"
+      description="Creates a read-only link to this canvas exactly as it is right now. Anyone with the link can view it without signing in -- it expires in 3 hours and can't be edited, renewed or taken back once created."
+    >
+      {result ? (
+        <>
+          <div className="flex items-center gap-2 rounded-sm border border-border px-2 py-1.5">
+            <span className="kit-mono min-w-0 flex-1 truncate text-xs" title={result.url}>{result.url}</span>
+            <CopyButton value={result.url} label="Copy link" />
+          </div>
+          <p className="mt-2 text-xs text-muted">Expires {new Date(result.expiresAt).toLocaleString()}.</p>
+        </>
+      ) : (
+        <>
+          {error ? <p className="mb-2 text-xs text-danger">{error}</p> : null}
+          <Button
+            variant="primary"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError(null);
+              try {
+                setResult(await onCreate());
+              } catch (e) {
+                setError(describeError(e).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? "Creating link…" : "Create a 3-hour link"}
+          </Button>
+        </>
+      )}
+    </Dialog>
+  );
+}
+
 export function EditLabelDialog({ node, onClose, onSaved }: { node: TraceNode | null; onClose: () => void; onSaved: () => void }) {
   const current = node?.displayAddress?.label;
   const [name, setName] = useState(current?.name ?? "");

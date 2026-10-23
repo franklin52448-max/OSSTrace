@@ -436,11 +436,23 @@ export function TracerPage({ source }: { source: TraceSource }) {
   };
 
   // ---------- pair summary + stale aggregate refresh ----------
+  // Both of these call server endpoints that require an owned trace row (POST /traces/:id/
+  // aggregate-summary, POST /traces/:id/edges/:edgeId/refresh) -- real for a saved trace, but a
+  // scratch canvas's id is the constant SCRATCH_ID, not a real trace, and there's no session to
+  // own one anyway. Computed client-side instead, from the edges already loaded in `doc` -- the
+  // same fallback aggregatePairEdit (above) already uses when no server summary is available.
+  const isScratch = source.kind === "scratch";
   const pair = selectedNodes.length === 2 && selectedNodes.every((n) => n.kind !== "transaction") ? (selectedNodes as [TraceNode, TraceNode]) : null;
-  const summaryQ = useAggregateSummary(id, pair?.[0].id ?? null, pair?.[1].id ?? null, !!pair && !readOnly);
+  const serverSummaryQ = useAggregateSummary(id, pair?.[0].id ?? null, pair?.[1].id ?? null, !!pair && !readOnly && !isScratch);
+  const localSummary = useMemo(() => {
+    if (!isScratch || !pair || !doc) return null;
+    const s = summaryFromTransferEdges(doc, pair[0].id, pair[1].id);
+    return { ...s, sync: { state: "ready" as const, coveredFrom: null, provider: "local" } };
+  }, [isScratch, pair, doc]);
+  const summaryQ = isScratch ? { data: localSummary ?? undefined, error: null, isPending: false } : serverSummaryQ;
   const refreshed = useRef(new Set<string>());
   useEffect(() => {
-    if (!pair || !doc || readOnly || snap.isSaving) return;
+    if (isScratch || !pair || !doc || readOnly || snap.isSaving) return;
     const agg = edgesBetween(doc, pair[0].id, pair[1].id).find((e): e is Extract<TraceEdge, { kind: "aggregate" }> => e.kind === "aggregate");
     if (!agg) return;
     const age = Date.now() - new Date(agg.aggregate.cachedAt).getTime();
@@ -450,7 +462,7 @@ export function TracerPage({ source }: { source: TraceSource }) {
     refreshTraceEdge(id, agg.id)
       .then((edge) => store.patchRemote((d) => ({ ...d, edges: d.edges.map((e) => (e.id === edge.id ? edge : e)) })))
       .catch((err) => console.warn("[tracer] aggregate refresh failed", err));
-  }, [pair, doc, readOnly, snap.isSaving, id, store]);
+  }, [isScratch, pair, doc, readOnly, snap.isSaving, id, store]);
 
   // ---------- zoom helpers ----------
   const center = () => ({ x: size.w / 2, y: size.h / 2 });

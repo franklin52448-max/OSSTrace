@@ -48,7 +48,7 @@ export default function HomeFeatures() {
         <FeatureRow
           name="Explorer"
           title="Look up any address"
-          lead="Paste an Ethereum, BNB Chain, Robinhood Chain or Solana address to see what it holds in USD, who it deals with most and every transfer it made, on one page."
+          lead="Paste an Ethereum, BNB Chain, Robinhood Chain, Base or Solana address to see what it holds in USD, who it deals with most and every transfer it made, on one page."
           points={[
             "Ethereum data comes from Blockscout and Solana from public RPC, with no API key needed. Nothing is estimated.",
             "Holdings are priced with DefiLlama. Tokens without a price, often airdropped spam, are left out of the total but still counted.",

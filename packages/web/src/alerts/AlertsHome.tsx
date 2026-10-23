@@ -51,7 +51,7 @@ export function AlertsHome() {
             Know the moment watched money moves.
           </h1>
           <p className="mt-3 text-[14px] leading-relaxed text-muted">
-            An alert watches addresses or your entities on Ethereum, BNB Chain, Robinhood Chain and Solana and tells you when they send or receive funds above a floor you set, in the
+            An alert watches addresses or your entities on Ethereum, BNB Chain, Robinhood Chain, Base and Solana and tells you when they send or receive funds above a floor you set, in the
             inbox, on the bell, and by webhook.
           </p>
           <a href="#alerts/new" className="kit-fade mt-6 inline-flex h-10 items-center gap-1.5 rounded-sm bg-accent px-4 text-[14px] font-semibold text-accent-ink shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-accent-strong">

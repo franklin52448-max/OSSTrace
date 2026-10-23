@@ -3,9 +3,9 @@ import type { Chain } from "@osstrace/contract";
 /** One entry per chain this project has real data for (see @osstrace/contract's Chain type) -- no
  * entry for anything else, rather than fabricate a link to data we don't have. BscScan is BNB
  * Smart Chain's own explorer (Etherscan's, for chain 56), same /address/ and /tx/ paths. Robinhood
- * Chain's is its own official Blockscout instance, the same one the server reads it through. Base
- * links to BaseScan, its Etherscan-family explorer (the server reads Base through Blockscout's PRO
- * API, but that's a keyed data source, not where a person clicks through to). */
+ * Chain's is its own official Blockscout instance. Base links to BaseScan, its Etherscan-family
+ * explorer. (The server reads all three through Alchemy -- packages/server/src/chain/alchemy.ts --
+ * which is a keyed data source, not somewhere a person clicks through to.) */
 export const EXPLORERS: Record<Chain, { name: string; address: string; tx: string }> = {
   ethereum: { name: "Etherscan", address: "https://etherscan.io/address/", tx: "https://etherscan.io/tx/" },
   solana: { name: "Solscan", address: "https://solscan.io/account/", tx: "https://solscan.io/tx/" },

@@ -43,7 +43,7 @@ export function SearchResults({ q, onPick, activeIndex, grouped = false }: { q: 
   for (const direct of [...missing].reverse()) {
     items.unshift({ key: `direct:${direct}:${term}`, group: "direct", target: { type: "address", chain: direct, address: term }, render: <span className="flex min-w-0 items-center gap-2"><ChainBadge chain={direct} /><span className="kit-mono truncate text-xs">{term}</span></span> });
   }
-  if (!term) return <p className="px-1 py-3 text-[13px] text-muted">Paste an Ethereum, BNB Chain, Robinhood Chain or Solana address, or type the name of one of your labels or entities.</p>;
+  if (!term) return <p className="px-1 py-3 text-[13px] text-muted">Paste an Ethereum, BNB Chain, Robinhood Chain, Base or Solana address, or type the name of one of your labels or entities.</p>;
   if (res.error && items.length === 0) return <p role="alert" className="px-1 py-3 text-[13px] text-danger">{describeError(res.error).message}</p>;
   if (items.length === 0) return <p className="px-1 py-3 text-[13px] text-muted">{res.isFetching ? "Searching…" : "No address, label or entity matches."}</p>;
   const option = (it: (typeof items)[number], i: number) => (

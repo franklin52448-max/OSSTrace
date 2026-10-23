@@ -1,9 +1,10 @@
 import { detectChain, normalizeAddress, type Chain, type Counterparty, type SyncStatus, type TransfersResponse } from "@osstrace/contract";
 import type { Ctx } from "../context.ts";
-import { budgetMs } from "../lib/http.ts";
+import { budgetMs, HttpClient } from "../lib/http.ts";
 import { badRequest } from "../lib/errors.ts";
 import { parseTimeLast, parseTimePoint } from "../lib/time.ts";
 import { mergeSync } from "../chain/sync.ts";
+import { fetchSolscanTransfersBetween } from "../chain/solscan.ts";
 import { FROM_IS, rowAddresses, rowToTransfer, TO_IS, TRANSFER_COLS, type TransferRow } from "../chain/store.ts";
 import { LabelIndex } from "./labelIndex.ts";
 import type { Param } from "../db/index.ts";
@@ -153,6 +154,24 @@ export async function queryTransfers(ctx: Ctx, userId: string | null, q: Transfe
   const sync = base.length
     ? await syncAll(ctx, base, windowFrom, { maxRounds: windowFrom === null ? 0 : undefined, anon: !userId })
     : { state: "ready" as const, coveredFrom: null, provider: "none" };
+
+  // A specific (base, counterparty) pair -- exactly what Find Connections and "narrow by
+  // counterparty" send -- can sit thousands of rows deep in a busy wallet's general history (a
+  // real 347-token-account wallet needed 500+ unrelated rows before a known counterparty's
+  // transfers appeared), so the chronological sync above can genuinely never reach them within any
+  // real budget. Solscan's own from/to filter answers this directly instead. Signed-in only (same
+  // Budget.preferIndexed gate as the general sync), Solana only (Solscan has no Ethereum data),
+  // and only for exactly one base + one counterparty (the pairwise shape this is for) -- a broader
+  // query already has the general sync covering it reasonably.
+  if (userId && ctx.config.solscanApiKey && base.length === 1 && cps.length === 1 && base[0]!.chain === "solana" && cps[0]!.chain === "solana") {
+    try {
+      const found = await fetchSolscanTransfersBetween(new HttpClient("solscan-pair", 2), ctx.config.solscanApiKey, base[0]!.address, cps[0]!.address, budgetMs(8000));
+      ctx.store.upsert(found);
+    } catch {
+      // The general sync above already ran; a failure here just means this shortcut didn't help,
+      // not that the query itself should fail.
+    }
+  }
 
   // inSet appends its params as it renders, so predicates are built in SQL text order.
   const conds: string[] = [];

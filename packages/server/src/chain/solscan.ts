@@ -67,6 +67,40 @@ export function normalizeSolscanTransfer(t: SolscanTransfer, ordinal: number): R
 
 const PAGE_SIZE = 100;
 
+/** Transfers directly between `address` and one specific `counterparty` -- NOT a page of address's
+ * general history. A busy wallet's chronological history can run thousands of rows deep before it
+ * happens to reach a specific counterparty's transfers (confirmed on a real 347-token-account
+ * wallet: 500+ unrelated rows before any transfer with a known counterparty appeared), so the
+ * general sync-then-filter path genuinely never reaches them within any reasonable budget. Solscan
+ * supports filtering server-side by `from`/`to` directly -- two targeted calls here (one per
+ * direction) replace what would otherwise need unbounded general pagination. Used only for a
+ * small, explicit counterparty list (Find Connections, narrowing by one counterparty in the
+ * Transfers panel), never for a general per-address sync. */
+export async function fetchSolscanTransfersBetween(http: HttpClient, apiKey: string, address: string, counterparty: string, budget: Budget): Promise<RawTransfer[]> {
+  const fetchDirection = async (param: "from" | "to"): Promise<SolscanTransfer[]> => {
+    const url = `https://pro-api.solscan.io/v2.0/account/transfer?address=${encodeURIComponent(address)}&${param}=${encodeURIComponent(counterparty)}&page=1&page_size=${PAGE_SIZE}&sort_by=block_time&sort_order=desc`;
+    const { data } = await http.json<SolscanTransferResponse>(url, { headers: { token: apiKey }, budget, cooldownKey: "solscan" });
+    if (!data.success) {
+      const msg = typeof data.errors === "string" ? data.errors : data.errors?.message;
+      throw new ProviderError("solscan", msg ? `Solscan: ${msg}` : "Solscan request failed");
+    }
+    return data.data ?? [];
+  };
+  const [fromRows, toRows] = await Promise.all([fetchDirection("from"), fetchDirection("to")]);
+  // Keyed without `flow`: the same transfer can come back from both the from= and to= queries
+  // (e.g. a direct transfer matches "from=counterparty" once and "to=counterparty" not at all,
+  // but a swap/multi-leg transaction can touch the pair in both directions) -- `flow` is relative
+  // to which side of the pair asked, so it's not part of the row's real identity here.
+  const byId = new Map<string, SolscanTransfer>();
+  for (const r of [...fromRows, ...toRows]) byId.set(`${r.trans_id}:${r.token_address}:${r.amount}:${r.from_address}:${r.to_address}`, r);
+  const transfers: RawTransfer[] = [];
+  [...byId.values()].forEach((r, i) => {
+    const t = normalizeSolscanTransfer(r, i);
+    if (t) transfers.push(t);
+  });
+  return transfers;
+}
+
 /** One page of an address's transfer history from Solscan's indexer, newest-first. Cursor is the
  * next page number as a string (Solscan pages are 1-indexed); null once a short page confirms
  * there's nothing older left. */

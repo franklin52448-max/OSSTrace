@@ -75,9 +75,36 @@ export function clearHistory(ctx: Ctx, convKey: string) {
   ctx.db.run("DELETE FROM tracer_agent_turns WHERE conv_key = ?", convKey);
 }
 
+/**
+ * A tool result as the model sees it, at most MAX_RESULT_CHARS. When it's over, the result's lists
+ * (transfers, nodes, edges, connections) are shortened from the end -- never the fields around them.
+ * A result's caveats (`note`, `sync`, `more`, `warning`) come after its list, so cutting the JSON
+ * text at a character count dropped exactly those: a 50-row list_transfers on a half-loaded history
+ * reached the model without its "not fully loaded" note, reading as a complete answer. What was left
+ * out is stated in `truncatedLists`.
+ */
 function clip(result: Record<string, unknown>): string {
   const s = JSON.stringify(result);
-  return s.length <= MAX_RESULT_CHARS ? s : JSON.stringify({ ...("ok" in result ? { ok: result.ok } : {}), truncated: true, partial: s.slice(0, MAX_RESULT_CHARS - 200) });
+  if (s.length <= MAX_RESULT_CHARS) return s;
+  const out: Record<string, unknown> = { ...result };
+  const lists = Object.keys(out).filter((k) => Array.isArray(out[k]));
+  const counts = new Map(lists.map((k) => [k, (out[k] as unknown[]).length]));
+  const render = () => {
+    const cut = Object.fromEntries(lists.filter((k) => (out[k] as unknown[]).length < counts.get(k)!).map((k) => [k, { shown: (out[k] as unknown[]).length, of: counts.get(k)! }]));
+    return JSON.stringify({ ...out, truncated: true, truncatedLists: cut });
+  };
+  let text = render();
+  while (text.length > MAX_RESULT_CHARS) {
+    const k = lists.filter((x) => (out[x] as unknown[]).length > 0).sort((x, y) => JSON.stringify(out[y]).length - JSON.stringify(out[x]).length)[0];
+    if (!k) break;
+    const arr = out[k] as unknown[];
+    const per = JSON.stringify(arr).length / arr.length;
+    out[k] = arr.slice(0, arr.length - Math.max(1, Math.min(arr.length, Math.ceil((text.length - MAX_RESULT_CHARS) / per))));
+    text = render();
+  }
+  if (text.length <= MAX_RESULT_CHARS) return text;
+  // Nothing list-shaped to shorten (or the rest alone is too big): the old blunt cut, still marked.
+  return JSON.stringify({ ...("ok" in result ? { ok: result.ok } : {}), truncated: true, partial: s.slice(0, MAX_RESULT_CHARS - 200) });
 }
 
 /**

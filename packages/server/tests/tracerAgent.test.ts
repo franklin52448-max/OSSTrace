@@ -490,6 +490,25 @@ describe("tracer agent", () => {
     expect(counts).toEqual([1, 1, 0]);
   });
 
+  it("an over-long tool result is shortened by its list, keeping the caveats that follow it (sync state, more, counts)", async () => {
+    const seen: Seen[] = [];
+    await setup([{ tools: [{ name: "list_transfers", args: { chain: "ethereum", address: ETH_A, limit: 50 } }] }, { content: "ok" }], seen);
+    t.eth.pageSize = 100;
+    t.eth.add(Array.from({ length: 60 }, (_, i) => ethTransfer(i % 2 ? ETH_B : ETH_C, ETH_A, base + i)));
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "list A's last 50 transfers" })).json() as TracerAgentChatResponse;
+    expect((res.toolCalls[0]!.result as { transfers: unknown[] }).transfers).toHaveLength(50); // the caller's own copy is whole
+    const toModel = seen[1]!.body.messages.find((m) => m.role === "tool")!.content!;
+    expect(toModel.length).toBeLessThanOrEqual(12_000);
+    const r = JSON.parse(toModel) as { transfers: unknown[]; sync: { state: string }; more: boolean; matchingInCache: number; truncatedLists: Record<string, { shown: number; of: number }> };
+    expect(r.sync.state).toBe("ready");
+    expect(r.more).toBe(true);
+    expect(r.matchingInCache).toBe(60);
+    expect(r.transfers.length).toBeGreaterThan(20);
+    expect(r.truncatedLists).toEqual({ transfers: { shown: r.transfers.length, of: 50 } });
+  });
+
   it("rename / annotate / remove act on this doc's real node ids only", async () => {
     await setup([
       { tools: [{ name: "get_doc_state", args: {} }] },

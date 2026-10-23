@@ -88,6 +88,11 @@ test("describeToolCall words only what each real result says", () => {
   assert.equal(say("add_node", { ok: true, nodeId: a.id, alreadyOnCanvas: true }), "read: 0x1111…1111 was already on the canvas");
   assert.equal(say("add_node", { ok: false, error: "That isn't a valid address." }), "failed: That isn't a valid address.");
   assert.equal(say("find_connections", { ok: true, connections: [], edgesAdded: 0, pairsFailed: 1 }), "read: No direct connections found, 1 pair couldn't be checked");
+  assert.equal(
+    say("find_connections", { ok: true, connections: [], edgesAdded: 0, pairsWithPartialHistory: 1 }),
+    "read: No direct connections in the history loaded so far (older history isn't loaded, so not proof there are none)",
+  );
+  assert.equal(say("find_connections", { ok: true, connections: [{}], edgesAdded: 1, pairsWithPartialHistory: 1 }), "applied: Found 1 direct connection, drew 1 edge");
   assert.equal(say("find_connections", { ok: true, connections: [{}, {}], edgesAdded: 2, indirectLeads: [{}] }), "applied: Found 2 direct connections, drew 2 edges, 1 possible indirect link (shared counterparties, not drawn)");
   assert.equal(say("find_connections", { ok: true, connections: [{}], edgesAdded: 1, transfersNotDrawnTraceFull: 2 }), "applied: Found 1 direct connection, drew 1 edge, 2 transfers not drawn (the trace is full)");
   assert.equal(say("expand_node", { ok: true, rootNodeId: a.id, nodesAdded: 3, edgesAdded: 3, note: "Stopped short: some nodes were not expanded" }), "applied: Expanded 0x1111…1111: 3 nodes, 3 edges added (partial: some nodes couldn't be expanded)");

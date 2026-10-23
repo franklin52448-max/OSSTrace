@@ -138,7 +138,10 @@ export function describeToolCall(call: AgentToolCall, doc: TraceDoc | null): Age
       const conns = Array.isArray(r["connections"]) ? r["connections"].length : 0;
       const edges = num(r["edgesAdded"]) ?? 0;
       const leads = Array.isArray(r["indirectLeads"]) ? r["indirectLeads"].length : 0;
-      const parts = [conns ? `Found ${plural(conns, "direct connection")}` : "No direct connections found"];
+      // The server says an empty result over incompletely loaded history is not proof of no
+      // connection; the panel's own line mustn't read as one either.
+      const partialHistory = (num(r["pairsWithPartialHistory"]) ?? 0) > 0;
+      const parts = [conns ? `Found ${plural(conns, "direct connection")}` : partialHistory ? "No direct connections in the history loaded so far (older history isn't loaded, so not proof there are none)" : "No direct connections found"];
       if (edges) parts.push(`drew ${plural(edges, "edge")}`);
       const undrawn = num(r["transfersNotDrawnTraceFull"]) ?? 0;
       if (undrawn) parts.push(`${plural(undrawn, "transfer")} not drawn (the trace is full)`);

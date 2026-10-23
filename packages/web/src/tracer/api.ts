@@ -24,8 +24,10 @@ export const traceKeys = {
   entity: (id: string) => ["graph", "entity", id] as const,
 };
 
-export function useTraces() {
-  return useQuery({ queryKey: traceKeys.all, queryFn: () => api<TraceSummary[]>("/traces"), staleTime: 15_000 });
+/** Saved traces are account data -- anon has none (ADR 0024). `signedIn` skips the call entirely
+ * rather than letting it 401, so the sidebar can show "sign in to save" instead of a load error. */
+export function useTraces(signedIn: boolean) {
+  return useQuery({ queryKey: traceKeys.all, queryFn: () => api<TraceSummary[]>("/traces"), staleTime: 15_000, enabled: signedIn });
 }
 
 export function useTrace(id: string, readOnly: boolean) {

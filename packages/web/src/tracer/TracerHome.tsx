@@ -1,6 +1,7 @@
 import { entityNodeId, type TraceOp, type TraceSummary } from "@osstrace/contract";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { useServerSession } from "../serverSession.ts";
 import { useSafeToast } from "../panels/parts.tsx";
 import { postTraceBatch, traceKeys, useCreateTrace, useDeleteTrace, useTraces } from "./api.ts";
 import { ShareDialog, type AddTarget } from "./dialogs.tsx";
@@ -27,7 +28,9 @@ export function traceListItem(t: TraceSummary): DocListItem {
 
 /** Tracer home: the trace list as a page sidebar, a large "start a trace" search, recent traces. */
 export function TracerHome() {
-  const traces = useTraces();
+  const session = useServerSession();
+  const signedIn = session.status === "signed-in";
+  const traces = useTraces(signedIn);
   const create = useCreateTrace();
   const del = useDeleteTrace();
   const qc = useQueryClient();
@@ -35,6 +38,10 @@ export function TracerHome() {
   const [share, setShare] = useState<TraceSummary | null>(null);
 
   const start = async (t: AddTarget | null) => {
+    if (!signedIn) {
+      toast.error("Connect a wallet to start a saved trace.");
+      return;
+    }
     try {
       if (!t) {
         const { id } = await create.mutateAsync({});
@@ -71,6 +78,7 @@ export function TracerHome() {
         items={items}
         error={traces.error}
         onRetry={() => void traces.refetch()}
+        signedOut={!signedIn}
         newLabel="New trace"
         newPending={create.isPending}
         onNew={() => void start(null)}

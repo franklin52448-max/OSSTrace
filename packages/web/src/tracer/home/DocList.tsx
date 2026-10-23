@@ -20,6 +20,9 @@ export type DocListProps = {
   items: DocListItem[] | undefined;
   error?: unknown;
   onRetry?: () => void;
+  /** Signed out: no account, so nothing to list -- shown instead of a load error or a forever-loading
+   * skeleton (anon mode, ADR 0024). The "New scratch ..." button above still works either way. */
+  signedOut?: boolean;
   newLabel: string;
   onNew: () => void;
   newPending?: boolean;
@@ -46,7 +49,9 @@ export function DocList(p: DocListProps) {
         </Button>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {p.error ? (
+        {p.signedOut ? (
+          <p className="px-4 py-5 text-[13px] text-muted">Connect a wallet to save {p.noun}s and come back to them later.</p>
+        ) : p.error ? (
           <div className="p-3"><ErrorNotice error={p.error} title={`Could not load your ${p.noun}s`} onRetry={p.onRetry} /></div>
         ) : !p.items ? (
           <ul aria-label="Loading" className="flex flex-col">

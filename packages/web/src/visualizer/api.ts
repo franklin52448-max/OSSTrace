@@ -10,8 +10,10 @@ export const viewKeys = {
   entity: (id: string) => ["graph", "entity", id] as const,
 };
 
-export function useViews() {
-  return useQuery({ queryKey: viewKeys.all, queryFn: () => api<VisualizerViewSummary[]>("/views"), staleTime: 15_000 });
+/** Saved views are account data -- anon has none (ADR 0024). `signedIn` skips the call entirely
+ * rather than letting it 401, so the sidebar can show "sign in to save" instead of a load error. */
+export function useViews(signedIn: boolean) {
+  return useQuery({ queryKey: viewKeys.all, queryFn: () => api<VisualizerViewSummary[]>("/views"), staleTime: 15_000, enabled: signedIn });
 }
 
 export function useView(id: string | undefined, readOnly: boolean) {

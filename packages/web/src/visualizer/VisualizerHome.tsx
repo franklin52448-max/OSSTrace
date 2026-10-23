@@ -2,6 +2,7 @@ import type { VisualizerViewSummary } from "@osstrace/contract";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { clientTimestamp } from "../optimistic/index.ts";
+import { useServerSession } from "../serverSession.ts";
 import { useSafeToast } from "../panels/parts.tsx";
 import { ShareDialog } from "../tracer/dialogs.tsx";
 import { DocList, type DocListItem } from "../tracer/home/DocList.tsx";
@@ -10,9 +11,12 @@ import { postViewBatch, useDeleteView, useViews, viewKeys } from "./api.ts";
 
 export const viewListItem = (v: VisualizerViewSummary): DocListItem => ({ id: v.id, title: v.name, href: `#graph/saved/${v.id}`, updatedAt: v.updatedAt, shareable: v.shareable, meta: v.shareable ? "public" : "private" });
 
-/** Visualizer home: saved views as a page sidebar, a large search that opens a scratch view, recent views. */
+/** Visualizer home: saved views as a page sidebar, a large search that opens a scratch view, recent views.
+ * The scratch view itself (anon mode, ADR 0024) needs no account at all -- "New scratch view" below is a
+ * plain navigation, not an API call, so it already works signed out. */
 export function VisualizerHome() {
-  const views = useViews();
+  const signedIn = useServerSession().status === "signed-in";
+  const views = useViews(signedIn);
   const del = useDeleteView();
   const qc = useQueryClient();
   const toast = useSafeToast();
@@ -35,6 +39,7 @@ export function VisualizerHome() {
         items={items}
         error={views.error}
         onRetry={() => void views.refetch()}
+        signedOut={!signedIn}
         newLabel="New scratch view"
         onNew={() => (window.location.hash = "#graph/scratch")}
         actions={(it) => [

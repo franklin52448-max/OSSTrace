@@ -289,6 +289,10 @@ const findConnections = defineTool({
         toAdd.set(key(a), a);
       }
       if (existing.size + toAdd.size < 2) fail("Need at least 2 different addresses to look for connections between");
+      // Checked before anything is added: running out of room halfway would leave some of the named
+      // addresses on the canvas behind an error that says nothing was done.
+      const room = MAX_DOC_NODES - env.doc.read().nodes.length;
+      if (toAdd.size > room) fail(`This trace has room for ${Math.max(0, room)} more node${room === 1 ? "" : "s"} (${MAX_DOC_NODES} max) but ${toAdd.size} of these addresses aren't on it yet -- remove some nodes first`);
       nodes = [...existing.values()];
       for (const a of toAdd.values()) {
         const r = ensureNode(env, a, null, taken);
@@ -410,6 +414,7 @@ const expandNode = defineTool({
     let nodesAdded = 0;
     let edgesAdded = 0;
     let counterpartiesNotAdded = 0;
+    let skippedTraceFull = 0;
     const unavailable: string[] = [];
     let budgetExhausted = 0;
     for (let hop = 1; hop <= hops && frontier.length; hop++) {
@@ -447,6 +452,14 @@ const expandNode = defineTool({
             continue;
           }
           const ck = { chain: cp.info.chain, address: cp.info.address };
+          // A full trace stops new nodes, not the call: what was already added stays, and is reported
+          // as a partial expansion instead of an error claiming nothing happened.
+          const d0 = env.doc.read();
+          if (d0.nodes.length >= MAX_DOC_NODES && !d0.nodes.some((x) => x.id === addressNodeId(env.doc.traceId, ck.chain, ck.address))) {
+            skippedTraceFull++;
+            counterpartiesNotAdded++;
+            continue;
+          }
           const r = ensureNode(env, ck, n.currentPosition, taken);
           if (r.created) nodesAdded++;
           const d = env.doc.read();
@@ -473,8 +486,10 @@ const expandNode = defineTool({
       nodesExpanded: expanded.size - unavailable.length,
       notExpanded: { depthCap: depthCapped, budgetExhausted, unavailable },
       counterpartiesNotAdded,
-      note:
-        budgetExhausted || unavailable.length
+      ...(skippedTraceFull ? { notAddedTraceFull: skippedTraceFull } : {}),
+      note: skippedTraceFull
+        ? `Stopped short: the trace reached its ${MAX_DOC_NODES}-node limit, so ${skippedTraceFull} counterpart${skippedTraceFull === 1 ? "y was" : "ies were"} not added -- the picture is partial. Remove nodes to make room.`
+        : budgetExhausted || unavailable.length
           ? "Stopped short: some nodes were not expanded (lookup budget or provider errors) -- the picture is partial, not complete."
           : "Aggregate edges carry real totals from the transfer history loaded so far.",
     };

@@ -535,6 +535,29 @@ describe("tracer agent", () => {
     expect(r.note).toMatch(new RegExp(`newest ${r.nodes.length} of 120 nodes`));
   });
 
+  it("a trace running out of node room mid-call: expand_node keeps what it added and says it stopped short; find_connections refuses before adding anything", async () => {
+    await setup([
+      { tools: [{ name: "expand_node", args: { chain: "ethereum", address: ETH_A, hops: 1 } }] },
+      { content: "expanded part of it" },
+      { tools: [{ name: "find_connections", args: { addresses: [ETH_B, ETH_C] } }] },
+      { content: "no room" },
+    ]);
+    t.eth.add([ethTransfer(ETH_A, ETH_B, base + 1, { amountRaw: "2000000000000000000" }), ethTransfer(ETH_A, ETH_C, base + 2)]);
+    const anon = new Browser(t.app);
+    const r1 = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "expand A", doc: scratchWith(498) })).json() as TracerAgentChatResponse;
+    // Root A and its bigger counterparty B fit (499, 500); C doesn't. Not an error: A and B are on the canvas.
+    expect(r1.toolCalls[0]!.result).toMatchObject({ ok: true, nodesAdded: 1, edgesAdded: 1, notAddedTraceFull: 1 });
+    expect((r1.toolCalls[0]!.result as { note: string }).note).toMatch(/500-node limit/);
+    expect(r1.doc.nodes).toHaveLength(500);
+    expect(r1.doc.nodes.some((n) => n.id === addressNodeId("scratch", "ethereum", ETH_B))).toBe(true);
+
+    const r2 = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "connect B and C", doc: scratchWith(499) })).json() as TracerAgentChatResponse;
+    expect(r2.toolCalls[0]!.result).toMatchObject({ ok: false });
+    expect((r2.toolCalls[0]!.result as { error: string }).error).toMatch(/room for 1 more node/);
+    expect(r2.doc.nodes).toHaveLength(499); // refused as a whole: B wasn't left behind
+    expect(r2.ops).toEqual([]);
+  });
+
   it("rename / annotate / remove act on this doc's real node ids only", async () => {
     await setup([
       { tools: [{ name: "get_doc_state", args: {} }] },

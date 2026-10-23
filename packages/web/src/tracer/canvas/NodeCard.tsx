@@ -15,13 +15,16 @@ export const NODE_COLORS: { value: NodeColor; label: string }[] = [
   { value: "gray", label: "Gray" },
 ];
 
-/** Title rules: "Entity: Label (abcde)" / "Entity (abcde)" / "Label (abcde)" / raw address / "Unknown address". */
+/** Title rules: the card's own trace-scoped name (TraceNode.label) first, then "Entity: Label (abcde)"
+ *  / "Entity (abcde)" / "Label (abcde)" / raw address / "Unknown address". */
 export function nodeTitle(n: TraceNode): { title: string; mono: boolean } {
-  if (n.kind === "entity") return { title: n.displayEntity?.name ?? "Entity", mono: false };
+  const own = n.label?.trim();
+  if (n.kind === "entity") return { title: own || (n.displayEntity?.name ?? "Entity"), mono: false };
   const info = n.displayAddress;
   const addr = n.address ?? info?.address;
-  if (!addr) return { title: "Unknown address", mono: false };
+  if (!addr) return { title: own || "Unknown address", mono: false };
   const tail = addr.startsWith("0x") ? addr.slice(2, 7) : addr.slice(0, 5);
+  if (own) return { title: `${own} (${tail})`, mono: false };
   const ent = info?.entity?.name;
   const label = info?.label?.name;
   if (ent && label && label !== ent) return { title: `${ent}: ${label} (${tail})`, mono: false };
@@ -85,6 +88,7 @@ export const NodeCard = memo(function NodeCard({ node, viewport, selected, edita
       data-node-id={node.id}
       data-kind={node.kind}
       data-color={node.color || undefined}
+      title={node.note || undefined}
       onPointerDown={(e) => onPointerDown(e, node)}
       onContextMenu={(e) => onContextMenu(e, node)}
       onKeyDown={(e) => {

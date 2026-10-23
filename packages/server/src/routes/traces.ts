@@ -1,20 +1,19 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { applyTraceOps, detectChain, isAddressOnChain, normalizeAddress, type AggregateSummaryResponse, type BatchResult, type TraceOp } from "@osstrace/contract";
+import { detectChain, isAddressOnChain, normalizeAddress, type AggregateSummaryResponse, type TraceOp } from "@osstrace/contract";
 import { requireUser, type Ctx } from "../context.ts";
 import { badRequest, notFound } from "../lib/errors.ts";
 import { nextAfter, nowIso } from "../lib/time.ts";
 import { anonTraceDoc, chain, parse, traceBatch } from "../schemas.ts";
 import {
+  commitTraceOps,
   computeAggregate,
   createTrace,
   getTraceRow,
   loadDoc,
   nodeAddresses,
   ownedTrace,
-  refreshChangedAggregates,
-  sanitizeTraceOps,
   saveDoc,
   summaries,
   toTrace,
@@ -62,23 +61,7 @@ export function registerTraces(app: FastifyInstance, ctx: Ctx) {
     const u = requireUser(req);
     ownedTrace(ctx, u.id, req.params.id);
     const { ops } = parse(traceBatch, req.body);
-    const placeholder = nowIso();
-    const clean = sanitizeTraceOps(req.params.id, ops as TraceOp[], placeholder);
-    // One transaction: load -> shared reducer -> recompute aggregates -> persist -> bump updatedAt.
-    return db.tx((): BatchResult => {
-      const t = ownedTrace(ctx, u.id, req.params.id);
-      const before = loadDoc(ctx, t);
-      const updatedAt = nextAfter(t.updated_at);
-      const stamped = clean.map((op): TraceOp => {
-        if (op.type === "create_node") return { ...op, node: { ...op.node, createdAt: updatedAt } };
-        if (op.type === "create_edge") return { ...op, edge: { ...op.edge, createdAt: updatedAt } as typeof op.edge };
-        return op;
-      });
-      const r = applyTraceOps(before, stamped);
-      refreshChangedAggregates(ctx, t.user_id, before, r.doc, updatedAt);
-      if (r.applied > 0) saveDoc(ctx, t, r.doc, updatedAt);
-      return { updatedAt: r.applied > 0 ? updatedAt : t.updated_at, applied: r.applied, skipped: r.skipped };
-    });
+    return commitTraceOps(ctx, u.id, req.params.id, ops as TraceOp[]);
   });
 
   app.post<{ Params: { id: string } }>("/api/traces/:id/aggregate-summary", async (req) => {

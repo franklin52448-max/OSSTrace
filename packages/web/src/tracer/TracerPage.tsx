@@ -12,7 +12,7 @@ import {
 } from "@osstrace/contract";
 import { useQuery } from "@tanstack/react-query";
 import { Copy, ExternalLink, Pencil, Plus, Scaling, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as RMouseEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as RMouseEvent } from "react";
 import { explorerAddressUrl, explorerName } from "../explorers.ts";
 import { api } from "../kit/api.ts";
 import { Button } from "../kit/Button.tsx";
@@ -53,6 +53,7 @@ import { Sidebar } from "./Sidebar.tsx";
 import { Toolbar } from "./Toolbar.tsx";
 import { SCRATCH_ID, useTraceDocument, type TraceSource } from "./useTraceDocument.ts";
 import { fitTransform, freeArea, type Insets } from "./lib/freeArea.ts";
+import { agentEdit, type AgentCanvas } from "./agent/toolCalls.ts";
 
 /** Fit node rects into the free canvas area (between the floating panels, above the bottom bar); never zooms past 100%. */
 function fitFree(rects: { x: number; y: number; w: number; h: number }[], W: number, H: number, ins: Insets): Viewport | null {
@@ -63,6 +64,13 @@ function fitFree(rects: { x: number; y: number; w: number; h: number }[], W: num
   if (scale === t.scale) return t;
   return fitTransform(bb, freeArea(W, H, ins), { margin: FIT_PADDING, min: scale, max: scale });
 }
+
+/** Only exists when the build-time flag is on (agent/flag.ts): with it off this is `null`, the
+ *  dynamic import is dead code, and the panel's module never becomes part of the build. The check
+ *  is spelled out here rather than imported as TRACER_AGENT_ENABLED on purpose: the bundler only
+ *  drops the dynamic import (and so never emits the panel's chunk) when the literal is in the same
+ *  module as the import() -- verified against a real `vite build` with the flag unset. */
+const AgentChatPanel = import.meta.env.VITE_ENABLE_TRACER_AGENT === "true" || import.meta.env.VITE_ENABLE_TRACER_AGENT === "1" ? lazy(() => import("./agent/AgentChatPanel.tsx")) : null;
 
 const FLOW_DOTS_KEY = "osstrace_tracer_flow_dots";
 const STALE_MS = 60 * 60 * 1000;
@@ -139,6 +147,11 @@ export function TracerPage({ source }: { source: TraceSource }) {
   const [addOpen, setAddOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [labelNode, setLabelNode] = useState<TraceNode | null>(null);
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [agentMounted, setAgentMounted] = useState(false);
+  useEffect(() => {
+    if (agentOpen) setAgentMounted(true);
+  }, [agentOpen]);
   const reducedMotion = useReducedMotion();
   const session = useServerSession();
   const signedIn = session.status === "signed-in";
@@ -555,6 +568,30 @@ export function TracerPage({ source }: { source: TraceSource }) {
     return null;
   })();
 
+  // ---------- agent panel (build-flagged, see agent/flag.ts) ----------
+  // The server runs the agent's tools with the same edit builders the buttons use (shared via
+  // @osstrace/contract) and returns the ops it applied. They land here through `run` -- the same
+  // store transaction every manual edit goes through -- so they show on this canvas at once, save
+  // the same way, and undo as one step.
+  const agentAvailable = !!AgentChatPanel && !readOnly;
+  const agentCanvas: AgentCanvas | null = agentAvailable
+    ? {
+        docId: id,
+        getDoc: () => store.getDoc() ?? docRef.current,
+        applyAgentOps: async (ops, after) => {
+          const before = store.getDoc() ?? docRef.current;
+          if (!before) return false;
+          const edit = agentEdit(before, ops, after);
+          if (!edit) return true;
+          const ok = await run(edit);
+          // A saved trace's ops are already committed server-side (replaying them is a no-op there);
+          // refetch so server-computed aggregate totals come through too.
+          if (ok && source.kind === "saved") invalidate();
+          return ok;
+        },
+      }
+    : null;
+
   // ---------- render ----------
   if (query.error && !doc) {
     return (
@@ -618,7 +655,7 @@ export function TracerPage({ source }: { source: TraceSource }) {
 
       <div className="pointer-events-none absolute inset-x-4 bottom-[68px] top-4 flex items-stretch justify-between gap-4">
         <div ref={leftRef} className="flex min-h-0 flex-col items-start">
-          {doc && !(narrow && inspector) ? (
+          {doc && !(narrow && (inspector || agentOpen)) ? (
             <Sidebar
               doc={doc}
               overview={overview}
@@ -640,7 +677,15 @@ export function TracerPage({ source }: { source: TraceSource }) {
             />
           ) : null}
         </div>
-        <div ref={rightRef} className="flex min-h-0">{inspector}</div>
+        <div ref={rightRef} className="flex min-h-0 gap-4">
+          {AgentChatPanel && agentCanvas && agentMounted ? (
+            // Stays mounted once opened (closing just hides it), so the conversation survives a close.
+            <Suspense fallback={null}>
+              <AgentChatPanel canvas={agentCanvas} onClose={() => setAgentOpen(false)} className={agentOpen ? undefined : "hidden"} />
+            </Suspense>
+          ) : null}
+          {inspector}
+        </div>
       </div>
 
       <Toolbar
@@ -677,6 +722,7 @@ export function TracerPage({ source }: { source: TraceSource }) {
         indirectOn={indirectOn}
         onIndirectOn={setIndirectOn}
         indirectLocked={!canIndirect}
+        agent={agentAvailable ? { open: agentOpen, onToggle: () => setAgentOpen((o) => !o) } : null}
       />
       {indirectResults ? (
         <div className="pointer-events-auto absolute bottom-16 left-1/2 z-20 w-[min(92vw,420px)] -translate-x-1/2 rounded-[14px] border border-line bg-panel/95 p-3 shadow-card backdrop-blur-md">

@@ -56,6 +56,23 @@ describe("traces", () => {
     expect(second.json().updatedAt > first.json().updatedAt).toBe(true);
   });
 
+  it("a node's own label/note persist through set_node_label/set_node_note, and never touch the labels table", async () => {
+    const root = addressNodeId(id, "ethereum", ETH_A);
+    const r = await batch([
+      { type: "set_node_label", id: root, label: "Suspect hot wallet" },
+      { type: "set_node_note", id: root, note: "Funded from the bridge exploit" },
+    ]);
+    expect(r.json()).toMatchObject({ applied: 2, skipped: 0 });
+    const n = (await get()).nodes.find((x) => x.id === root)!;
+    expect(n).toMatchObject({ label: "Suspect hot wallet", note: "Funded from the bridge exploit" });
+    expect(n.displayAddress?.label).toBeNull(); // the user's private address book is untouched
+    expect(t.ctx.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM labels")!.n).toBe(0);
+    await batch([{ type: "set_node_label", id: root, label: null }]);
+    expect((await get()).nodes.find((x) => x.id === root)!.label).toBeUndefined();
+    const tooLong = await batch([{ type: "set_node_label", id: root, label: "x".repeat(500) }]);
+    expect(tooLong.statusCode).toBe(400);
+  });
+
   it("rejects non-deterministic ids, malformed ops and > 500 ops", async () => {
     const bad = await batch([{ type: "create_node", node: { ...node(id, ETH_B), id: "00000000-0000-4000-8000-000000000000" } }]);
     expect(bad.statusCode).toBe(400);

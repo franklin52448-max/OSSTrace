@@ -156,7 +156,7 @@ export type TestApp = {
   close: () => Promise<void>;
 };
 
-export async function makeApp(over: Partial<Config> = {}, opts: { sendWebhook?: WebhookSender; ethStreams?: string[] } = {}): Promise<TestApp> {
+export async function makeApp(over: Partial<Config> = {}, opts: { sendWebhook?: WebhookSender; ethStreams?: string[]; agentFetch?: typeof fetch } = {}): Promise<TestApp> {
   const config = { ...loadConfig({ NODE_ENV: "test" } as NodeJS.ProcessEnv), dbPath: ":memory:", ...over };
   const db = openDb(":memory:");
   const eth = new FakeProvider("ethereum", opts.ethStreams);
@@ -188,6 +188,7 @@ export async function makeApp(over: Partial<Config> = {}, opts: { sendWebhook?: 
         return { ok: true, status: 200, detail: "HTTP 200" };
       }),
     logger: false,
+    ...(opts.agentFetch ? { agentFetch: opts.agentFetch } : {}),
   });
   await app.ready();
   return {

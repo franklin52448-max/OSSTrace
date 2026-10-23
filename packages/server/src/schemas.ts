@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Chain } from "@osstrace/contract";
+import { NODE_LABEL_MAX, NODE_NOTE_MAX, type Chain } from "@osstrace/contract";
 import { badRequest } from "./lib/errors.ts";
 
 export function parse<S extends z.ZodTypeAny>(schema: S, data: unknown): z.output<S> {
@@ -37,6 +37,8 @@ export const traceNode = z
     transactionHash: z.string().min(1).max(200).optional(),
     displayAddress: z.unknown().optional(),
     displayEntity: z.unknown().optional(),
+    label: z.string().max(NODE_LABEL_MAX).nullable().optional(),
+    note: z.string().max(NODE_NOTE_MAX).nullable().optional(),
   })
   .strip();
 
@@ -73,6 +75,8 @@ export const traceOp = z.discriminatedUnion("type", [
   z.object({ type: z.literal("update_node_position"), id, position: xy, clientTimestamp: iso }),
   z.object({ type: z.literal("update_node_size"), id, width: num.min(0).max(10000).nullable(), height: num.min(0).max(10000).nullable() }),
   z.object({ type: z.literal("set_node_color"), id, color: nodeColor.nullable() }),
+  z.object({ type: z.literal("set_node_label"), id, label: z.string().max(NODE_LABEL_MAX).nullable() }),
+  z.object({ type: z.literal("set_node_note"), id, note: z.string().max(NODE_NOTE_MAX).nullable() }),
   z.object({ type: z.literal("set_title"), title: z.string().max(1000) }),
   z.object({ type: z.literal("set_notes"), notes: z.string().max(100_000) }),
   z.object({ type: z.literal("set_shareable"), shareable: z.boolean() }),

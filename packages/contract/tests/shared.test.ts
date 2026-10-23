@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   addressNodeId,
-  CHAIN_NAMES,
-  NATIVE_SYMBOLS,
+  addTransfersEdit,
   aggregateEdgeId,
   applyTraceOps,
   applyVisualizerOps,
+  CHAIN_NAMES,
+  makeAddressNode,
+  NATIVE_SYMBOLS,
+  NODE_LABEL_MAX,
+  NODE_NOTE_MAX,
+  pairsToCompare,
+  sharedCounterparties,
   DEFAULT_VISUALIZER_STATE,
   chainForAddress,
   detectChain,
@@ -18,6 +24,7 @@ import {
   type TraceDoc,
   type TraceNode,
   type TraceOp,
+  type Transfer,
 } from "../src/index.ts";
 
 const node = (id: string, x = 0, y = 0): TraceNode => ({ id, kind: "address", currentPosition: { x, y }, createdAt: "2026-01-01T00:00:00.000Z" });
@@ -189,5 +196,63 @@ describe("applyVisualizerOps", () => {
     r = applyVisualizerOps(r.doc, [{ type: "set_name", name: "old", clientTimestamp: "2026-01-01T00:00:01.000Z" }]);
     expect(r.doc.name).toBe("new");
     expect(r.skipped).toBe(1);
+  });
+});
+
+describe("node label / note ops", () => {
+  it("set_node_label / set_node_note set, clamp, clear, and skip a missing node", () => {
+    const doc = { ...empty(), nodes: [node("a")] };
+    let r = applyTraceOps(doc, [
+      { type: "set_node_label", id: "a", label: "Hot wallet" },
+      { type: "set_node_note", id: "a", note: "x".repeat(NODE_NOTE_MAX + 50) },
+      { type: "set_node_label", id: "missing", label: "nope" },
+    ]);
+    expect(r.applied).toBe(2);
+    expect(r.skipped).toBe(1);
+    expect(r.doc.nodes[0]!.label).toBe("Hot wallet");
+    expect(r.doc.nodes[0]!.note).toHaveLength(NODE_NOTE_MAX);
+    r = applyTraceOps(r.doc, [
+      { type: "set_node_label", id: "a", label: "y".repeat(NODE_LABEL_MAX + 1) },
+      { type: "set_node_note", id: "a", note: "" },
+    ]);
+    expect(r.doc.nodes[0]!.label).toHaveLength(NODE_LABEL_MAX);
+    expect(r.doc.nodes[0]!.note).toBeNull();
+    r = applyTraceOps(r.doc, [{ type: "set_node_label", id: "a", label: null }]);
+    expect(r.doc.nodes[0]!.label).toBeNull();
+  });
+});
+
+describe("shared tracer edits (Find connections)", () => {
+  const A = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+  const B = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359";
+  const transfer = (id: string, from: string, to: string): Transfer => ({
+    id, chain: "ethereum", txHash: id, blockNumber: 1, blockTimestamp: "2026-01-01T00:00:00.000Z",
+    from: { chain: "ethereum", address: from }, to: { chain: "ethereum", address: to },
+    tokenId: "native", tokenSymbol: "ETH", tokenName: "Ether", tokenDecimals: 18, amountRaw: "1", amount: "1", usd: 10, priceSource: "x",
+  });
+
+  it("pairsToCompare only pairs same-chain address nodes", () => {
+    const a = makeAddressNode("t", { chain: "ethereum", address: A }, { x: 0, y: 0 });
+    const b = makeAddressNode("t", { chain: "ethereum", address: B }, { x: 0, y: 0 });
+    const s = makeAddressNode("t", { chain: "solana", address: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM" }, { x: 0, y: 0 });
+    expect(pairsToCompare([a, b, s]).map(([x, y]) => [x.id, y.id])).toEqual([[a.id, b.id]]);
+  });
+
+  it("addTransfersEdit draws real transfers as edges, replaces the pair's aggregate, and skips duplicates", () => {
+    const a = makeAddressNode("t", { chain: "ethereum", address: A }, { x: 0, y: 0 });
+    const b = makeAddressNode("t", { chain: "ethereum", address: B }, { x: 0, y: 0 });
+    const agg = edge(aggregateEdgeId("t", a.id, b.id), a.id, b.id);
+    const doc = { ...empty(), nodes: [a, b], edges: [agg] };
+    const t1 = transfer("tx1_0", A, B);
+    const e = addTransfersEdit({ traceId: "t", doc, transfers: [t1, t1], positionFor: () => ({ x: 0, y: 0 }) });
+    const r = applyTraceOps(doc, e.doOps);
+    expect(r.doc.edges.map((x) => x.id)).toEqual([transferEdgeId("t", "ethereum", "tx1_0")]);
+    expect(applyTraceOps(r.doc, e.undoOps).doc.edges.map((x) => x.id)).toEqual([agg.id]);
+  });
+
+  it("sharedCounterparties excludes the pair itself", () => {
+    const setA = new Map([["k1", "x"], ["k2", "y"], ["self", "s"]]);
+    const setB = new Map([["k2", "y"], ["self", "s"]]);
+    expect(sharedCounterparties(setA, setB, new Set(["self"]))).toEqual([{ key: "k2", address: "y" }]);
   });
 });

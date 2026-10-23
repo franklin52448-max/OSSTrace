@@ -1,13 +1,17 @@
 import {
   addressNodeId,
   aggregateEdgeId,
+  applyTraceOps,
   detectChain,
   isAddressOnChain,
   entityNodeId,
   normalizeAddress,
+  NODE_LABEL_MAX,
+  NODE_NOTE_MAX,
   transactionNodeId,
   transferEdgeId,
   type AggregateSummary,
+  type BatchResult,
   type Chain,
   type EntityRef,
   type Trace,
@@ -19,7 +23,7 @@ import {
 } from "@osstrace/contract";
 import type { Ctx } from "../context.ts";
 import { badRequest, notFound } from "../lib/errors.ts";
-import { nowIso } from "../lib/time.ts";
+import { nextAfter, nowIso } from "../lib/time.ts";
 import { rowAddresses, rowToTransfer } from "../chain/store.ts";
 import { LabelIndex } from "./labelIndex.ts";
 import type { AddrKey } from "./transfers.ts";
@@ -39,6 +43,8 @@ type NodeRow = {
   width: number | null;
   height: number | null;
   color: TraceNode["color"] | null;
+  label: string | null;
+  note: string | null;
   created_at: string;
 };
 type EdgeRow = {
@@ -77,6 +83,8 @@ export function loadDoc(ctx: Ctx, t: TraceRow): TraceDoc {
     if (n.width !== null) node.width = Number(n.width);
     if (n.height !== null) node.height = Number(n.height);
     if (n.color) node.color = n.color;
+    if (n.label) node.label = n.label;
+    if (n.note) node.note = n.note;
     if (n.kind === "address" && n.chain && n.address) Object.assign(node, { chain: n.chain, address: n.address });
     if (n.kind === "entity" && n.entity_id) node.entityID = n.entity_id;
     if (n.kind === "transaction" && n.chain && n.tx_hash) Object.assign(node, { transactionChain: n.chain, transactionHash: n.tx_hash });
@@ -109,8 +117,8 @@ export function saveDoc(ctx: Ctx, t: TraceRow, doc: TraceDoc, updatedAt: string)
   db.run("DELETE FROM trace_nodes WHERE trace_id = ?", t.id);
   doc.nodes.forEach((n, i) => {
     db.run(
-      `INSERT INTO trace_nodes (trace_id, id, ord, kind, chain, address, entity_id, tx_hash, x, y, pos_ts, width, height, color, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO trace_nodes (trace_id, id, ord, kind, chain, address, entity_id, tx_hash, x, y, pos_ts, width, height, color, label, note, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       t.id,
       n.id,
       i,
@@ -125,6 +133,8 @@ export function saveDoc(ctx: Ctx, t: TraceRow, doc: TraceDoc, updatedAt: string)
       n.width ?? null,
       n.height ?? null,
       n.color ?? null,
+      n.label ?? null,
+      n.note ?? null,
       n.createdAt,
     );
   });
@@ -209,6 +219,8 @@ export function sanitizeTraceOps(traceId: string, ops: TraceOp[], commitAt: stri
           ...(n.width !== undefined ? { width: n.width } : {}),
           ...(n.height !== undefined ? { height: n.height } : {}),
           ...(n.color !== undefined ? { color: n.color } : {}),
+          ...(n.label ? { label: n.label.slice(0, NODE_LABEL_MAX) } : {}),
+          ...(n.note ? { note: n.note.slice(0, NODE_NOTE_MAX) } : {}),
         };
         if (n.kind === "address") {
           if (!n.address) throw badRequest("address node needs an address");
@@ -252,6 +264,30 @@ export function sanitizeTraceOps(traceId: string, ops: TraceOp[], commitAt: stri
       default:
         return op;
     }
+  });
+}
+
+/**
+ * The whole write path of `POST /api/traces/:id/batch`, as a function so the Tracer agent commits
+ * its edits through exactly the same hygiene, reducer, aggregate recompute and ownership check as a
+ * canvas edit -- not a second write path. One transaction: load -> shared reducer -> recompute
+ * aggregates -> persist -> bump updatedAt. Throws not_found unless `userId` owns the trace.
+ */
+export function commitTraceOps(ctx: Ctx, userId: string, traceId: string, ops: TraceOp[]): BatchResult {
+  const clean = sanitizeTraceOps(traceId, ops, nowIso());
+  return ctx.db.tx((): BatchResult => {
+    const t = ownedTrace(ctx, userId, traceId);
+    const before = loadDoc(ctx, t);
+    const updatedAt = nextAfter(t.updated_at);
+    const stamped = clean.map((op): TraceOp => {
+      if (op.type === "create_node") return { ...op, node: { ...op.node, createdAt: updatedAt } };
+      if (op.type === "create_edge") return { ...op, edge: { ...op.edge, createdAt: updatedAt } as typeof op.edge };
+      return op;
+    });
+    const r = applyTraceOps(before, stamped);
+    refreshChangedAggregates(ctx, t.user_id, before, r.doc, updatedAt);
+    if (r.applied > 0) saveDoc(ctx, t, r.doc, updatedAt);
+    return { updatedAt: r.applied > 0 ? updatedAt : t.updated_at, applied: r.applied, skipped: r.skipped };
   });
 }
 

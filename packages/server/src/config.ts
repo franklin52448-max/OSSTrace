@@ -16,6 +16,10 @@ export type Config = {
   solanaRpcUrl: string;
   /** True when the operator supplied their own RPC (URL or file). */
   solanaRpcCustom: boolean;
+  /** Never logged. Null unless the operator configures one -- unlike Solana, there's no reliable
+   *  free public Ethereum mainnet RPC to default to, so Ethereum falls back to ethBlockscoutUrl
+   *  (which needs no key) when this is unset, the same shape as solanaRpcUrl's custom/default split. */
+  ethRpcUrl: string | null;
   ethBlockscoutUrl: string;
   defillamaUrl: string;
   /** Public wallet addresses bounty depositors pay into -- never a key this server holds (ADR 0020). */
@@ -55,6 +59,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     solanaRpcCustom = true;
   }
 
+  let ethRpcUrl: string | null = null;
+  if (env.ETH_RPC_URL_FILE) {
+    const raw = readFileSync(expandHome(env.ETH_RPC_URL_FILE), "utf8").trim();
+    if (!/^https?:\/\//.test(raw)) throw new Error("ETH_RPC_URL_FILE does not contain an http(s) URL");
+    ethRpcUrl = raw;
+  } else if (env.ETH_RPC_URL) {
+    ethRpcUrl = env.ETH_RPC_URL.trim();
+  }
+
   const origins = (env.ALLOWED_ORIGINS ?? "http://127.0.0.1:5301,http://localhost:5301")
     .split(",")
     .map((s) => s.trim().replace(/\/$/, ""))
@@ -74,6 +87,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     trustProxy: bool(env.TRUST_PROXY, false),
     solanaRpcUrl,
     solanaRpcCustom,
+    ethRpcUrl,
     ethBlockscoutUrl: (env.ETH_BLOCKSCOUT_URL ?? "https://eth.blockscout.com").replace(/\/$/, ""),
     defillamaUrl: (env.DEFILLAMA_URL ?? "https://coins.llama.fi").replace(/\/$/, ""),
     depositWallets: {

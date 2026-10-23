@@ -140,6 +140,35 @@ describe("wallet auth API", () => {
     expect(Number(locked.headers["retry-after"])).toBeGreaterThan(0);
   });
 
+  it("throttles challenge requests at 10/hour per wallet address, regardless of which ip asks -- real HTTP route exercises it too", async () => {
+    // Through the real route once, proving it's actually wired in (not just unit-tested below).
+    const { address } = testWallet("griefed-victim");
+    const c = new Client(t.app);
+    for (let i = 0; i < 10; i++) expect((await c.post("/api/auth/challenge", { chain: "solana", address })).statusCode).toBe(200);
+    const blocked = await c.post("/api/auth/challenge", { chain: "solana", address });
+    expect(blocked.statusCode).toBe(429);
+    expect(blocked.json().error.code).toBe("rate_limited");
+
+    // Unit-tested directly below with varied `ip` arguments: the per-ip (10) and per-wallet (10)
+    // caps happen to share a threshold, which the HTTP route can't cleanly tell apart (both
+    // increment on every call from one connection) -- checkChallengeAllowed itself can.
+    const { openDb } = await import("../src/db/index.ts");
+    const { checkChallengeAllowed } = await import("../src/auth/throttle.ts");
+    const db = openDb(":memory:");
+    try {
+      const victim = "solana:griefed-by-many-ips";
+      // 10 calls, each from a DIFFERENT ip -- each individually well under its own per-ip cap of 10,
+      // but all hitting the same wallet's shared 10/hour budget.
+      for (let i = 0; i < 10; i++) expect(() => checkChallengeAllowed(db, `10.0.0.${i}`, victim)).not.toThrow();
+      expect(() => checkChallengeAllowed(db, "10.0.0.99", victim)).toThrow(/too many/i);
+
+      // a different wallet, even from one of the SAME ips already used above, is unaffected
+      expect(() => checkChallengeAllowed(db, "10.0.0.5", "solana:unrelated-wallet")).not.toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
   it("CSRF: mutating requests need an allowed Origin (or Referer) and a JSON content type", async () => {
     const { address } = testWallet("grace");
     const noOrigin = await t.app.inject({ method: "POST", url: "/api/auth/challenge", headers: { "content-type": "application/json" }, payload: JSON.stringify({ chain: "solana", address }) });

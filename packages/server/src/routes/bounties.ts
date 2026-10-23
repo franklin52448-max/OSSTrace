@@ -170,7 +170,9 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
 
     const budget = budgetMs(8000);
     const verified =
-      body.chain === "solana" ? await verifySolanaDeposit(http, config.solanaRpcUrl, body.txRef, wallet, budget) : await verifyEthereumDeposit(http, config.ethBlockscoutUrl, body.txRef, wallet, budget);
+      body.chain === "solana"
+        ? await verifySolanaDeposit(http, config.solanaRpcUrl, body.txRef, wallet, budget)
+        : await verifyEthereumDeposit(http, config.ethBlockscoutUrl, config.ethRpcUrl, body.txRef, wallet, budget);
     if (!verified.ok) {
       const messages: Record<typeof verified.reason, string> = {
         not_configured: "No deposit wallet is configured for this chain",

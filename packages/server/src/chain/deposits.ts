@@ -2,13 +2,13 @@
 // never holds or moves a payout -- a `Deposit` is only ever independently-checked evidence that a
 // specific, real transaction paid the configured public wallet, re-checkable by anyone.
 //
-// Ported from the old standalone @osstrace/bounties service's deposits.ts, with one deliberate
-// change: that version made raw `eth_getTransactionReceipt`/`eth_getTransactionByHash`/`eth_call`
-// JSON-RPC calls against a dedicated Ethereum RPC URL this server was never configured with (it
-// reads Ethereum through Blockscout's REST API instead -- see chain/ethereum.ts). Rewritten here
-// against Blockscout's own `/api/v2/transactions/:hash` endpoints so no new RPC secret is needed;
-// Blockscout also already resolves a token's real decimals server-side, which is simpler and no
-// less correct than the old code's own `decimals()` call.
+// Ethereum has two verification paths now. When a dedicated `ETH_RPC_URL` is configured (see
+// config.ts), deposits are checked via real `eth_getTransactionByHash`/`eth_getTransactionReceipt`
+// JSON-RPC calls -- the same approach the old standalone @osstrace/bounties service originally
+// used, before this server existed. When it isn't configured (the zero-config default -- no
+// Ethereum mainnet public RPC is reliable enough to hardcode the way Solana's is), it falls back
+// to Blockscout's own `/api/v2/transactions/:hash` REST endpoints, which need no RPC secret at
+// all and already resolve a token's real decimals server-side.
 import { formatUnits } from "./amount.ts";
 import { HttpClient, type Budget } from "../lib/http.ts";
 
@@ -115,15 +115,13 @@ type BsTokenTransfer = { to: { hash: string } | null; from: { hash: string } | n
 type BsPage<T> = { items: T[] };
 
 /**
- * Ethereum, via Blockscout's own REST API (no raw JSON-RPC needed -- see module comment). A
- * native transfer is read off the transaction's own `value`/`to`; an ERC-20 deposit is read off
- * Blockscout's own token-transfers list for that transaction, which already includes the token's
- * real decimals -- no separate `decimals()` call needed.
+ * Ethereum, via Blockscout's own REST API -- the zero-config fallback when no `ETH_RPC_URL` is
+ * set (see verifyEthereumDeposit below). A native transfer is read off the transaction's own
+ * `value`/`to`; an ERC-20 deposit is read off Blockscout's own token-transfers list for that
+ * transaction, which already includes the token's real decimals -- no separate `decimals()` call
+ * needed.
  */
-export async function verifyEthereumDeposit(http: HttpClient, blockscoutUrl: string, txHash: string, wallet: string | undefined, budget: Budget): Promise<DepositVerification> {
-  if (!wallet) return { ok: false, reason: "not_configured" };
-  if (!ETH_TX_HASH_FORMAT.test(txHash)) return { ok: false, reason: "malformed_reference" };
-
+async function verifyEthereumDepositViaBlockscout(http: HttpClient, blockscoutUrl: string, txHash: string, wallet: string, budget: Budget): Promise<DepositVerification> {
   let tx: BsTx;
   try {
     const { data } = await http.json<BsTx>(`${blockscoutUrl}/api/v2/transactions/${txHash}`, { budget });
@@ -155,4 +153,72 @@ export async function verifyEthereumDeposit(http: HttpClient, blockscoutUrl: str
       toWallet: wallet,
     },
   };
+}
+
+type EthRpcTx = { to: string | null; from: string; value: string; blockNumber: string | null } | null;
+type EthRpcLog = { address: string; topics: string[]; data: string };
+type EthRpcReceipt = { status: string | null; logs: EthRpcLog[] } | null;
+
+// keccak256("Transfer(address,address,uint256)") -- the standard ERC-20 Transfer event topic, not
+// this project's own invention.
+const ERC20_TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+const topicToAddress = (topic: string) => `0x${topic.slice(-40)}`;
+
+async function ethRpc<T>(http: HttpClient, rpcUrl: string, method: string, params: unknown[], budget: Budget): Promise<T> {
+  const { data } = await http.json<{ result: T; error?: { message: string } }>(rpcUrl, { method: "POST", body: { jsonrpc: "2.0", id: 1, method, params }, budget });
+  if (data.error) throw new Error(`${method}: ${data.error.message}`);
+  return data.result;
+}
+
+/** A token's on-chain `decimals()` (selector 0x313ce567), via `eth_call` -- same as the old
+ *  standalone service used to, before this server read Ethereum through Blockscout. */
+async function fetchDecimals(http: HttpClient, rpcUrl: string, contract: string, budget: Budget): Promise<number> {
+  try {
+    const result = await ethRpc<string>(http, rpcUrl, "eth_call", [{ to: contract, data: "0x313ce567" }, "latest"], budget);
+    return parseInt(result, 16);
+  } catch {
+    return 18; // most ERC-20s are 18; a failed decimals() call shouldn't block an otherwise-verified deposit.
+  }
+}
+
+/**
+ * Ethereum, via a dedicated RPC (`eth_getTransactionByHash`/`eth_getTransactionReceipt`/`eth_call`)
+ * when `ETH_RPC_URL` is configured -- faster and more reliable than the public Blockscout fallback
+ * under load. A native transfer is read off the transaction's own `value`/`to`; an ERC-20 deposit
+ * is read off the real Transfer event log in the transaction's receipt, with the token's real
+ * decimals resolved via its own `decimals()`.
+ */
+async function verifyEthereumDepositViaRpc(http: HttpClient, rpcUrl: string, txHash: string, wallet: string, budget: Budget): Promise<DepositVerification> {
+  let tx: EthRpcTx;
+  let receipt: EthRpcReceipt;
+  try {
+    [tx, receipt] = await Promise.all([
+      ethRpc<EthRpcTx>(http, rpcUrl, "eth_getTransactionByHash", [txHash], budget),
+      ethRpc<EthRpcReceipt>(http, rpcUrl, "eth_getTransactionReceipt", [txHash], budget),
+    ]);
+  } catch {
+    return { ok: false, reason: "not_found" };
+  }
+  if (!tx || !receipt) return { ok: false, reason: "not_found" };
+  if (receipt.status !== "0x1") return { ok: false, reason: "not_confirmed" };
+
+  if (tx.to && sameAddress(tx.to, wallet) && BigInt(tx.value) > 0n) {
+    return { ok: true, deposit: { asset: "native", amount: formatUnits(BigInt(tx.value).toString(), 18), fromAddress: tx.from, toWallet: wallet } };
+  }
+
+  const match = receipt.logs.find((l) => l.topics[0] === ERC20_TRANSFER_TOPIC && l.topics.length === 3 && sameAddress(topicToAddress(l.topics[2]!), wallet));
+  if (!match) return { ok: false, reason: "wrong_wallet" };
+  const decimals = await fetchDecimals(http, rpcUrl, match.address, budget);
+  return {
+    ok: true,
+    deposit: { asset: { contract: match.address }, amount: formatUnits(BigInt(match.data).toString(), decimals), fromAddress: topicToAddress(match.topics[1]!), toWallet: wallet },
+  };
+}
+
+/** Prefers `ethRpcUrl` when the operator configured one; falls back to Blockscout (no key needed)
+ *  otherwise -- the same configured-RPC-with-a-zero-config-fallback shape as Solana already uses. */
+export async function verifyEthereumDeposit(http: HttpClient, blockscoutUrl: string, ethRpcUrl: string | null, txHash: string, wallet: string | undefined, budget: Budget): Promise<DepositVerification> {
+  if (!wallet) return { ok: false, reason: "not_configured" };
+  if (!ETH_TX_HASH_FORMAT.test(txHash)) return { ok: false, reason: "malformed_reference" };
+  return ethRpcUrl ? verifyEthereumDepositViaRpc(http, ethRpcUrl, txHash, wallet, budget) : verifyEthereumDepositViaBlockscout(http, blockscoutUrl, txHash, wallet, budget);
 }

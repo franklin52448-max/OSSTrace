@@ -28,12 +28,12 @@ export function registerAuth(app: FastifyInstance, ctx: Ctx) {
   const { db, config } = ctx;
 
   app.post("/api/auth/challenge", async (req) => {
-    // Skipped under the same test-only flag the alerts test-tick route gates on (SERVER_TEST_HOOKS=1,
-    // always off in production) -- without it, a test suite doing many real logins from one IP trips
-    // the same per-IP abuse guard real callers are meant to.
-    if (!config.testHooks) checkChallengeAllowed(db, req.ip);
     const body = parse(challengeBody, req.body);
     if (!isValidAddress(body.chain, body.address)) throw new ApiErr("bad_request", `That doesn't look like a ${body.chain} address`);
+    // Skipped under the same test-only flag the alerts test-tick route gates on (SERVER_TEST_HOOKS=1,
+    // always off in production) -- without it, a test suite doing many real logins from one IP (or
+    // repeatedly against the same test wallet) trips the same abuse guards real callers are meant to.
+    if (!config.testHooks) checkChallengeAllowed(db, req.ip, `${body.chain}:${normalizeAddress(body.chain, body.address)}`);
     // Already validated by the CSRF check in app.ts's onRequest hook (same Origin-or-Referer logic,
     // repeated here since that hook only validates, it doesn't normalize req.headers.origin itself).
     let origin = req.headers.origin;

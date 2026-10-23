@@ -48,11 +48,26 @@ export function recordVerify(db: Db, ip: string, walletKey: string, success: boo
   db.run("INSERT INTO login_attempts (id, ip, username, success, at) VALUES (?, ?, ?, 0, ?)", randomUUID(), ip, walletKey, nowIso());
 }
 
-/** Challenges per ip: at most 10 per hour (one wallet can of course retry its own verify freely; this just stops mass nonce-minting). */
-export function checkChallengeAllowed(db: Db, ip: string) {
+/** Challenges per ip: at most 10 per hour (one wallet can of course retry its own verify freely;
+ * this just stops mass nonce-minting). `walletKey`, when given, is also capped at 10/hour on its
+ * own -- without this, someone who knows a specific address could repeatedly request fresh
+ * challenges for just that one wallet (easily staying under the per-ip cap, especially spread
+ * across IPs) purely to keep overwriting whatever challenge its real owner is mid-way through
+ * signing (createChallenge intentionally overwrites any prior pending one, to avoid unbounded
+ * growth -- see its own doc comment), griefing that one person's login without it ever looking
+ * like abuse at the ip level. Stored as its own `success = 1` row keyed by the wallet (same
+ * marker convention as the ip-wide `__challenge__` row below) -- distinct from the `success = 0`
+ * failed-verify rows `checkVerifyAllowed`/`recordVerify` count for that same username, so this
+ * never affects verify throttling. */
+export function checkChallengeAllowed(db: Db, ip: string, walletKey?: string) {
   const since = msToIso(Date.now() - 3600_000);
   const r = db.get<{ n: number }>("SELECT COUNT(*) AS n FROM login_attempts WHERE ip = ? AND username = '__challenge__' AND at > ?", ip, since)!;
   if (Number(r.n) >= 10) throw tooMany(600);
+  if (walletKey) {
+    const byAddress = db.get<{ n: number }>("SELECT COUNT(*) AS n FROM login_attempts WHERE username = ? AND success = 1 AND at > ?", walletKey, since)!;
+    if (Number(byAddress.n) >= 10) throw tooMany(600);
+    db.run("INSERT INTO login_attempts (id, ip, username, success, at) VALUES (?, ?, ?, 1, ?)", randomUUID(), ip, walletKey, nowIso());
+  }
   db.run("INSERT INTO login_attempts (id, ip, username, success, at) VALUES (?, ?, '__challenge__', 1, ?)", randomUUID(), ip, nowIso());
 }
 

@@ -2,6 +2,7 @@
 // limits it works within, and a small diagram drawn in the same colours the live views use
 // (inbound green, outbound orange, entities yellow). Diagrams are illustrative: the
 // addresses and amounts in them are placeholders, never real data.
+import { supportedChainNames } from "./chainList.ts";
 import type { ReactNode } from "react";
 import { Bell, Search, Tag, Waypoints } from "lucide-react";
 import { cx } from "./prism/components.tsx";
@@ -48,7 +49,7 @@ export default function HomeFeatures() {
         <FeatureRow
           name="Explorer"
           title="Look up any address"
-          lead="Paste an Ethereum, BNB Chain, Robinhood Chain, Base or Solana address to see what it holds in USD, who it deals with most and every transfer it made, on one page."
+          lead={`Paste an ${supportedChainNames("or")} address to see what it holds in USD, who it deals with most and every transfer it made, on one page.`}
           points={[
             "Ethereum data comes from Blockscout and Solana from public RPC, with no API key needed. Nothing is estimated.",
             "Holdings are priced with DefiLlama. Tokens without a price, often airdropped spam, are left out of the total but still counted.",

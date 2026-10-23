@@ -1,5 +1,6 @@
 /** Main column of the Tracer / Visualizer homes: the subject heading, one large search that starts the work,
  *  and the most recently edited documents as cards (real list data only). */
+import { supportedChainNames } from "../../chainList.ts";
 import { ChevronRight, Search } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "../../kit/cn.ts";
@@ -46,7 +47,7 @@ export function HomeMain(p: {
           <SearchResults q={q} onPick={p.onPick} grouped />
         </div>
       ) : (
-        <p className="mt-2 text-xs text-faint">Paste an Ethereum, BNB Chain, Robinhood Chain, Base or Solana address, or type the name of one of your labels or entities.</p>
+        <p className="mt-2 text-xs text-faint">Paste an {supportedChainNames("or")} address, or type the name of one of your labels or entities.</p>
       )}
       {p.busy ? <p className="mt-2 text-xs text-muted" role="status">{p.busyText}</p> : null}
 

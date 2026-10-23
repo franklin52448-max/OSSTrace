@@ -58,3 +58,60 @@ test("validateAddress checks Base addresses by EVM shape, never lets anything th
   assert.equal(validateAddress("base", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"), null);
   assert.equal(validateAddress("base", "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"), "Not a Base address (0x followed by 40 hex characters).");
 });
+
+const NEW_CHAINS = [
+  ["arbitrum", "Arbitrum One", "ARB"],
+  ["optimism", "OP Mainnet", "OP"],
+  ["zora", "Zora", "ZORA"],
+  ["lens", "Lens Chain", "LENS"],
+  ["story", "Data Network", "DATA"],
+] as const;
+
+test("ChainSelect offers Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network by their own names, after Base", async () => {
+  assert.deepEqual(
+    mod.CHAIN_OPTIONS.map((o) => o.value),
+    ["ethereum", "solana", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story"],
+  );
+  const picked: string[] = [];
+  const r = await render(createElement(mod.ChainSelect as ComponentType<any>, { value: "ethereum", onChange: (c: string) => picked.push(c) }));
+  await click(r.container.querySelector("button")!);
+  for (const [, label] of NEW_CHAINS) assert.ok(optionLabels(r.container).includes(label), `no ${label} option`);
+  const story = [...r.container.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent?.includes("Data Network"))!;
+  await click(story);
+  assert.deepEqual(picked, ["story"]);
+});
+
+test("the legacy-service picker never offers the five new chains", async () => {
+  const r = await render(createElement(mod.ChainSelect as ComponentType<any>, { value: "ethereum", onChange: () => {}, chains: mod.LEGACY_SERVICE_CHAINS }));
+  await click(r.container.querySelector("button")!);
+  for (const [, label] of NEW_CHAINS) assert.ok(!optionLabels(r.container).includes(label));
+});
+
+test("ChainIcon draws each new chain as its own plain mark, in its own colour (a neutral grey 'D' for the Data Network)", async () => {
+  const fills: Record<string, string> = { arbitrum: "#213147", optimism: "#FF0420", zora: "#000000", lens: "#00501E", story: "#6B7280" };
+  for (const [chain] of NEW_CHAINS) {
+    const r = await render(createElement(mod.ChainIcon, { chain }));
+    assert.equal(r.container.querySelector("svg circle")?.getAttribute("fill"), fills[chain], chain);
+    await cleanup();
+  }
+  const story = await render(createElement(mod.ChainIcon, { chain: "story" }));
+  assert.ok(story.container.querySelector("svg path"), "no D on the Data Network's disc");
+  assert.equal(story.container.textContent, "", "the mark adds no text of its own");
+});
+
+test("short badges: ARB / OP / ZORA / LENS / DATA -- never ETH for an ETH-gas chain that isn't Ethereum", () => {
+  for (const [chain, , short] of NEW_CHAINS) assert.equal(CHAIN_SHORT[chain], short);
+});
+
+test("validateAddress checks the new chains' addresses by EVM shape, with each chain's own name", () => {
+  for (const [chain, label] of NEW_CHAINS) {
+    assert.equal(validateAddress(chain, "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"), null);
+    assert.equal(validateAddress(chain, "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"), `Not ${chain === "arbitrum" || chain === "optimism" ? "an" : "a"} ${label} address (0x followed by 40 hex characters).`);
+  }
+});
+
+test("supportedChainNames lists every chain, Ethereum first and Solana last", async () => {
+  const { supportedChainNames } = await import("../src/chainList.ts");
+  assert.equal(supportedChainNames("or"), "Ethereum, BNB Chain, Robinhood Chain, Base, Arbitrum One, OP Mainnet, Zora, Lens Chain, Data Network or Solana");
+  assert.ok(supportedChainNames("and").endsWith("Data Network and Solana"));
+});

@@ -2,7 +2,11 @@
 // is a small listbox: button + popup, keyboard-operable (arrows / Home / End / Enter / Escape).
 //
 // Marks: Simple Icons (https://simpleicons.org, CC0-1.0), filled in each project's brand colours --
-// except Base's, which is drawn here rather than copied: a plain disc in Base's own brand blue.
+// except Base's, which is drawn here rather than copied: a plain disc in Base's own brand blue. The
+// five chains after it are drawn the same honest way, never a from-memory copy of brand artwork:
+// Arbitrum One a navy disc with a blue ring, OP Mainnet a disc in OP's red, Zora a black disc with a
+// white ring, Lens Chain a disc in Lens's dark green, and the Data Network (formerly Story), whose
+// new branding isn't one to guess at, a neutral grey disc with a "D".
 import { useEffect, useId, useRef, useState } from "react";
 import { CHAIN_NAMES, type Chain } from "@osstrace/contract";
 import { cx } from "./prism/components.tsx";
@@ -14,10 +18,37 @@ export const CHAIN_OPTIONS: readonly { value: Chain; label: string }[] = [
   { value: "bnb", label: CHAIN_NAMES.bnb },
   { value: "robinhood", label: CHAIN_NAMES.robinhood },
   { value: "base", label: CHAIN_NAMES.base },
+  { value: "arbitrum", label: CHAIN_NAMES.arbitrum },
+  { value: "optimism", label: CHAIN_NAMES.optimism },
+  { value: "zora", label: CHAIN_NAMES.zora },
+  { value: "lens", label: CHAIN_NAMES.lens },
+  { value: "story", label: CHAIN_NAMES.story },
 ];
 
 /** Base's brand blue (base.org's "Base Blue"). */
 const BASE_BLUE = "#0052FF";
+/** Arbitrum's navy and blue. */
+const ARBITRUM_NAVY = "#213147";
+const ARBITRUM_BLUE = "#28A0F0";
+/** OP Mainnet's red. */
+const OP_RED = "#FF0420";
+/** Lens's dark green. */
+const LENS_GREEN = "#00501E";
+/** A neutral grey: no brand colour is claimed for the Data Network. */
+const NEUTRAL_GREY = "#6B7280";
+
+/** A plain disc, optionally with an inner ring -- the honest generic mark for a chain whose exact
+ *  brand artwork isn't copied here. */
+function DiscMark({ fill, ring, size, className, letter }: { fill: string; ring?: string; size: number; className?: string; letter?: "D" }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" className={cx("shrink-0", className)}>
+      <circle cx="12" cy="12" r="12" fill={fill} />
+      {ring && <circle cx="12" cy="12" r="7" fill="none" stroke={ring} strokeWidth="2.5" />}
+      {/* Drawn, not <text>: a glyph would leak into the option's own text ("DData Network"). */}
+      {letter === "D" && <path d="M9 7h2.5a5 5 0 0 1 0 10H9z" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinejoin="round" />}
+    </svg>
+  );
+}
 
 /** The chains the older standalone feature services (pathfinder, cases...) were built for. Their
  *  own backends only know these two, so their pickers must not offer a chain they'd reject. */
@@ -25,6 +56,11 @@ export const LEGACY_SERVICE_CHAINS = ["ethereum", "solana"] as const satisfies r
 
 export function ChainIcon({ chain, size = 18, className }: { chain: Chain; size?: number; className?: string }) {
   const gradientId = useId();
+  if (chain === "arbitrum") return <DiscMark fill={ARBITRUM_NAVY} ring={ARBITRUM_BLUE} size={size} className={className} />;
+  if (chain === "optimism") return <DiscMark fill={OP_RED} size={size} className={className} />;
+  if (chain === "zora") return <DiscMark fill="#000000" ring="#ffffff" size={size} className={className} />;
+  if (chain === "lens") return <DiscMark fill={LENS_GREEN} size={size} className={className} />;
+  if (chain === "story") return <DiscMark fill={NEUTRAL_GREY} letter="D" size={size} className={className} />;
   if (chain === "base") {
     return (
       <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" className={cx("shrink-0", className)}>

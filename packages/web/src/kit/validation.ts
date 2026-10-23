@@ -24,7 +24,8 @@ export const SOL_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 export function validateAddress(chain: Chain, raw: string): string | null {
   const v = raw.trim();
   if (!v) return "Enter an address.";
-  if (isEvmChain(chain) && !ETH_ADDRESS_RE.test(v)) return `Not ${chain === "ethereum" ? "an" : "a"} ${CHAIN_NAMES[chain]} address (0x followed by 40 hex characters).`;
+  // "an Ethereum", "an Arbitrum One", "an OP Mainnet" -- every chain name starting with a vowel.
+  if (isEvmChain(chain) && !ETH_ADDRESS_RE.test(v)) return `Not ${/^[AEIOU]/.test(CHAIN_NAMES[chain]) ? "an" : "a"} ${CHAIN_NAMES[chain]} address (0x followed by 40 hex characters).`;
   if (chain === "solana" && !SOL_ADDRESS_RE.test(v)) return "Not a Solana address (32 to 44 base58 characters).";
   return null;
 }

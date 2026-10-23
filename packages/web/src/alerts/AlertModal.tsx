@@ -1,3 +1,4 @@
+import { supportedChainNames } from "../chainList.ts";
 import type { AlertRule, Chain } from "@osstrace/contract";
 import { Plus, X } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
@@ -129,7 +130,7 @@ export function AlertModal({
           </div>
         ) : null}
 
-        <Step n={1} title="Watch" hint="Ethereum, BNB Chain, Robinhood Chain, Base and Solana addresses. The chain is picked up from what you paste; pick BNB Chain, Robinhood Chain or Base for a 0x address there.">
+        <Step n={1} title="Watch" hint={`${supportedChainNames("and")} addresses. The chain is picked up from what you paste; a 0x address starts on Ethereum, so pick its chain for one on any other EVM chain.`}>
           {entities.isError ? <ErrorText error={entities.error} /> : null}
           <TargetsEditor
             targets={form.targets}

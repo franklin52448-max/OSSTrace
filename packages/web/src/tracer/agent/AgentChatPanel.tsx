@@ -16,6 +16,7 @@ import { ArrowUp, Check, CircleAlert, Eye, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { Button, IconButton } from "../../kit/Button.tsx";
 import { cn } from "../../kit/cn.ts";
+import { formatWait } from "../../kit/errors.ts";
 import { Textarea } from "../../kit/Field.tsx";
 import { useServerSession } from "../../serverSession.ts";
 import { openLogin } from "../../ui.tsx";
@@ -128,7 +129,8 @@ export default function AgentChatPanel({ canvas, onClose, className }: { canvas:
         return;
       }
       if (out.kind === "error") {
-        notice(out.retryAfterSec ? `${out.message} (try again in ${out.retryAfterSec}s)` : out.message);
+        // The signed-in hourly cap's Retry-After is up to an hour: "3412s" is not a wait anyone reads.
+        notice(out.retryAfterSec ? `${out.message} (try again in ${formatWait(out.retryAfterSec)})` : out.message);
         return;
       }
       if (!signedIn) setRemaining(out.messagesRemaining);

@@ -90,7 +90,20 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
       o.providers?.optimism ??
       new AlchemyProvider({ chain: "optimism", chainId: 10, nativeSymbol: "ETH", nativeName: "Ether", rpcUrl: config.optimismRpcUrl, rpcEnv: "OPTIMISM_RPC_URL", fetchImpl: o.fetchImpl }),
     zora: o.providers?.zora ?? new AlchemyProvider({ chain: "zora", chainId: 7777777, nativeSymbol: "ETH", nativeName: "Ether", rpcUrl: config.zoraRpcUrl, rpcEnv: "ZORA_RPC_URL", fetchImpl: o.fetchImpl }),
-    lens: o.providers?.lens ?? new AlchemyProvider({ chain: "lens", chainId: 232, nativeSymbol: "GHO", nativeName: "GHO", rpcUrl: config.lensRpcUrl, rpcEnv: "LENS_RPC_URL", fetchImpl: o.fetchImpl }),
+    // Lens Chain's L2BaseToken system contract mirrors every native GHO movement as an ERC-20 Transfer
+    // log; those rows are dropped (they'd double every native transfer -- see AlchemyNative).
+    lens:
+      o.providers?.lens ??
+      new AlchemyProvider({
+        chain: "lens",
+        chainId: 232,
+        nativeSymbol: "GHO",
+        nativeName: "GHO",
+        baseTokenContract: "0x000000000000000000000000000000000000800a",
+        rpcUrl: config.lensRpcUrl,
+        rpcEnv: "LENS_RPC_URL",
+        fetchImpl: o.fetchImpl,
+      }),
     story: o.providers?.story ?? new AlchemyProvider({ chain: "story", chainId: 1514, nativeSymbol: "DATA", nativeName: "DATA", rpcUrl: config.storyRpcUrl, rpcEnv: "STORY_RPC_URL", fetchImpl: o.fetchImpl }),
     solana:
       o.providers?.solana ??

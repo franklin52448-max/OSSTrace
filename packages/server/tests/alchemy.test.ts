@@ -268,6 +268,91 @@ describe("AlchemyProvider transfer history", () => {
   });
 });
 
+// Real Alchemy answers (2026-10-23): on Zora, Lens Chain and Data Network every row comes back with
+// `metadata: null` even with withMetadata: true; on Lens Chain (ZKsync stack) a 0.5 GHO deposit into
+// WGHO comes back as an `external` row plus an `erc20` row from the L2BaseToken system contract
+// (0x...800a) for the same amount, and the fee paid to the bootloader (0x...8001) as another one.
+describe("AlchemyProvider on networks without block times, and Lens Chain's base-token mirror logs", () => {
+  const LENS_TX = "0x77b500440f31005b831f8ce716fd171cf0196ce90dada3094ea2828e331ea74a";
+  const BASE_TOKEN = "0x000000000000000000000000000000000000800a";
+  const BOOTLOADER = "0x0000000000000000000000000000000000008001";
+  const WGHO = "0x6bdc36e20d267ff0dd6097799f82e78907105e2f";
+  const LENS = { chain: "lens" as const, nativeSymbol: "GHO", nativeName: "GHO", baseTokenContract: BASE_TOKEN };
+  const lensExternal = { blockNum: "0x61e65d", uniqueId: `${LENS_TX}:external`, hash: LENS_TX, from: B, to: WGHO, value: 0.5, erc721TokenId: null, erc1155Metadata: null, tokenId: null, asset: "ETH", category: "external", rawContract: { value: "0x06f05b59d3b20000", address: null, decimal: "0x12" }, metadata: null };
+  const lensMirror = { ...lensExternal, uniqueId: `${LENS_TX}:log:2`, value: null, erc1155Metadata: [], asset: null, category: "erc20", rawContract: { value: "0x6f05b59d3b20000", address: BASE_TOKEN, decimal: null } };
+  const lensFee = { ...lensMirror, uniqueId: `${LENS_TX}:log:0`, to: BOOTLOADER, rawContract: { value: "0x52d41a9475e30", address: BASE_TOKEN, decimal: null } };
+  const blockTs = 0x6adb8abc;
+  const blockReply = (body: any[], skip: (n: bigint) => boolean = () => false) =>
+    body
+      .filter((b) => !skip(BigInt(b.params[0])))
+      .map((b) => ({ jsonrpc: "2.0", id: b.id, result: { number: b.params[0], timestamp: `0x${(blockTs + Number(BigInt(b.params[0]) % 1000n)).toString(16)}` } }))
+      .reverse();
+
+  it("normalizer: drops the base-token contract's mirror logs, keeping the one real native row in the chain's own symbol", () => {
+    const rows = [lensExternal, lensMirror, lensFee].map((r) => ({ ...r, metadata: { blockTimestamp: "2026-10-23T12:00:00.000Z" } }));
+    const out = normalizeAlchemyTransfers(rows as any, LENS);
+    expect(out).toHaveLength(1);
+    // Alchemy labels the row "ETH"; Lens Chain's native currency is GHO.
+    expect(out[0]).toMatchObject({ chain: "lens", id: `${LENS_TX}_t0`, tokenId: "native", tokenSymbol: "GHO", tokenName: "GHO", amountRaw: "500000000000000000" });
+    // Without the option (any other chain), that contract is just another token.
+    expect(normalizeAlchemyTransfers(rows as any, { ...LENS, baseTokenContract: undefined } as any)).toHaveLength(3);
+  });
+
+  it("reads block times from the blocks themselves when Alchemy leaves them out, batched, paired by id, cached", async () => {
+    const calls: Call[] = [];
+    const older = { ...externalRow, blockNum: "0x61e600", uniqueId: `${TX2}:external`, metadata: null };
+    const p = make(alchemy((body) => (Array.isArray(body) ? blockReply(body) : ok({ transfers: [lensExternal, lensMirror, older] })), calls), LENS);
+    const page = await p.fetchStreamPage(A, "incoming", null, budgetMs(5000));
+    const batch = calls.find(Array.isArray) as { method: string; params: any[] }[];
+    // One request per distinct block, not per row.
+    expect(batch.map((b) => [b.method, b.params])).toEqual([
+      ["eth_getBlockByNumber", ["0x61e65d", false]],
+      ["eth_getBlockByNumber", ["0x61e600", false]],
+    ]);
+    expect(page.transfers.map((t) => [t.id, t.blockTime])).toEqual([
+      [`${LENS_TX}_t0`, blockTs + (0x61e65d % 1000)],
+      [`${TX2}_t0`, blockTs + (0x61e600 % 1000)],
+    ]);
+    expect(page.newestTime).toBe(blockTs + (0x61e65d % 1000));
+    expect(page.oldestTime).toBe(blockTs + (0x61e600 % 1000));
+    // Rows that do carry a timestamp (Arbitrum, OP Mainnet, Base...) cost no extra call.
+    const before = calls.length;
+    await make(alchemy(() => ok({ transfers: [externalRow] }), calls)).fetchStreamPage(A, "incoming", null, budgetMs(5000));
+    expect(calls.slice(before).some(Array.isArray)).toBe(false);
+    // A block already read is never read again.
+    await p.fetchStreamPage(A, "outgoing", null, budgetMs(5000));
+    expect(calls.filter(Array.isArray)).toHaveLength(1);
+  });
+
+  it("a block time that can't be read fails the page instead of silently dropping its transfers", async () => {
+    const missingOne = make(alchemy((body) => (Array.isArray(body) ? blockReply(body, (n) => n === 0x61e65dn) : ok({ transfers: [lensExternal] }))), LENS);
+    const e1 = await missingOne.fetchStreamPage(A, "incoming", null, budgetMs(5000)).catch((e) => e);
+    expect(e1).toBeInstanceOf(ProviderError);
+    expect(e1.message).toMatch(/without block times/);
+    const limited = make(alchemy((body) => (Array.isArray(body) ? body.map((b: any) => ({ jsonrpc: "2.0", id: b.id, error: { code: 429, message: "Your app has exceeded its compute units per second capacity" } })) : ok({ transfers: [lensExternal] }))), LENS);
+    const e2 = await limited.fetchStreamPage(A, "incoming", null, budgetMs(5000)).catch((e) => e);
+    expect(e2).toBeInstanceOf(ProviderError);
+    expect(e2.message).toMatch(/rate limited/);
+  });
+
+  it("balances never list the base-token contract as a token next to the native balance it mirrors", async () => {
+    const pad = (n: bigint) => "0x" + n.toString(16).padStart(64, "0");
+    const p = make(
+      alchemy((b) => {
+        if (Array.isArray(b)) return b.map((r: any) => ({ jsonrpc: "2.0", id: r.id, result: { decimals: 18, logo: null, name: "Wrapped Gho Token", symbol: "WGHO" } }));
+        if (b.method === "eth_getBalance") return ok("0xde0b6b3a7640000");
+        return ok({ address: A, tokenBalances: [{ contractAddress: BASE_TOKEN, tokenBalance: pad(10n ** 18n) }, { contractAddress: WGHO, tokenBalance: pad(2n) }] });
+      }),
+      LENS,
+    );
+    const out = await p.fetchBalances(A, budgetMs(5000));
+    expect(out.map((r) => [r.tokenId, r.symbol, r.priceCoin])).toEqual([
+      ["native", "GHO", "coingecko:gho"],
+      [toChecksumAddress(WGHO), "WGHO", `lens:${toChecksumAddress(WGHO)}`],
+    ]);
+  });
+});
+
 describe("AlchemyProvider balances", () => {
   const ZERO = "0x00000000000000000000000000000000000000aa";
   const BROKEN = "0x00000000000000000000000000000000000000bb";

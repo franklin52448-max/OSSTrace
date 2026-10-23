@@ -138,6 +138,29 @@ describe.each(CASES)("$name provider wiring", (k) => {
   });
 });
 
+describe("Lens Chain wiring: no double-counted native transfers, real block times", () => {
+  it("drops the L2BaseToken (0x...800a) mirror rows and reads missing block times from the block", async () => {
+    const hash = `0x${"4c".repeat(32)}`;
+    const ext = { blockNum: "0x61e65d", uniqueId: `${hash}:external`, hash, from: ETH_B.toLowerCase(), to: ETH_A.toLowerCase(), value: 0.5, erc721TokenId: null, erc1155Metadata: null, tokenId: null, asset: "ETH", category: "external", rawContract: { value: "0x06f05b59d3b20000", address: null, decimal: "0x12" }, metadata: null };
+    const mirror = { ...ext, uniqueId: `${hash}:log:2`, category: "erc20", asset: null, rawContract: { value: "0x6f05b59d3b20000", address: "0x000000000000000000000000000000000000800a", decimal: null } };
+    const fetchImpl = (async (_u: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init!.body));
+      const reply = (x: unknown) => new Response(JSON.stringify(x), { status: 200 });
+      if (Array.isArray(body)) return reply(body.map((b: any) => ({ jsonrpc: "2.0", id: b.id, result: { timestamp: "0x6adb8abc" } })));
+      if (body.method === "eth_chainId") return reply({ jsonrpc: "2.0", id: body.id, result: "0xe8" });
+      return reply({ jsonrpc: "2.0", id: body.id, result: { transfers: [ext, mirror] } });
+    }) as unknown as typeof fetch;
+    const config = { ...loadConfig({ NODE_ENV: "test", LENS_RPC_URL: "https://lens-mainnet.g.alchemy.test/v2/k" } as NodeJS.ProcessEnv), dbPath: ":memory:" };
+    const { app, ctx } = await buildApp(config, { db: openDb(":memory:"), fetchImpl, logger: false });
+    try {
+      const page = await ctx.providers.lens.fetchStreamPage(ETH_A, "incoming", null, budgetMs(5000));
+      expect(page.transfers).toEqual([expect.objectContaining({ chain: "lens", id: `${hash}_t0`, tokenSymbol: "GHO", amountRaw: "500000000000000000", blockTime: 0x6adb8abc })]);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 describe.each(CASES)("$name config", (k) => {
   it("zero-config defaults to the chain's own public RPC (lookups need it to be an Alchemy URL), overridable by URL or file", () => {
     expect(loadConfig({ NODE_ENV: "test" } as NodeJS.ProcessEnv)[k.configKey]).toBe(k.defaultRpc);

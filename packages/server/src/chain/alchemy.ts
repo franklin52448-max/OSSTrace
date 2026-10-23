@@ -15,8 +15,14 @@ import { combinedFetch, type ChainProvider, type RawBalance, type RawTransfer, t
 // with a Cloudflare challenge.
 //
 // Response shapes (only the fields read here) match real Alchemy answers, checked against BNB, Base
-// and Robinhood Chain mainnet on 2026-10-23. Every amount is read from `rawContract.value` (hex,
-// base units) -- never `value`, which Alchemy pre-scales into a lossy float.
+// and Robinhood Chain mainnet on 2026-10-23, and Arbitrum One, OP Mainnet, Zora, Lens Chain and Data
+// Network the same day. Every amount is read from `rawContract.value` (hex, base units) -- never
+// `value`, which Alchemy pre-scales into a lossy float.
+//
+// Two network differences, both seen live: on Zora, Lens Chain and Data Network Alchemy answers
+// `metadata: null` even with `withMetadata: true`, so a row's block time is read from the block itself
+// (fillMissingTimestamps); and on Lens Chain (a ZKsync-stack chain) the base-token system contract
+// mirrors every native-currency movement as an ERC-20 Transfer log, which is dropped (baseTokenContract).
 
 type AlTransfer = {
   blockNum: string;
@@ -52,6 +58,10 @@ const METADATA_BATCH = 100;
 const DECIMALS_SELECTOR = "0x313ce567";
 /** Most contracts whose `decimals()` is read per page (one JSON-RPC batch). */
 const DECIMALS_BATCH = 100;
+/** `eth_getBlockByNumber` requests per JSON-RPC batch, for block times Alchemy leaves out. */
+const BLOCK_BATCH = 50;
+/** Block times kept per provider (a block's timestamp never changes); cleared when full. */
+const BLOCK_TIME_CACHE = 50_000;
 
 const cs = (h: string | undefined | null) => (h && /^0x[0-9a-fA-F]{40}$/.test(h) ? toChecksumAddress(h) : null);
 const hexInt = (h: string | null | undefined): bigint | null => (typeof h === "string" && /^0x[0-9a-fA-F]{1,64}$/.test(h) ? BigInt(h) : null);
@@ -64,7 +74,16 @@ const sec = (iso: string | null | undefined) => {
   return Number.isFinite(t) ? Math.floor(t / 1000) : null;
 };
 
-export type AlchemyNative = { chain: Chain; nativeSymbol: string; nativeName: string };
+export type AlchemyNative = {
+  chain: Chain;
+  nativeSymbol: string;
+  nativeName: string;
+  /** A system contract that emits an ERC-20 Transfer log for every movement of the chain's own native
+   *  currency -- ZKsync-stack chains' L2BaseToken at 0x...800a (Lens Chain). Alchemy reports those logs
+   *  as `erc20` rows beside the real `external` row for the same payment (and for every fee paid to the
+   *  bootloader), so they're dropped: kept, every native transfer would count twice. */
+  baseTokenContract?: string;
+};
 
 /**
  * The id a transfer is stored under, from Alchemy's `uniqueId` (`<tx>:external`, `<tx>:log:<logIndex>`,
@@ -89,6 +108,7 @@ function idOf(t: AlTransfer): string {
  */
 export function normalizeAlchemyTransfers(items: AlTransfer[], n: AlchemyNative): RawTransfer[] {
   const out: RawTransfer[] = [];
+  const baseToken = n.baseTokenContract?.toLowerCase();
   for (const t of items) {
     const time = sec(t.metadata?.blockTimestamp);
     const block = hexInt(t.blockNum);
@@ -104,7 +124,7 @@ export function normalizeAlchemyTransfers(items: AlTransfer[], n: AlchemyNative)
       continue;
     }
     const contract = cs(t.rawContract?.address);
-    if (!contract) continue;
+    if (!contract || contract.toLowerCase() === baseToken) continue;
     if (t.category === "erc20") {
       const amountRaw = hexInt(t.rawContract.value)?.toString();
       if (!isPositiveIntString(amountRaw)) continue;
@@ -150,7 +170,8 @@ export type AlchemyOptions = AlchemyNative & {
   internal?: boolean;
 };
 
-/** One instance per EVM chain read through Alchemy (BNB Chain, Robinhood Chain, Base). */
+/** One instance per EVM chain read through Alchemy (BNB Chain, Robinhood Chain, Base, Arbitrum One,
+ *  OP Mainnet, Zora, Lens Chain, Data Network). */
 export class AlchemyProvider implements ChainProvider {
   readonly chain: Chain;
   readonly id: string;
@@ -167,13 +188,15 @@ export class AlchemyProvider implements ChainProvider {
   private enhancedOk = false;
   /** ERC-20 decimals read on-chain via `decimals()` (only successful reads are kept). */
   private readonly decimalsCache = new Map<string, number>();
+  /** Block number -> block time (epoch s), for networks where Alchemy omits `metadata.blockTimestamp`. */
+  private readonly blockTimes = new Map<bigint, number>();
 
   constructor(opts: AlchemyOptions & { fetchImpl?: typeof fetch | undefined }) {
     this.chain = opts.chain;
     this.chainId = opts.chainId;
     this.rpcUrl = opts.rpcUrl;
     this.rpcEnv = opts.rpcEnv;
-    this.native = { chain: opts.chain, nativeSymbol: opts.nativeSymbol, nativeName: opts.nativeName };
+    this.native = { chain: opts.chain, nativeSymbol: opts.nativeSymbol, nativeName: opts.nativeName, ...(opts.baseTokenContract ? { baseTokenContract: opts.baseTokenContract } : {}) };
     this.id = `alchemy-${opts.chain}`;
     // The chain's name, not the URL's host: some RPC hosts carry the key in the hostname itself.
     this.name = `Alchemy (${CHAIN_NAMES[opts.chain]})`;
@@ -294,6 +317,7 @@ export class AlchemyProvider implements ChainProvider {
     if (!result || !Array.isArray(result.transfers)) throw new ProviderError(this.id, "Alchemy alchemy_getAssetTransfers returned an unexpected response");
     this.enhancedOk = true;
     const items = result.transfers;
+    await this.fillMissingTimestamps(items, budget);
     const times = items.map((t) => sec(t?.metadata?.blockTimestamp)).filter((x): x is number => x !== null);
     const blocks = items.map((t) => hexInt(t?.blockNum)).filter((x): x is bigint => x !== null);
     const oldestBlock = blocks.length ? Number(blocks.reduce((m, b) => (b < m ? b : m))) : cur?.b ?? 0;
@@ -307,6 +331,44 @@ export class AlchemyProvider implements ChainProvider {
       oldestTime: times.length ? Math.min(...times) : null,
       newestTime: times.length ? Math.max(...times) : null,
     };
+  }
+
+  /**
+   * On some networks (Zora, Lens Chain and Data Network, checked 2026-10-23) Alchemy answers every row
+   * with `metadata: null`, even with `withMetadata: true` -- and a row without a block time can't be
+   * placed in a history, so the normalizer would drop all of them and the address would look empty.
+   * This reads each such row's block timestamp from the block itself (`eth_getBlockByNumber`, batched,
+   * paired by id) and writes it into the row's metadata. Unlike decimals this isn't best effort: if a
+   * block time can't be read the page fails (and is retried), never returns with real transfers missing.
+   */
+  private async fillMissingTimestamps(items: AlTransfer[], budget: Budget) {
+    const missing = items.filter((t) => t && sec(t.metadata?.blockTimestamp) === null && hexInt(t.blockNum) !== null);
+    if (missing.length === 0) return;
+    const unknown = [...new Set(missing.map((t) => hexInt(t.blockNum)!))].filter((b) => !this.blockTimes.has(b));
+    if (this.blockTimes.size + unknown.length > BLOCK_TIME_CACHE) this.blockTimes.clear();
+    const batches: bigint[][] = [];
+    for (let i = 0; i < unknown.length; i += BLOCK_BATCH) batches.push(unknown.slice(i, i + BLOCK_BATCH));
+    await Promise.all(
+      batches.map(async (part) => {
+        const res = await this.post<RpcReply<{ timestamp?: string } | null>[]>(
+          part.map((b, j) => ({ jsonrpc: "2.0", id: j, method: "eth_getBlockByNumber", params: [`0x${b.toString(16)}`, false] })),
+          budget,
+        );
+        if (!Array.isArray(res)) throw new ProviderError(this.id, "Alchemy eth_getBlockByNumber returned an unexpected batch response");
+        // Pair by id, never by position (LESSONS.md).
+        for (const r of res) {
+          const b = typeof r?.id === "number" ? part[r.id] : undefined;
+          if (r?.error) throw this.replyError("eth_getBlockByNumber", r.error);
+          const ts = hexInt(r?.result?.timestamp);
+          if (b !== undefined && ts !== null) this.blockTimes.set(b, Number(ts));
+        }
+      }),
+    );
+    for (const t of missing) {
+      const ts = this.blockTimes.get(hexInt(t.blockNum)!);
+      if (ts === undefined) throw new ProviderError(this.id, `Alchemy sent ${CHAIN_NAMES[this.chain]} transfers without block times, and their blocks' times couldn't be read`);
+      t.metadata = { ...t.metadata, blockTimestamp: new Date(ts * 1000).toISOString() };
+    }
   }
 
   /**
@@ -380,10 +442,12 @@ export class AlchemyProvider implements ChainProvider {
     if (nativeWei === null) throw new ProviderError(this.id, "Alchemy eth_getBalance returned an unexpected response");
 
     const held = new Map<string, bigint>();
+    const baseToken = this.native.baseTokenContract?.toLowerCase();
     for (const r of tokenRows) {
       const c = cs(r?.contractAddress);
       const amt = r?.error ? null : hexInt(r?.tokenBalance);
-      if (c && amt !== null && amt > 0n && !held.has(c)) held.set(c, amt);
+      // The base-token system contract's "balance" is the native balance already read above.
+      if (c && amt !== null && amt > 0n && !held.has(c) && c.toLowerCase() !== baseToken) held.set(c, amt);
     }
     const contracts = [...held.keys()];
     const meta = new Map<string, AlTokenMetadata>();

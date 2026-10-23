@@ -120,6 +120,17 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
     rootstock:
       o.providers?.rootstock ??
       new AlchemyProvider({ chain: "rootstock", chainId: 30, nativeSymbol: "RBTC", nativeName: "Smart Bitcoin", rpcUrl: config.rootstockRpcUrl, rpcEnv: "ROOTSTOCK_RPC_URL", fetchImpl: o.fetchImpl }),
+    // ZetaChain, Mythos and the HyperEVM: the same provider again. ZetaChain pays gas in ZETA, the HyperEVM
+    // in HYPE, Mythos in ETH (an OP Stack chain without a custom gas token; MYTH is only its ecosystem
+    // token). Alchemy serves internal transfers on none of them (-32602) and answers every row with
+    // metadata: null on all three, so the provider reads block times from the blocks (checked 2026-10-23).
+    zetachain:
+      o.providers?.zetachain ??
+      new AlchemyProvider({ chain: "zetachain", chainId: 7000, nativeSymbol: "ZETA", nativeName: "Zeta", rpcUrl: config.zetachainRpcUrl, rpcEnv: "ZETACHAIN_RPC_URL", fetchImpl: o.fetchImpl }),
+    mythos: o.providers?.mythos ?? new AlchemyProvider({ chain: "mythos", chainId: 42018, nativeSymbol: "ETH", nativeName: "Ether", rpcUrl: config.mythosRpcUrl, rpcEnv: "MYTHOS_RPC_URL", fetchImpl: o.fetchImpl }),
+    hyperliquid:
+      o.providers?.hyperliquid ??
+      new AlchemyProvider({ chain: "hyperliquid", chainId: 999, nativeSymbol: "HYPE", nativeName: "HYPE", rpcUrl: config.hyperliquidRpcUrl, rpcEnv: "HYPERLIQUID_RPC_URL", fetchImpl: o.fetchImpl }),
     solana:
       o.providers?.solana ??
       new SolanaRpcProvider(config.solanaRpcUrl, config.solanaRpcCustom, o.fetchImpl, {

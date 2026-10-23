@@ -101,6 +101,9 @@ describe("labels, entities, tags", () => {
       "address:gnosis",
       "address:ronin",
       "address:rootstock",
+      "address:zetachain",
+      "address:mythos",
+      "address:hyperliquid",
       "label:ethereum",
     ]);
     expect(dupHits.every((h: { address: string }) => h.address === ETH_A)).toBe(true);
@@ -116,7 +119,7 @@ describe("labels, entities, tags", () => {
       expect.objectContaining({ type: "address", chain: "bnb", address: ETH_B, info: expect.objectContaining({ label: null }) }),
       expect.objectContaining({ type: "address", chain: "robinhood", address: ETH_B, info: expect.objectContaining({ label: null }) }),
       expect.objectContaining({ type: "address", chain: "base", address: ETH_B, info: expect.objectContaining({ label: null }) }),
-      ...(["arbitrum", "optimism", "zora", "lens", "story", "gnosis", "ronin", "rootstock"] as const).map((chain) => expect.objectContaining({ type: "address", chain, address: ETH_B, info: expect.objectContaining({ label: null }) })),
+      ...(["arbitrum", "optimism", "zora", "lens", "story", "gnosis", "ronin", "rootstock", "zetachain", "mythos", "hyperliquid"] as const).map((chain) => expect.objectContaining({ type: "address", chain, address: ETH_B, info: expect.objectContaining({ label: null }) })),
     ]);
     expect((await a.patch(`/api/labels/${lab.json().id}`, { name: "Hot 1b", note: "n" })).json()).toMatchObject({ name: "Hot 1b", note: "n" });
     expect((await a.del(`/api/entities/${ent.id}`)).statusCode).toBe(204);

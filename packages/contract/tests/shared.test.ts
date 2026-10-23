@@ -128,6 +128,22 @@ describe("chain detection", () => {
     expect([NATIVE_SYMBOLS.gnosis, NATIVE_SYMBOLS.ronin, NATIVE_SYMBOLS.rootstock]).toEqual(["xDAI", "RON", "RBTC"]);
     for (const alias of ["xdai", "rsk", "gno", "ron"]) expect(isChain(alias)).toBe(false);
   });
+  it("ZetaChain, Mythos and the HyperEVM are EVM chains, each its own; Mythos pays gas in ETH, not MYTH", () => {
+    const addr = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+    const t = "11111111-1111-4111-8111-111111111111";
+    for (const chain of ["zetachain", "mythos", "hyperliquid"] as const) {
+      expect(isChain(chain)).toBe(true);
+      expect(isEvmChain(chain)).toBe(true);
+      expect(normalizeAddress(chain, addr.toLowerCase())).toBe(addr);
+      expect(isAddressOnChain(chain, "So11111111111111111111111111111111111111112")).toBe(false);
+      expect(chainForAddress(addr, chain)).toBe(chain);
+      expect(addressNodeId(t, chain, addr)).not.toBe(addressNodeId(t, "ethereum", addr));
+    }
+    expect(addressNodeId(t, "mythos", addr)).not.toBe(addressNodeId(t, "optimism", addr));
+    expect([CHAIN_NAMES.zetachain, CHAIN_NAMES.mythos, CHAIN_NAMES.hyperliquid]).toEqual(["ZetaChain", "Mythos", "HyperEVM"]);
+    expect([NATIVE_SYMBOLS.zetachain, NATIVE_SYMBOLS.mythos, NATIVE_SYMBOLS.hyperliquid]).toEqual(["ZETA", "ETH", "HYPE"]);
+    for (const alias of ["zeta", "myth", "hyperevm", "hype", "hyperliquid-core"]) expect(isChain(alias)).toBe(false);
+  });
 });
 
 describe("deterministic ids", () => {

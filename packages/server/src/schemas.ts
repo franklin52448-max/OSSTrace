@@ -10,7 +10,7 @@ export function parse<S extends z.ZodTypeAny>(schema: S, data: unknown): z.outpu
   throw badRequest(`${path}${first?.message ?? "invalid request"}`);
 }
 
-export const chain = z.enum(["solana", "ethereum", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story", "gnosis", "ronin", "rootstock"]) satisfies z.ZodType<Chain>;
+export const chain = z.enum(["solana", "ethereum", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story", "gnosis", "ronin", "rootstock", "zetachain", "mythos", "hyperliquid"]) satisfies z.ZodType<Chain>;
 /** Bounty deposits only (contract's `DepositChain`): Bitcoin is accepted as a deposit payment but is
  *  never an address/trace/label chain, so it must not widen the shared `chain` enum above. */
 export const depositChain = z.enum(["solana", "ethereum", "bnb", "robinhood", "bitcoin", "base", "arbitrum", "optimism", "zora", "lens", "story", "gnosis", "ronin", "rootstock"]);

@@ -9,7 +9,11 @@ import type { Chain } from "@osstrace/contract";
  * Network to datanetscan.io, its Blockscout instance (storyscan.io, its name as Story, now redirects
  * there). Gnosis Chain links to Gnosisscan (its Etherscan-family explorer), Ronin to Ronin's own
  * official explorer (explorer.roninchain.com, a Blockscout instance), and Rootstock to the Rootstock
- * Explorer (explorer.rootstock.io; explorer.rsk.co redirects there). (The server reads every EVM chain
+ * Explorer (explorer.rootstock.io; explorer.rsk.co redirects there). ZetaChain links to ZetaScan
+ * (zetascan.com, the explorer ZetaChain's own docs name -- a Blockscout instance), Mythos to its own
+ * explorer (mythos-mainnet.explorer.alchemy.com, an Alchemy-hosted Blockscout that names itself "Mythos
+ * Mainnet"), and the HyperEVM to HyperEVMScan (hyperevmscan.io, the first explorer Hyperliquid's own docs
+ * list). (The server reads every EVM chain
  * but Ethereum through Alchemy -- packages/server/src/chain/alchemy.ts -- which is a keyed data source,
  * not somewhere a person clicks through to.) */
 export const EXPLORERS: Record<Chain, { name: string; address: string; tx: string }> = {
@@ -26,6 +30,9 @@ export const EXPLORERS: Record<Chain, { name: string; address: string; tx: strin
   gnosis: { name: "Gnosisscan", address: "https://gnosisscan.io/address/", tx: "https://gnosisscan.io/tx/" },
   ronin: { name: "Ronin Explorer", address: "https://explorer.roninchain.com/address/", tx: "https://explorer.roninchain.com/tx/" },
   rootstock: { name: "Rootstock Explorer", address: "https://explorer.rootstock.io/address/", tx: "https://explorer.rootstock.io/tx/" },
+  zetachain: { name: "ZetaScan", address: "https://zetascan.com/address/", tx: "https://zetascan.com/tx/" },
+  mythos: { name: "Mythos Explorer", address: "https://mythos-mainnet.explorer.alchemy.com/address/", tx: "https://mythos-mainnet.explorer.alchemy.com/tx/" },
+  hyperliquid: { name: "HyperEVMScan", address: "https://hyperevmscan.io/address/", tx: "https://hyperevmscan.io/tx/" },
 };
 
 export function explorerName(chain: Chain): string {

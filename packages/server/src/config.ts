@@ -85,6 +85,12 @@ export type Config = {
   gnosisRpcUrl: string;
   roninRpcUrl: string;
   rootstockRpcUrl: string;
+  /** Never logged. ZetaChain, Mythos and HyperEVM JSON-RPC, the same shape again. Each defaults to a
+   *  keyless public RPC the chain's own operator publishes (chain ids 7000 / 42018 / 999 checked against
+   *  each one 2026-10-23); address lookups need an Alchemy URL with a key. */
+  zetachainRpcUrl: string;
+  mythosRpcUrl: string;
+  hyperliquidRpcUrl: string;
   /** Bitcoin bounty-deposit verification source (an Esplora-API block explorer, no key needed) --
    *  Blockstream.info by default; mempool.space speaks the same API and can be swapped in via
    *  ESPLORA_URL. Bitcoin is deposit-only here: nothing else in this server reads Bitcoin. */
@@ -147,6 +153,15 @@ export const DEFAULT_GNOSIS_RPC = "https://rpc.gnosischain.com";
 export const DEFAULT_RONIN_RPC = "https://api.roninchain.com/rpc";
 /** Rootstock's public node, run by RootstockLabs (chain id 30, no key, rate-limited). */
 export const DEFAULT_ROOTSTOCK_RPC = "https://public-node.rsk.co";
+/** ZetaChain's mainnet EVM RPC as ZetaChain's own docs list it (BlockPI's public endpoint; chain id 7000,
+ *  no key, rate-limited). */
+export const DEFAULT_ZETACHAIN_RPC = "https://zetachain-evm.blockpi.network/v1/rpc/public";
+/** Mythos's public RPC, the one its own explorer (mythos-mainnet.explorer.alchemy.com) publishes (chain id
+ *  42018, no key). It is Alchemy-hosted but serves core `eth_*` calls only -- it refuses Alchemy's
+ *  enhanced API ("Only core evm requests are allowed"), so lookups still need a keyed Alchemy URL. */
+export const DEFAULT_MYTHOS_RPC = "https://mythos-mainnet.g.alchemy.com/public";
+/** The HyperEVM's own public RPC, from Hyperliquid's docs (chain id 999, no key, rate-limited). */
+export const DEFAULT_HYPERLIQUID_RPC = "https://rpc.hyperliquid.xyz/evm";
 
 const bool = (v: string | undefined, dflt: boolean) => {
   if (v === undefined || v === "") return dflt;
@@ -232,6 +247,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const gnosisRpcUrl = rpcUrlFrom(env, "GNOSIS", DEFAULT_GNOSIS_RPC);
   const roninRpcUrl = rpcUrlFrom(env, "RONIN", DEFAULT_RONIN_RPC);
   const rootstockRpcUrl = rpcUrlFrom(env, "ROOTSTOCK", DEFAULT_ROOTSTOCK_RPC);
+  const zetachainRpcUrl = rpcUrlFrom(env, "ZETACHAIN", DEFAULT_ZETACHAIN_RPC);
+  const mythosRpcUrl = rpcUrlFrom(env, "MYTHOS", DEFAULT_MYTHOS_RPC);
+  const hyperliquidRpcUrl = rpcUrlFrom(env, "HYPERLIQUID", DEFAULT_HYPERLIQUID_RPC);
 
   const solscanApiKey = env.SOLSCAN_API_KEY?.trim() || null;
   const tracerAgentApiKey = env.OPENROUTER_API_KEY_TRACER_AGENT?.trim() || null;
@@ -272,6 +290,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     gnosisRpcUrl,
     roninRpcUrl,
     rootstockRpcUrl,
+    zetachainRpcUrl,
+    mythosRpcUrl,
+    hyperliquidRpcUrl,
     esploraUrl: (env.ESPLORA_URL ?? "https://blockstream.info").replace(/\/$/, ""),
     defillamaUrl: (env.DEFILLAMA_URL ?? "https://coins.llama.fi").replace(/\/$/, ""),
     jupiterTokensUrl: (env.JUPITER_TOKENS_URL ?? "https://lite-api.jup.ag/tokens/v2").replace(/\/$/, ""),

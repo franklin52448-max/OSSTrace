@@ -32,8 +32,20 @@
 // - "ronin": Ronin (chain id 2020), gas paid in RON, its own coin.
 // - "rootstock": Rootstock (RSK, a Bitcoin sidechain, chain id 30). Gas is paid in RBTC ("Smart
 //   Bitcoin", pegged 1:1 to BTC) -- its own EVM-native unit, priced as RBTC, never as Ethereum's ETH.
-export type Chain = "solana" | "ethereum" | "bnb" | "robinhood" | "base" | "arbitrum" | "optimism" | "zora" | "lens" | "story" | "gnosis" | "ronin" | "rootstock";
-export const CHAINS: readonly Chain[] = ["solana", "ethereum", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story", "gnosis", "ronin", "rootstock"] as const;
+//
+// And three more, the same way again, none with a login of its own:
+// - "zetachain": ZetaChain (a Cosmos-SDK chain with an EVM, EVM chain id 7000), gas paid in ZETA, its
+//   own coin.
+// - "mythos": Mythos (Mythical Games' chain, EVM chain id 42018). Its ecosystem token is MYTH, but gas
+//   on this chain is paid in ETH: it's an OP Stack chain whose L1Block predeploy reports the ETH
+//   sentinel as its gas-paying token (isCustomGasToken false), and its own explorer says ETH -- checked
+//   live 2026-10-23. So, like Base's, a native transfer here says "ETH" and only the chain tells it apart.
+// - "hyperliquid": the HyperEVM, the EVM side of Hyperliquid (EVM chain id 999), gas paid in HYPE.
+//   Only the HyperEVM's standard JSON-RPC is read; Hyperliquid's non-EVM HyperCore (its order books and
+//   spot/perp balances) is not, so nothing here shows trading activity there. Shown as "HyperEVM" so the
+//   name says which side it is.
+export type Chain = "solana" | "ethereum" | "bnb" | "robinhood" | "base" | "arbitrum" | "optimism" | "zora" | "lens" | "story" | "gnosis" | "ronin" | "rootstock" | "zetachain" | "mythos" | "hyperliquid";
+export const CHAINS: readonly Chain[] = ["solana", "ethereum", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story", "gnosis", "ronin", "rootstock", "zetachain", "mythos", "hyperliquid"] as const;
 export const isChain = (v: unknown): v is Chain => typeof v === "string" && (CHAINS as readonly string[]).includes(v);
 
 /** Display name per chain -- one place, so a new chain can't end up as "Solana" in a two-way ternary. */
@@ -51,12 +63,16 @@ export const CHAIN_NAMES: Record<Chain, string> = {
   gnosis: "Gnosis Chain",
   ronin: "Ronin",
   rootstock: "Rootstock",
+  zetachain: "ZetaChain",
+  mythos: "Mythos",
+  hyperliquid: "HyperEVM",
 };
 /** Each chain's native unit, known without a successful balance call. Robinhood Chain's, Base's,
  *  Arbitrum One's, OP Mainnet's and Zora's really are ETH (bridged from Ethereum), not a token of their
  *  own -- so this symbol alone can't tell their transfers from Ethereum's; show the chain next to it.
  *  Lens Chain's is GHO and the Data Network's is DATA (formerly IP), each that chain's own. Gnosis
- *  Chain's is xDAI (a dollar stablecoin), Ronin's RON and Rootstock's RBTC (BTC-pegged). */
+ *  Chain's is xDAI (a dollar stablecoin), Ronin's RON and Rootstock's RBTC (BTC-pegged). ZetaChain's is
+ *  ZETA and the HyperEVM's HYPE, each that chain's own; Mythos's is ETH (not MYTH, its ecosystem token). */
 export const NATIVE_SYMBOLS: Record<Chain, string> = {
   solana: "SOL",
   ethereum: "ETH",
@@ -71,6 +87,9 @@ export const NATIVE_SYMBOLS: Record<Chain, string> = {
   gnosis: "xDAI",
   ronin: "RON",
   rootstock: "RBTC",
+  zetachain: "ZETA",
+  mythos: "ETH",
+  hyperliquid: "HYPE",
 };
 
 export type XY = { x: number; y: number };

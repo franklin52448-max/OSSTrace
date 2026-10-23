@@ -113,7 +113,7 @@ describe("Base as a first-class chain", () => {
     expect((await c.get(`/api/address/ethereum/${ETH_A}`)).json()).toMatchObject({ label: { name: "Eth hot wallet" } });
     const imp = (await c.post("/api/labels/import", { format: "csv", data: `chain,address,name\nbase,${ETH_B},Imported on Base\nbsc,${ETH_C},Not a chain here`, onConflict: "skip" })).json();
     expect(imp.created).toBe(1);
-    expect(imp.skipped).toEqual([{ row: 3, reason: "chain must be one of solana, ethereum, bnb, robinhood, base, arbitrum, optimism, zora, lens, story, gnosis, ronin, rootstock" }]);
+    expect(imp.skipped).toEqual([{ row: 3, reason: "chain must be one of solana, ethereum, bnb, robinhood, base, arbitrum, optimism, zora, lens, story, gnosis, ronin, rootstock, zetachain, mythos, hyperliquid" }]);
     const csv = (await c.get("/api/labels/export?format=csv")).body;
     expect(csv).toContain(`base,${ETH_A},Base hot wallet`);
     expect(csv).toContain(`base,${ETH_B},Imported on Base`);
@@ -121,7 +121,7 @@ describe("Base as a first-class chain", () => {
 
   it("search offers a pasted 0x address on every EVM chain, Ethereum first", async () => {
     const hits = (await c.get(`/api/search?q=${ETH_C}`)).json().hits;
-    expect(hits.map((h: { type: string; chain: string }) => `${h.type}:${h.chain}`)).toEqual(["address:ethereum", "address:bnb", "address:robinhood", "address:base", "address:arbitrum", "address:optimism", "address:zora", "address:lens", "address:story", "address:gnosis", "address:ronin", "address:rootstock"]);
+    expect(hits.map((h: { type: string; chain: string }) => `${h.type}:${h.chain}`)).toEqual(["address:ethereum", "address:bnb", "address:robinhood", "address:base", "address:arbitrum", "address:optimism", "address:zora", "address:lens", "address:story", "address:gnosis", "address:ronin", "address:rootstock", "address:zetachain", "address:mythos", "address:hyperliquid"]);
   });
 
   it("traces accept Base address nodes (deterministic ids keyed by chain)", async () => {

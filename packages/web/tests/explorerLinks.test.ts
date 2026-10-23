@@ -34,7 +34,20 @@ afterEach(async () => {
 });
 
 test("explorers.ts: only the chains this project actually has data for", () => {
-  assert.deepEqual(Object.keys(explorers.EXPLORERS).sort(), ["arbitrum", "base", "bnb", "ethereum", "gnosis", "lens", "optimism", "robinhood", "ronin", "rootstock", "solana", "story", "zora"]);
+  assert.deepEqual(Object.keys(explorers.EXPLORERS).sort(), ["arbitrum", "base", "bnb", "ethereum", "gnosis", "hyperliquid", "lens", "mythos", "optimism", "robinhood", "ronin", "rootstock", "solana", "story", "zetachain", "zora"]);
+});
+
+test("explorers.ts: ZetaChain, Mythos and the HyperEVM link to each chain's own real explorer", () => {
+  const cases = [
+    ["zetachain", "ZetaScan", "https://zetascan.com"],
+    ["mythos", "Mythos Explorer", "https://mythos-mainnet.explorer.alchemy.com"],
+    ["hyperliquid", "HyperEVMScan", "https://hyperevmscan.io"],
+  ] as const;
+  for (const [chain, name, origin] of cases) {
+    assert.equal(explorers.explorerName(chain), name);
+    assert.equal(explorers.explorerAddressUrl(chain, "0xabc"), `${origin}/address/0xabc`);
+    assert.equal(explorers.explorerTxUrl(chain, "0xdef"), `${origin}/tx/0xdef`);
+  }
 });
 
 test("explorers.ts: Gnosis Chain, Ronin and Rootstock link to each chain's own real explorer", () => {

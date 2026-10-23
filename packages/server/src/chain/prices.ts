@@ -31,6 +31,13 @@ export const bucketOf = (t: number) => Math.floor(t / HOUR) * HOUR;
 // And on 2026-10-23 again: Gnosis Chain is "xdai" (`xdai:0xe91d...a97d`, WXDAI, prices at ~$1.00), Ronin
 // "ronin" (WRON), Rootstock "rsk" (RIF, WRBTC) -- DefiLlama's own chain keys. ("gnosis:" and "rootstock:"
 // happen to answer the same today, as aliases; the canonical keys are used.)
+//
+// And on 2026-10-23 a third time: ZetaChain is "zeta" (`zeta:0x5F0b...71a8bf`, WZETA, prices at ZETA's own
+// price), the HyperEVM "hyperliquid" (WHYPE `0x5555...5555`, and Circle's USDC `0xb883...630f` at ~$1.00,
+// 6 dp; "hyperevm:" answers the same today as an alias). DefiLlama has no Mythos chain at all (its chain
+// list has none with id 42018, and `mythos:` keys -- WETH at 0x4200...0006, USDC.e -- price as nothing),
+// so Mythos tokens stay unpriced, never borrowed from another chain's key; "mythos" is kept as the
+// would-be key so a later DefiLlama listing under that name is picked up.
 export const LLAMA_CHAIN_PREFIX: Record<Chain, string> = {
   ethereum: "ethereum",
   solana: "solana",
@@ -45,6 +52,9 @@ export const LLAMA_CHAIN_PREFIX: Record<Chain, string> = {
   gnosis: "xdai",
   ronin: "ronin",
   rootstock: "rsk",
+  zetachain: "zeta",
+  mythos: "mythos",
+  hyperliquid: "hyperliquid",
 };
 /** Native coins are keyed by their CoinGecko id on DefiLlama (BNB's is "binancecoin", not "bnb").
  *  Robinhood Chain pays gas in real ETH -- CoinGecko's asset platform for it says `native_coin_id:
@@ -54,7 +64,11 @@ export const LLAMA_CHAIN_PREFIX: Record<Chain, string> = {
  *  and the Data Network's is DATA, whose CoinGecko id is still "story-2" from before the rebrand
  *  (DefiLlama answers it with symbol "DATA"). Gnosis Chain's xDAI is "coingecko:xdai" (~$1.00), Ronin's
  *  RON "coingecko:ronin", and Rootstock's RBTC "coingecko:rootstock" -- RBTC's own series (symbol RBTC),
- *  which tracks BTC 1:1 but is the asset actually held, so it's priced as itself. */
+ *  which tracks BTC 1:1 but is the asset actually held, so it's priced as itself. ZetaChain's ZETA is
+ *  "coingecko:zetachain" and the HyperEVM's HYPE "coingecko:hyperliquid" (DefiLlama's chain list gives
+ *  each as the chain's gasTokenGeckoId). Mythos pays gas in ETH (its L1Block predeploy's gas-paying
+ *  token is the ETH sentinel), so it's Ethereum's series -- never "coingecko:mythos", which is MYTH, the
+ *  ecosystem token, not what a native transfer there moves. */
 export const NATIVE_COIN: Record<Chain, string> = {
   ethereum: "coingecko:ethereum",
   solana: "coingecko:solana",
@@ -69,6 +83,9 @@ export const NATIVE_COIN: Record<Chain, string> = {
   gnosis: "coingecko:xdai",
   ronin: "coingecko:ronin",
   rootstock: "coingecko:rootstock",
+  zetachain: "coingecko:zetachain",
+  mythos: "coingecko:ethereum",
+  hyperliquid: "coingecko:hyperliquid",
 };
 export const tokenCoin = (chain: Chain, tokenId: string) => `${LLAMA_CHAIN_PREFIX[chain]}:${tokenId}`;
 

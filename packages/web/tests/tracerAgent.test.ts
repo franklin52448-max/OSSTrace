@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo as NetAddress } from "node:net";
 import { act, createElement, type ComponentType } from "react";
-import { addTransfersEdit, applyTraceOps, makeAddressNode, type TraceDoc, type TraceOp, type Transfer } from "@osstrace/contract";
+import { addTransfersEdit, applyTraceOps, CHAIN_NAMES, CHAINS, makeAddressNode, type TraceDoc, type TraceOp, type Transfer } from "@osstrace/contract";
 import { window } from "./harness/env.ts";
 import { fill } from "./harness/forms.ts";
 import { cleanup, click, consoleErrors, getButton, getByLabelText, render, settle, text, waitFor } from "./harness/render.ts";
@@ -232,7 +232,11 @@ test("before the first message: says what the agent works from and what it can't
   await renderScratch();
   const panel = await openAgent();
   const t = text(panel);
-  assert.ok(t.includes("It works only from real transfers on Solana, Ethereum, BNB Chain, Robinhood Chain and Base."), t);
+  // Derived the way the panel builds it (CHAINS/CHAIN_NAMES), so this can't go stale as chains are added.
+  const names = CHAINS.map((c) => CHAIN_NAMES[c]);
+  const chainList = `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  assert.ok(t.includes(`It works only from real transfers on ${chainList}.`), t);
+  assert.ok(chainList.startsWith("Solana, Ethereum, BNB Chain, Robinhood Chain, Base"), chainList);
   assert.ok(t.includes("It can't tell you who owns an address, predict what a wallet will do, or help with anything outside tracing, and it says so rather than guess."), t);
   assert.ok(t.includes("It can't see what you've selected, so name the address."), t);
   assert.ok(t.includes("Add 0x… and expand its top counterparties"));

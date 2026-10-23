@@ -680,6 +680,24 @@ describe("tracer agent", () => {
     expect(asked[1]).toBe("dup"); // a real id is kept; only the repeat is replaced
   });
 
+  it("a saved trace deleted while the agent is working answers 404, not a 500", async () => {
+    let id = "";
+    await setup([
+      { tools: [{ name: "add_node", args: { chain: "ethereum", address: ETH_A } }] },
+      () => {
+        // The user deletes the trace from another tab between two model rounds.
+        t.ctx.db.run("DELETE FROM traces WHERE id = ?", id);
+        return { tools: [{ name: "add_node", args: { chain: "ethereum", address: ETH_B } }] };
+      },
+      { content: "done" },
+    ]);
+    const c = await signup(t.app, "agent_user");
+    id = await savedTrace(c);
+    const r = await c.post("/api/tracer-agent/chat", { docId: id, message: "add A then B" });
+    expect(r.statusCode, r.body.slice(0, 200)).toBe(404);
+    expect(r.json().error.code).toBe("not_found");
+  });
+
   it("remembers the conversation per doc, and forgets it on DELETE", async () => {
     const seen: Seen[] = [];
     await setup([{ tools: [{ name: "add_node", args: { chain: "ethereum", address: ETH_A } }] }, { content: "Added A." }, { content: "It was A." }, { content: "fresh" }], seen);

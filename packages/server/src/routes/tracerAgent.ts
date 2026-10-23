@@ -6,7 +6,7 @@ import { ApiErr, badRequest, conflict, unauthorized } from "../lib/errors.ts";
 import { nowIso } from "../lib/time.ts";
 import { anonTraceDoc, parse } from "../schemas.ts";
 import { sha256 } from "../auth/sessions.ts";
-import { getTraceRow, loadDoc, toTrace } from "../services/traces.ts";
+import { loadDoc, ownedTrace, toTrace } from "../services/traces.ts";
 import { clearHistory, loadHistory, runAgentTurn, saveTurn, type AgentTurn } from "../services/tracerAgent/agent.ts";
 import { SavedAgentDoc, SCRATCH_DOC_ID, ScratchAgentDoc, type AgentDoc } from "../services/tracerAgent/doc.ts";
 import { ANON_AGENT_COOKIE, ANON_MESSAGE_LIMIT, anonCookieOpts, anonRemaining, refundAnonMessage, reserveAnonMessage, reserveUserMessage } from "../services/tracerAgent/limits.ts";
@@ -101,7 +101,8 @@ export function registerTracerAgent(app: FastifyInstance, ctx: Ctx, llm: AgentLl
 
       let after: TracerAgentChatResponse["doc"];
       if (doc.kind === "saved") {
-        const row = getTraceRow(ctx, doc.traceId)!;
+        // Re-checked, not assumed: the trace can be deleted (another tab) while the turn runs -- a 404, not a crash.
+        const row = ownedTrace(ctx, user!.id, doc.traceId);
         after = toTrace(ctx, row, loadDoc(ctx, row), true);
       } else {
         const { posTs: _internal, ...rest } = doc.read();

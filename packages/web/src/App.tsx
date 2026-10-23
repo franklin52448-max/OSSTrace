@@ -33,6 +33,10 @@ const AeroShards = lazy(() => import("./vendor/AeroShards.tsx"));
 
 const EXPLORER_URL = import.meta.env["VITE_EXPLORER_URL"] ?? "http://localhost:5300";
 
+/** The project's own token (Solana, pump.fun) -- not something this server verifies or tracks any
+ *  differently than any other address; shown on the homepage purely so people can find/copy it. */
+const OSSTRACE_TOKEN = "6V8ZLegByoWKpRCmfFtpK5mvMbZ5wFTSaajhr5Ckpump";
+
 interface Balance {
   native: { symbol: string; amount: string; decimals: number };
   asOf: string;
@@ -342,6 +346,19 @@ function Home() {
           </Text>
           <div className="mx-auto mt-8 w-full rounded-[20px] border border-line bg-panel/80 p-3 text-left shadow-card backdrop-blur-md">
             <GlobalSearch initial={null} />
+          </div>
+          <div className="mx-auto mt-4 flex flex-wrap items-center justify-center gap-2 text-xs text-ink-faint">
+            <span>$OSSTRACE</span>
+            <span className="hash max-w-[220px] truncate text-ink-dim sm:max-w-none">{OSSTRACE_TOKEN}</span>
+            <CopyButton value={OSSTRACE_TOKEN} label="Copy" />
+            <a
+              href={`https://pump.fun/coin/${OSSTRACE_TOKEN}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-ctl px-2 py-1 font-medium text-ink-dim transition-colors duration-150 hover:bg-[var(--helium-elevated-7)] hover:text-ink"
+            >
+              pump.fun <IconExternalLink className="h-3.5 w-3.5" />
+            </a>
           </div>
         </div>
         <button

@@ -1,5 +1,7 @@
 # OSSTrace
 
+`$OSSTRACE` contract address (Solana, pump.fun): `6V8ZLegByoWKpRCmfFtpK5mvMbZ5wFTSaajhr5Ckpump`
+
 An open-source, multi-chain on-chain intelligence platform: look up an address or entity, see its
 balance and transaction history, and see any **genuinely sourced** label or tag attached to it.
 

@@ -7,6 +7,8 @@ import { Wordmark } from "./Wordmark.tsx";
 const REPO_URL = "https://github.com/OpenTraceIntelligence/OSSTrace";
 /** The project's X (Twitter) account. */
 const X_URL = "https://x.com/OSSTrace";
+/** All the project's other links in one place. */
+const LINKTREE_URL = "https://linktr.ee/OpenSourceTrace";
 
 const PRODUCT_LINKS: readonly { label: string; href: string }[] = [
   { label: "Explorer", href: "#" },
@@ -40,6 +42,17 @@ export default function SiteFooter() {
             {X_URL && (
               <Social href={X_URL} label="OSSTrace on X">
                 <path d="M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z" />
+              </Social>
+            )}
+            {LINKTREE_URL && (
+              <Social href={LINKTREE_URL} label="All OSSTrace links (Linktree)">
+                {/* A plain link glyph, not Linktree's own brand mark -- same reasoning as every
+                    other "don't guess a brand path from memory" icon in this codebase. */}
+                <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 15l6 -6" />
+                  <path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />
+                  <path d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" />
+                </g>
               </Social>
             )}
           </div>

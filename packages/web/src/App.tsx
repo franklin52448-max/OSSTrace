@@ -349,7 +349,7 @@ function Home() {
             <GlobalSearch initial={null} />
           </div>
           <div className="mx-auto mt-4 flex flex-wrap items-center justify-center gap-2 text-xs text-ink-faint">
-            <span>$OSSTRACE</span>
+            <span>$TRACE</span>
             <span className="hash max-w-[220px] truncate text-ink-dim sm:max-w-none">{OSSTRACE_TOKEN}</span>
             <CopyButton value={OSSTRACE_TOKEN} label="Copy" />
             <a

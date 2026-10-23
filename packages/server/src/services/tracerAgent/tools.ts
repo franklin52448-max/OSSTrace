@@ -627,6 +627,23 @@ const annotateNode = defineTool({
   },
 });
 
+/** get_doc_state's own size budget: under agent.ts's per-result cap (MAX_RESULT_CHARS, 12k) with
+ *  room for the fields around the lists, so it chooses what to leave out rather than being cut. */
+const DOC_STATE_CHARS = 10_500;
+
+/** The newest entries of `xs` (canvas order kept) whose JSON fits in `budget` characters. */
+function newestThatFit<T>(xs: T[], budget: number): T[] {
+  let used = 0;
+  let i = xs.length;
+  while (i > 0) {
+    const c = JSON.stringify(xs[i - 1]).length + 1;
+    if (used + c > budget) break;
+    used += c;
+    i--;
+  }
+  return xs.slice(i);
+}
+
 const getDocState = defineTool({
   name: "get_doc_state",
   description: "The current trace: its nodes (id, chain, address, label, note) and edges (with transfer/aggregate details). Call it before acting on 'that node', 'the second one', etc.",
@@ -638,7 +655,7 @@ const getDocState = defineTool({
     // client attached to the doc -- and with no label join, so private labels never reach the model.
     const rows = env.ctx.store.getMany(d.edges.flatMap((e) => (e.kind === "transfer" ? [{ chain: e.chain, id: e.transferID }] : [])));
     const empty = LabelIndex.empty();
-    const nodes = d.nodes.slice(0, 200).map((n) => ({
+    const allNodes = d.nodes.map((n) => ({
       id: n.id,
       kind: n.kind,
       ...(n.chain ? { chain: n.chain } : {}),
@@ -648,13 +665,18 @@ const getDocState = defineTool({
       ...(n.label ? { label: safeText(n.label, NODE_LABEL_MAX) } : {}),
       ...(n.note ? { note: safeText(n.note, 300) } : {}),
     }));
-    const edges = d.edges.slice(0, 300).map((e) => {
+    const allEdges = d.edges.map((e) => {
       if (e.kind === "aggregate")
         return { id: e.id, kind: e.kind, from: e.fromNodeID, to: e.toNodeID, usdOut: e.aggregate.cachedUSDOut, txOut: e.aggregate.cachedTransactionCountOut, usdIn: e.aggregate.cachedUSDIn, txIn: e.aggregate.cachedTransactionCountIn };
       const r = rows.get(`${e.chain}:${e.transferID}`);
       const t = r ? transferOut(rowToTransferNoLabels(r, empty)) : null;
       return { id: e.id, kind: e.kind, from: e.fromNodeID, to: e.toNodeID, ...(t ? { time: t.time, token: t.token, amount: t.amount, usd: t.usd, txHash: t.txHash } : { transferId: e.transferID }) };
     });
+    // On a big canvas, the *newest* nodes are the ones "that node" / "the one you just added" mean,
+    // so the oldest are left out first -- nodes before edges, since every node tool needs a node id.
+    const nodes = newestThatFit(allNodes.slice(-200), DOC_STATE_CHARS);
+    const edges = newestThatFit(allEdges.slice(-300), DOC_STATE_CHARS - JSON.stringify(nodes).length);
+    const omitted = nodes.length < allNodes.length || edges.length < allEdges.length;
     return {
       ok: true,
       docKind: env.doc.kind,
@@ -663,7 +685,12 @@ const getDocState = defineTool({
       edgeCount: d.edges.length,
       nodes,
       edges,
-      ...(d.nodes.length > 200 || d.edges.length > 300 ? { truncated: true } : {}),
+      ...(omitted
+        ? {
+            truncated: true,
+            note: `Showing the newest ${nodes.length} of ${allNodes.length} nodes and ${edges.length} of ${allEdges.length} edges; the oldest are left out. Any node can still be named as chain:address.`,
+          }
+        : {}),
     };
   },
 });

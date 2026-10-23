@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
-import { addressNodeId, aggregateEdgeId, applyTraceOps, transferEdgeId, type Trace, type TraceDoc, type TracerAgentChatResponse } from "@osstrace/contract";
+import { addressNodeId, aggregateEdgeId, applyTraceOps, normalizeAddress, transferEdgeId, type Trace, type TraceDoc, type TraceEdge, type TraceNode, type TracerAgentChatResponse } from "@osstrace/contract";
 import { loadConfig } from "../src/config.ts";
 import { OPENROUTER_CHAT_URL } from "../src/services/tracerAgent/openrouter.ts";
 import { TOOL_SPECS } from "../src/services/tracerAgent/tools.ts";
@@ -63,6 +63,15 @@ class Browser {
 }
 
 const emptyScratch = (): Pick<TraceDoc, "title" | "notes" | "nodes" | "edges"> => ({ title: "", notes: "", nodes: [], edges: [] });
+/** The i-th of a run of distinct, valid, checksummed EVM addresses. */
+const evm = (i: number) => normalizeAddress("ethereum", `0x${(0xabc00000 + i).toString(16).padStart(40, "0")}`);
+/** A scratch canvas already holding `n` Ethereum address nodes (oldest first), plus any edges given. */
+const scratchWith = (n: number, edges: TraceEdge[] = []): Pick<TraceDoc, "title" | "notes" | "nodes" | "edges"> => ({
+  title: "",
+  notes: "",
+  nodes: Array.from({ length: n }, (_, i): TraceNode => ({ id: addressNodeId("scratch", "ethereum", evm(i)), kind: "address", chain: "ethereum", address: evm(i), currentPosition: { x: i * 300, y: 0 }, createdAt: new Date().toISOString() })),
+  edges,
+});
 const base = Math.floor(Date.now() / 1000) - 86400;
 
 describe("tracer agent", () => {
@@ -507,6 +516,23 @@ describe("tracer agent", () => {
     expect(r.matchingInCache).toBe(60);
     expect(r.transfers.length).toBeGreaterThan(20);
     expect(r.truncatedLists).toEqual({ transfers: { shown: r.transfers.length, of: 50 } });
+  });
+
+  it("get_doc_state on a big canvas shows the newest nodes (the ones 'that node' means) as real JSON, and says what it left out", async () => {
+    const seen: Seen[] = [];
+    await setup([{ tools: [{ name: "get_doc_state", args: {} }] }, { content: "ok" }], seen);
+    const anon = new Browser(t.app);
+    const doc = scratchWith(120);
+    await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "remove the node I just added", doc });
+    const toModel = seen[1]!.body.messages.find((m) => m.role === "tool")!.content!;
+    const r = JSON.parse(toModel) as { nodeCount: number; nodes: { id: string }[]; truncated?: boolean; note?: string };
+    expect(r.nodeCount).toBe(120);
+    expect(r.nodes.at(-1)!.id).toBe(doc.nodes.at(-1)!.id); // the newest node is there, as a real entry
+    expect(r.nodes.length).toBeGreaterThan(50);
+    expect(r.nodes.length).toBeLessThan(120);
+    expect(r.nodes.map((n) => n.id)).toEqual(doc.nodes.slice(-r.nodes.length).map((n) => n.id));
+    expect(r.truncated).toBe(true);
+    expect(r.note).toMatch(new RegExp(`newest ${r.nodes.length} of 120 nodes`));
   });
 
   it("rename / annotate / remove act on this doc's real node ids only", async () => {

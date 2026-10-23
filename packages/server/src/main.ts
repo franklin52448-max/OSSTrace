@@ -2,6 +2,7 @@ import { buildApp } from "./app.ts";
 import { loadConfig } from "./config.ts";
 import { pruneSessions } from "./auth/sessions.ts";
 import { pruneAttempts } from "./auth/throttle.ts";
+import { pruneAnonTraceShares } from "./services/anonTraceShares.ts";
 
 const config = loadConfig();
 const { app, ctx, worker } = await buildApp(config);
@@ -10,6 +11,7 @@ const housekeeping = setInterval(() => {
   try {
     pruneSessions(ctx.db);
     pruneAttempts(ctx.db);
+    pruneAnonTraceShares(ctx);
   } catch (e) {
     app.log.warn({ err: e instanceof Error ? e.message : String(e) }, "housekeeping failed");
   }

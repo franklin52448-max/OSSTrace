@@ -75,6 +75,15 @@ export const traceOp = z.discriminatedUnion("type", [
 ]);
 export const traceBatch = z.object({ ops: z.array(traceOp).max(500, "at most 500 ops per batch") });
 
+/** An anon share's doc snapshot -- same node/edge shapes as a real trace, just submitted whole
+ *  (a local-only canvas has no op history to replay) rather than as ops against a server doc. */
+export const anonTraceDoc = z.object({
+  title: z.string().max(1000),
+  notes: z.string().max(100_000),
+  nodes: z.array(traceNode).max(500),
+  edges: z.array(traceEdge).max(1000),
+});
+
 export const visualizerFilter = z.object({
   flow: z.enum(["all", "in", "out", "self"]),
   from: z.array(z.string().max(200)).max(200).nullable(),

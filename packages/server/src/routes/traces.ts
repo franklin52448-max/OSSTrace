@@ -5,7 +5,7 @@ import { applyTraceOps, detectChain, normalizeAddress, type AggregateSummaryResp
 import { requireUser, type Ctx } from "../context.ts";
 import { badRequest, notFound } from "../lib/errors.ts";
 import { nextAfter, nowIso } from "../lib/time.ts";
-import { chain, parse, traceBatch } from "../schemas.ts";
+import { anonTraceDoc, chain, parse, traceBatch } from "../schemas.ts";
 import {
   computeAggregate,
   createTrace,
@@ -19,6 +19,7 @@ import {
   summaries,
   toTrace,
 } from "../services/traces.ts";
+import { createAnonTraceShare, getAnonTraceShare } from "../services/anonTraceShares.ts";
 import { syncAll } from "../services/transfers.ts";
 
 const createBody = z.object({ initialAddress: z.string().max(128).nullable().optional(), initialChain: chain.nullable().optional(), title: z.string().max(256).optional() });
@@ -131,5 +132,25 @@ export function registerTraces(app: FastifyInstance, ctx: Ctx) {
     const t = getTraceRow(ctx, req.params.id);
     if (!t || t.shareable !== 1) throw notFound("Trace not found");
     return toTrace(ctx, t, loadDoc(ctx, t), false, { publicRead: true });
+  });
+
+  // Anon Tracer sharing (ADR 0025) -- intentionally separate from the routes above: no account,
+  // no ownership, a 3-hour-expiring snapshot rather than a live document. Neither route calls
+  // requireUser.
+  app.post("/api/anon-traces", async (req, reply) => {
+    const doc = parse(anonTraceDoc, req.body ?? {});
+    const now = nowIso();
+    const r = createAnonTraceShare(ctx, req.ip, {
+      ...doc,
+      shareable: true,
+      nodes: doc.nodes.map((n) => ({ ...n, createdAt: n.createdAt ?? now })),
+      edges: doc.edges.map((e) => ({ ...e, createdAt: e.createdAt ?? now })),
+    });
+    return reply.status(201).send(r);
+  });
+
+  app.get<{ Params: { id: string } }>("/api/anon-traces/:id", async (req) => {
+    const r = getAnonTraceShare(ctx, req.params.id);
+    return { title: r.doc.title, notes: r.doc.notes, nodes: r.doc.nodes, edges: r.doc.edges, shareable: true, isOwner: false, expiresAt: r.expiresAt };
   });
 }

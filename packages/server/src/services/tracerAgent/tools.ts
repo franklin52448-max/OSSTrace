@@ -315,7 +315,7 @@ const findConnections = defineTool({
 
     // Direct: the same counterparty-filtered transfer query the canvas runs, one pair at a time.
     const perPair: Transfer[][] = [];
-    const connections: { a: string; b: string; transfers: number; usd: number }[] = [];
+    const connections: { a: string; b: string; transfers: number; usd: number | null; unpricedTransfers?: number }[] = [];
     let failedPairs = 0;
     let skippedForTime = 0;
     for (const [a, b] of pairs) {
@@ -334,7 +334,14 @@ const findConnections = defineTool({
           limit: 200,
         });
         perPair.push(res.transfers);
-        if (res.transfers.length) connections.push({ a: a.id, b: b.id, transfers: res.transfers.length, usd: res.transfers.reduce((s, t) => s + (t.usd ?? 0), 0) });
+        if (res.transfers.length) {
+          // A transfer with no USD price (not priced yet, or no price exists) is unknown, not $0:
+          // summing it as 0 had the model report "the total USD value transferred is 0" for a pair
+          // whose transfers were later priced at ~$4M.
+          const priced = res.transfers.filter((t) => t.usd !== null && t.usd !== undefined);
+          const unpriced = res.transfers.length - priced.length;
+          connections.push({ a: a.id, b: b.id, transfers: res.transfers.length, usd: priced.length ? priced.reduce((s, t) => s + t.usd!, 0) : null, ...(unpriced ? { unpricedTransfers: unpriced } : {}) });
+        }
       } catch {
         failedPairs++; // one pair's provider hiccup shouldn't abort the rest, same as the canvas
       }

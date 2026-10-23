@@ -162,6 +162,21 @@ describe("tracer agent", () => {
     expect(JSON.parse(toolMsgs[2]!.content!)).toMatchObject({ ok: true, edgesAdded: 2 });
   });
 
+  it("find_connections: a transfer with no USD price is unknown, not $0", async () => {
+    await setup([
+      { tools: [{ name: "find_connections", args: { addresses: [`ethereum:${ETH_A}`, `ethereum:${ETH_B}`] } }, { name: "find_connections", args: { addresses: [`ethereum:${ETH_A}`, `ethereum:${ETH_C}`] } }] },
+      { content: "ok" },
+    ]);
+    t.eth.add([ethTransfer(ETH_A, ETH_B, base + 1, { priceCoin: null }), ethTransfer(ETH_A, ETH_C, base + 2, { priceCoin: null }), ethTransfer(ETH_C, ETH_A, base + 3)]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "how much moved between A and B, and A and C?" })).json() as TracerAgentChatResponse;
+    const ab = (res.toolCalls[0]!.result as { connections: Record<string, unknown>[] }).connections[0]!;
+    expect(ab).toMatchObject({ transfers: 1, usd: null, unpricedTransfers: 1 });
+    const ac = (res.toolCalls[1]!.result as { connections: Record<string, unknown>[] }).connections[0]!;
+    expect(ac).toMatchObject({ transfers: 2, usd: 2000, unpricedTransfers: 1 });
+  });
+
   it("find_connections adds nothing when the addresses never transacted", async () => {
     await setup([{ tools: [{ name: "find_connections", args: { addresses: [`ethereum:${ETH_A}`, `ethereum:${ETH_C}`] } }] }, { content: "No direct transfers found." }]);
     t.eth.add([ethTransfer(ETH_A, ETH_B, base + 10), ethTransfer(ETH_C, ETH_B, base + 20)]);

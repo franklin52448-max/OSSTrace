@@ -703,6 +703,29 @@ describe("tracer agent", () => {
     expect((full.toolCalls[0]!.result as { note: string }).note).toBe("Aggregate edges carry real totals from the transfer history loaded so far.");
   });
 
+  it("get_doc_state: an aggregate edge whose transfers have no USD price reads as unknown, not $0, and says which way each total runs", async () => {
+    await setup([{ tools: [{ name: "expand_node", args: { chain: "ethereum", address: ETH_A, hops: 1 } }] }, { tools: [{ name: "get_doc_state", args: {} }] }, { content: "ok" }]);
+    // A -> B: two unpriced transfers. A -> C: one priced ($2000), one not. C -> A: priced.
+    t.eth.add([
+      ethTransfer(ETH_A, ETH_B, base + 1, { priceCoin: null }),
+      ethTransfer(ETH_A, ETH_B, base + 2, { priceCoin: null }),
+      ethTransfer(ETH_A, ETH_C, base + 3),
+      ethTransfer(ETH_A, ETH_C, base + 4, { priceCoin: null }),
+      ethTransfer(ETH_C, ETH_A, base + 5),
+    ]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "how much did A send B and C?" })).json() as TracerAgentChatResponse;
+    const edges = (res.toolCalls[1]!.result as { edges: Record<string, unknown>[] }).edges;
+    const a = addressNodeId(id, "ethereum", ETH_A);
+    const toB = edges.find((e) => e.to === addressNodeId(id, "ethereum", ETH_B))!;
+    const toC = edges.find((e) => e.to === addressNodeId(id, "ethereum", ETH_C))!;
+    expect(toB).toMatchObject({ from: a, usdOut: null, txOut: 2, unpricedOut: 2, usdIn: 0, txIn: 0 }); // not "$0 sent"
+    expect(toC).toMatchObject({ from: a, usdOut: 2000, txOut: 2, unpricedOut: 1, usdIn: 2000, txIn: 1 }); // a lower bound, and said why
+    expect(toC).not.toHaveProperty("unpricedIn");
+    expect(TOOL_SPECS.find((s) => s.function.name === "get_doc_state")!.function.description).toMatch(/usdOut\/txOut are from -> to and usdIn\/txIn are to -> from.*null means none had one \(unknown, not \$0\)/);
+  });
+
   it("list_transfers on a never-synced address with no time window loads more than the newest page, and an empty partial answer says it isn't proof", async () => {
     await setup([
       {

@@ -741,9 +741,22 @@ function newestThatFit<T>(xs: T[], budget: number): T[] {
   return xs.slice(i);
 }
 
+/** Transfers from `a` to `b` (an owner wallet counts as itself, as computeAggregate counts it) with no USD price. */
+function unpricedCount(ctx: Ctx, a: AddrKey, b: AddrKey): number {
+  const r = ctx.db.get<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM transfers t WHERE t.chain = ? AND (t.from_addr = ? OR t.from_owner = ?) AND (t.to_addr = ? OR t.to_owner = ?) AND t.usd IS NULL",
+    a.chain,
+    a.address,
+    a.address,
+    b.address,
+    b.address,
+  );
+  return Number(r?.n ?? 0);
+}
+
 const getDocState = defineTool({
   name: "get_doc_state",
-  description: "The current trace: its nodes (id, chain, address, label, note), oldest first, and edges (with transfer/aggregate details). A node's label and note were written by the user -- their own annotations, not sourced facts about who an address is. Call it before acting on 'that node', 'the second one', etc.",
+  description: "The current trace: its nodes (id, chain, address, label, note), oldest first, and edges (with transfer/aggregate details). A node's label and note were written by the user -- their own annotations, not sourced facts about who an address is. An aggregate edge's usdOut/txOut are from -> to and usdIn/txIn are to -> from; its USD sums priced transfers only, unpricedOut/unpricedIn count the ones with no price, and a USD of null means none had one (unknown, not $0). Call it before acting on 'that node', 'the second one', etc.",
   parameters: { type: "object", properties: {}, additionalProperties: false },
   args: z.object({}).strict(),
   async run(env) {
@@ -762,9 +775,32 @@ const getDocState = defineTool({
       ...(n.label ? { label: safeText(n.label, NODE_LABEL_MAX) } : {}),
       ...(n.note ? { note: safeText(n.note, 300) } : {}),
     }));
+    const byId = new Map(d.nodes.map((n) => [n.id, n]));
+    const recent = new Set(d.edges.slice(-300).map((e) => e.id));
     const allEdges = d.edges.map((e) => {
-      if (e.kind === "aggregate")
-        return { id: e.id, kind: e.kind, from: e.fromNodeID, to: e.toNodeID, usdOut: e.aggregate.cachedUSDOut, txOut: e.aggregate.cachedTransactionCountOut, usdIn: e.aggregate.cachedUSDIn, txIn: e.aggregate.cachedTransactionCountIn };
+      if (e.kind === "aggregate") {
+        const g = e.aggregate;
+        const from = byId.get(e.fromNodeID);
+        const to = byId.get(e.toNodeID);
+        // An aggregate's USD is a SUM over priced transfers only, so 0 next to a nonzero count was
+        // read as "$0 moved" when nothing had a price yet -- the same unknown-is-not-$0 mistake
+        // find_connections had. Counted here for address-to-address edges (what expand_node draws).
+        const pair = recent.has(e.id) && from?.kind === "address" && to?.kind === "address" && from.chain && from.chain === to.chain ? { a: { chain: from.chain, address: from.address! }, b: { chain: to.chain, address: to.address! } } : null;
+        const unOut = pair ? unpricedCount(env.ctx, pair.a, pair.b) : 0;
+        const unIn = pair ? unpricedCount(env.ctx, pair.b, pair.a) : 0;
+        return {
+          id: e.id,
+          kind: e.kind,
+          from: e.fromNodeID,
+          to: e.toNodeID,
+          usdOut: unOut && unOut >= g.cachedTransactionCountOut ? null : g.cachedUSDOut,
+          txOut: g.cachedTransactionCountOut,
+          ...(unOut ? { unpricedOut: unOut } : {}),
+          usdIn: unIn && unIn >= g.cachedTransactionCountIn ? null : g.cachedUSDIn,
+          txIn: g.cachedTransactionCountIn,
+          ...(unIn ? { unpricedIn: unIn } : {}),
+        };
+      }
       const r = rows.get(`${e.chain}:${e.transferID}`);
       const t = r ? transferOut(rowToTransferNoLabels(r, empty)) : null;
       return { id: e.id, kind: e.kind, from: e.fromNodeID, to: e.toNodeID, ...(t ? { time: t.time, token: t.token, amount: t.amount, usd: t.usd, txHash: t.txHash } : { transferId: e.transferID }) };

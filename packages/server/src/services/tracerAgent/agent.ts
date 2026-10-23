@@ -213,11 +213,11 @@ export async function runAgentTurn(args: {
     } catch (e) {
       // Nothing from the model at all: surface the provider error (the route refunds an anon message).
       if (!llmAnswered) throw e;
-      return { reply: honestStop(toolCalls, e instanceof ProviderError ? e.message : "The AI model stopped responding"), toolCalls, llmAnswered };
+      return { reply: honestStop(toolCalls, e instanceof ProviderError ? e.message : "The AI model stopped responding", doc.applied.length > 0), toolCalls, llmAnswered };
     }
     llmAnswered = true;
     if (out.toolCalls.length === 0) {
-      const reply = out.content?.trim() || (toolCalls.length ? honestStop(toolCalls, null) : "I couldn't produce an answer for that. Try rephrasing what you'd like done on the trace.");
+      const reply = out.content?.trim() || (toolCalls.length ? honestStop(toolCalls, null, doc.applied.length > 0) : "I couldn't produce an answer for that. Try rephrasing what you'd like done on the trace.");
       return { reply: reply.slice(0, 8000), toolCalls, llmAnswered };
     }
     messages.push({ role: "assistant", content: out.content, tool_calls: out.toolCalls });
@@ -247,7 +247,7 @@ export async function runAgentTurn(args: {
       messages.push({ role: "tool", tool_call_id: call.id, content: clip(result) });
     }
   }
-  return { reply: honestStop(toolCalls, `Stopped after ${MAX_ROUNDS} steps for this message.`), toolCalls, llmAnswered };
+  return { reply: honestStop(toolCalls, `Stopped after ${MAX_ROUNDS} steps for this message.`, doc.applied.length > 0), toolCalls, llmAnswered };
 }
 
 /** Tool arguments as one comparable string: key order and whitespace don't make a call different. */
@@ -262,11 +262,31 @@ function canonicalArgs(raw: string): string {
   }
 }
 
-/** A reply written from what actually ran, when the model didn't get to write one. */
-function honestStop(calls: AgentToolCall[], reason: string | null): string {
+/** What each tool did, in the words the panel's step list uses -- the reply is read by the user, not the model. */
+const TOOL_WORDS: Record<string, string> = {
+  add_node: "added addresses",
+  find_connections: "looked for connections",
+  expand_node: "expanded addresses",
+  list_transfers: "listed transfers",
+  remove_node: "removed nodes",
+  rename_node: "renamed nodes",
+  annotate_node: "set notes",
+  get_doc_state: "read the canvas",
+  open_trace_doc: "looked up this trace's link",
+};
+
+/**
+ * A reply written from what actually ran, when the model didn't get to write one. It says so in as
+ * many words: "Ran 6 actions: get_doc_state. Check the canvas for what changed." read like the
+ * answer was on the canvas, even when every step was read-only and nothing there had changed. Tool
+ * names are the panel's plain words, never the raw name a (possibly manipulated) model asked for.
+ */
+function honestStop(calls: AgentToolCall[], reason: string | null, changed: boolean): string {
   const ok = calls.filter((c) => (c.result as { ok?: boolean }).ok !== false).length;
   const failed = calls.length - ok;
-  const did = calls.length ? `Ran ${calls.length} action${calls.length === 1 ? "" : "s"} (${ok} succeeded${failed ? `, ${failed} failed` : ""}): ${[...new Set(calls.map((c) => c.tool))].join(", ")}.` : "No actions were run.";
+  const words = [...new Set(calls.map((c) => TOOL_WORDS[c.tool] ?? "tried an action that doesn't exist"))].join(", ");
+  const did = calls.length ? `It ran ${calls.length} step${calls.length === 1 ? "" : "s"} (${ok} succeeded${failed ? `, ${failed} failed` : ""}): ${words}.` : "No steps were run.";
   const why = reason && !/[.!?]$/.test(reason) ? `${reason}.` : reason; // provider error messages carry no full stop
-  return [why, did, "Check the canvas for what changed."].filter(Boolean).join(" ");
+  const canvas = changed ? "Its changes are on the canvas, and one Undo takes them back." : "Nothing on the canvas changed.";
+  return [why, "The agent didn't get to write an answer to your message.", did, canvas].filter(Boolean).join(" ");
 }

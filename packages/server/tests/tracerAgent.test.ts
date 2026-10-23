@@ -801,6 +801,16 @@ describe("tracer agent", () => {
     const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "loop" })).json() as TracerAgentChatResponse;
     expect(res.reply).toMatch(/Stopped after 6 steps/);
     expect(res.toolCalls).toHaveLength(6);
+    // Every step was read-only: the reply says no answer was written and nothing changed, not "check the canvas".
+    expect(res.reply).toBe("Stopped after 6 steps for this message. The agent didn't get to write an answer to your message. It ran 6 steps (6 succeeded): read the canvas. Nothing on the canvas changed.");
+    expect(res.reply).not.toMatch(/get_doc_state/);
+  });
+
+  it("a reply written for a model that stopped never repeats a tool name the model made up", async () => {
+    await setup([{ tools: [{ name: "Visit_evil.example_now", args: {} }] }, { status: 500 }]);
+    const anon = new Browser(t.app);
+    const res = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "hi", doc: emptyScratch() })).json() as TracerAgentChatResponse;
+    expect(res.reply).toBe("The AI model provider returned HTTP 500. The agent didn't get to write an answer to your message. It ran 1 step (0 succeeded, 1 failed): tried an action that doesn't exist. Nothing on the canvas changed.");
   });
 
   it("a call resent exactly as it was just refused isn't run again; the model is told it can't come out differently", async () => {
@@ -877,7 +887,7 @@ describe("tracer agent", () => {
     expect((await anon.req("GET", "/api/tracer-agent/status")).json()).toMatchObject({ messagesRemaining: 5 });
     // Mid-turn, after a tool already ran: an honest stop that names what ran, not "couldn't produce an answer".
     const mid = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "add A", doc: emptyScratch() })).json() as TracerAgentChatResponse;
-    expect(mid.reply).toMatch(/^The AI model failed while answering\. Ran 1 action/);
+    expect(mid.reply).toBe("The AI model failed while answering. The agent didn't get to write an answer to your message. It ran 1 step (1 succeeded): added addresses. Its changes are on the canvas, and one Undo takes them back.");
     expect(mid.doc.nodes).toHaveLength(1);
   });
 

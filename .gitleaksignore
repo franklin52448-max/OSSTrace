@@ -61,3 +61,7 @@ ff43d186fd76c08362783fd38b976e9ba300279e:packages/server/tests/providers.test.ts
 ff43d186fd76c08362783fd38b976e9ba300279e:packages/server/tests/providers.test.ts:generic-api-key:112
 ff43d186fd76c08362783fd38b976e9ba300279e:packages/server/tests/providers.test.ts:generic-api-key:137
 ff43d186fd76c08362783fd38b976e9ba300279e:packages/server/tests/fixtures/solana/tx.inner-token2022.json:generic-api-key:1154
+
+# The project's own $OSSTRACE token contract address (Solana, pump.fun) -- deliberately public,
+# shown on the homepage itself for anyone to copy.
+cb0f1dee31f8333669062c83916b240c1c7db405:packages/web/src/App.tsx:generic-api-key:38

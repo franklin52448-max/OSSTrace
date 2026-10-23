@@ -106,11 +106,11 @@ describe("Blockscout normalisation (recorded 2026-10-22)", () => {
   });
 });
 
-// Base's Blockscout speaks the exact v2 shape Ethereum's does (same software), so these reuse the
-// Ethereum recordings for the shape and hand-build the Base-specific bits: what has to change is
-// only which chain the rows are stamped with and which DefiLlama keys price them. base.blockscout.com
-// itself can't be recorded from a server (Cloudflare challenge, see config.ts's baseBlockscoutUrl).
-describe("Blockscout on Base", () => {
+// BlockscoutProvider pointed at a non-Ethereum chain (Base here) and at Blockscout's keyed PRO API.
+// No chain is wired this way any more -- Base reads AlchemyProvider now (chain/alchemy.ts), because
+// base.blockscout.com challenges every server-side call -- but the class still supports both, so
+// they stay covered. These reuse the Ethereum recordings for the shape and hand-build the Base bits.
+describe("Blockscout on Base (class support; not the current wiring)", () => {
   const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
   const usdcTransfer = {
     transaction_hash: "0x" + "ab".repeat(32),

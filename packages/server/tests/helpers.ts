@@ -148,6 +148,7 @@ export type TestApp = {
   sol: FakeProvider;
   bnb: FakeProvider;
   rh: FakeProvider;
+  base: FakeProvider;
   sent: { url: string; body: string; headers: Record<string, string> }[];
   close: () => Promise<void>;
 };
@@ -159,10 +160,12 @@ export async function makeApp(over: Partial<Config> = {}, opts: { sendWebhook?: 
   const sol = new FakeProvider("solana");
   const bnb = new FakeProvider("bnb");
   const rh = new FakeProvider("robinhood");
+  // Every chain gets a fake: the real providers would go to the network (health pings all of them).
+  const base = new FakeProvider("base");
   const sent: TestApp["sent"] = [];
   const { app, ctx, worker } = await buildApp(config, {
     db,
-    providers: { ethereum: eth, solana: sol, bnb, robinhood: rh },
+    providers: { ethereum: eth, solana: sol, bnb, robinhood: rh, base },
     prices: new PriceService(db, "https://prices.test", llamaFetch()),
     resolver: async (host) => (host === "hooks.example.com" ? [{ address: "93.184.216.34", family: 4 }] : [{ address: "10.0.0.5", family: 4 }]),
     sendWebhook:
@@ -182,6 +185,7 @@ export async function makeApp(over: Partial<Config> = {}, opts: { sendWebhook?: 
     sol,
     bnb,
     rh,
+    base,
     sent,
     close: async () => {
       await app.close();

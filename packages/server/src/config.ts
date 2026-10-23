@@ -31,28 +31,17 @@ export type Config = {
    *  to read instead). The zero-config default is BNB Chain's own public RPC: deposits work on it,
    *  address lookups report that an Alchemy URL is needed, never an empty wallet. */
   bnbRpcUrl: string;
-  /** Robinhood Chain's own official Blockscout instance (robinhoodchain.blockscout.com) -- the same
-   *  zero-key `/api/v2` shape as ethBlockscoutUrl, one instance per chain. Deliberately the per-chain
-   *  instance, not Blockscout's keyed multichain aggregator (api.blockscout.com). */
-  robinhoodBlockscoutUrl: string;
-  /** Never logged. Robinhood Chain JSON-RPC, used for bounty-deposit verification. The chain runs its
-   *  own public RPC (rate-limited, no key), so this has the same zero-config-with-override shape as
-   *  bnbRpcUrl rather than ethRpcUrl's null default. */
+  /** Never logged. Robinhood Chain JSON-RPC: bounty-deposit verification, and -- when it's an Alchemy
+   *  URL -- address history and balances through Alchemy's enhanced API (chain/alchemy.ts). The
+   *  chain's own Blockscout instance can't be read instead: it answers every scripted request with a
+   *  Cloudflare challenge. The default is the chain's own public RPC (rate-limited, no key): deposits
+   *  work on it, address lookups report that an Alchemy URL is needed, never an empty wallet. */
   robinhoodRpcUrl: string;
-  /** Base's history/balance source: a Blockscout v2 API, the same shape `ethBlockscoutUrl` serves,
-   *  read by the same BlockscoutProvider. Defaults to Blockscout's hosted PRO API for chain 8453,
-   *  because Base's own per-instance explorer (base.blockscout.com) answers every non-browser API
-   *  call with a Cloudflare bot challenge (HTTP 403, checked 2026-10-23), and Etherscan's V2 API --
-   *  BaseScan -- refuses Base on its free tier ("Paid Plan required" in its own /v2/chainlist). The
-   *  PRO API's free tier needs only a free key (`blockscoutApiKey`); BASE_BLOCKSCOUT_URL can point
-   *  this at any other Blockscout instance instead (e.g. a self-hosted one, which needs no key). */
-  baseBlockscoutUrl: string;
-  /** Never logged. Blockscout PRO API key (free tier, no card needed). Only ever sent to
-   *  api.blockscout.com; without it a PRO-API-backed chain reports the key as missing, never empty. */
-  blockscoutApiKey: string | null;
-  /** Never logged. Base JSON-RPC, used for bounty-deposit verification. Unlike Ethereum, Base runs
-   *  an official public endpoint (rate-limited, "not for production" per Base's own docs -- fine for
-   *  occasional deposit checks), so this defaults to it with the same override shape as solanaRpcUrl. */
+  /** Never logged. Base JSON-RPC: bounty-deposit verification, and -- when it's an Alchemy URL --
+   *  address history and balances through Alchemy's enhanced API (chain/alchemy.ts). base.blockscout.com
+   *  challenges every server-side call (HTTP 403, checked 2026-10-23) and Etherscan's free plan refuses
+   *  Base. The default is Base's official public endpoint ("not for production" per Base's own docs --
+   *  fine for occasional deposit checks): address lookups on it report that an Alchemy URL is needed. */
   baseRpcUrl: string;
   /** Bitcoin bounty-deposit verification source (an Esplora-API block explorer, no key needed) --
    *  Blockstream.info by default; mempool.space speaks the same API and can be swapped in via
@@ -81,11 +70,8 @@ export const DEFAULT_SOLANA_RPC = "https://api.mainnet-beta.solana.com";
 export const DEFAULT_BNB_RPC = "https://bsc-dataseed.bnbchain.org";
 /** Robinhood Chain's own public mainnet RPC (chain id 4663, no key, rate-limited). */
 export const DEFAULT_ROBINHOOD_RPC = "https://rpc.mainnet.chain.robinhood.com";
-export const DEFAULT_ROBINHOOD_BLOCKSCOUT = "https://robinhoodchain.blockscout.com";
 /** Base's own official public RPC (chain id 8453, no key). */
 export const DEFAULT_BASE_RPC = "https://mainnet.base.org";
-/** Blockscout's hosted multichain API, Base mainnet's chain id in the path. */
-export const DEFAULT_BASE_BLOCKSCOUT_URL = "https://api.blockscout.com/8453";
 
 const bool = (v: string | undefined, dflt: boolean) => {
   if (v === undefined || v === "") return dflt;
@@ -149,7 +135,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
 
   const solscanApiKey = env.SOLSCAN_API_KEY?.trim() || null;
-  const blockscoutApiKey = env.BLOCKSCOUT_API_KEY?.trim() || null;
 
   const origins = (env.ALLOWED_ORIGINS ?? "http://127.0.0.1:5301,http://localhost:5301")
     .split(",")
@@ -174,10 +159,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     solscanApiKey,
     ethBlockscoutUrl: (env.ETH_BLOCKSCOUT_URL ?? "https://eth.blockscout.com").replace(/\/$/, ""),
     bnbRpcUrl,
-    robinhoodBlockscoutUrl: (env.ROBINHOOD_BLOCKSCOUT_URL ?? DEFAULT_ROBINHOOD_BLOCKSCOUT).replace(/\/$/, ""),
     robinhoodRpcUrl,
-    baseBlockscoutUrl: (env.BASE_BLOCKSCOUT_URL ?? DEFAULT_BASE_BLOCKSCOUT_URL).replace(/\/$/, ""),
-    blockscoutApiKey,
     baseRpcUrl,
     esploraUrl: (env.ESPLORA_URL ?? "https://blockstream.info").replace(/\/$/, ""),
     defillamaUrl: (env.DEFILLAMA_URL ?? "https://coins.llama.fi").replace(/\/$/, ""),

@@ -28,27 +28,17 @@ calls. The default (`https://bsc-dataseed.bnbchain.org`, no key) is enough for d
 it, BNB address lookups report that `BNB_RPC_URL` needs to be an Alchemy URL, as a provider error --
 never as an empty wallet. The provider checks `eth_chainId` is 56 before reading anything.
 
-**Robinhood Chain** (EVM chain id 4663) needs no key: it's read through the same Blockscout provider
-as Ethereum, pointed at the chain's own official instance (`ROBINHOOD_BLOCKSCOUT_URL`, default
-`https://robinhoodchain.blockscout.com`), and its deposits are checked over its own public RPC
-(`ROBINHOOD_RPC_URL`, default `https://rpc.mainnet.chain.robinhood.com`). Its gas token is ETH, so
-its rows are stored under chain `robinhood` and its tokens priced under DefiLlama's `robinhood:`
-key -- never as Ethereum mainnet's. Caveat, checked 2026-10-23: that instance's `/api/v2` answered
-every scripted (non-browser) request with a Cloudflare challenge (HTTP 403, `cf-mitigated:
-challenge`), while eth.blockscout.com didn't. Lookups then report "blockscout-robinhood returned HTTP
-403" as the provider error -- never an empty wallet -- until it lifts or the URL points elsewhere.
-Deposit checks don't depend on it (they use the RPC).
-
-**Base** (EVM chain id 8453) needs a free key. Its own Blockscout instance (base.blockscout.com) hits
-the same Cloudflare challenge for every scripted request (checked 2026-10-23), and Etherscan's free
-plan refuses Base ("Paid Plan required" in its own `/v2/chainlist`), so Base is read through
-Blockscout's hosted multichain PRO API (`BASE_BLOCKSCOUT_URL`, default
-`https://api.blockscout.com/8453`) -- the same `/api/v2` shape, the same Blockscout provider -- with a
-free `BLOCKSCOUT_API_KEY` from dev.blockscout.com (no card). The key is only ever sent to
-api.blockscout.com; without it, health and every Base lookup report that it's missing -- never an
-empty wallet. Deposit checks use Base's own public RPC (`BASE_RPC_URL`, default
-`https://mainnet.base.org`) and are pinned to chain id 8453. Gas on Base is ETH, so its rows are
-stored under chain `base` and its tokens priced under DefiLlama's `base:` key.
+**Robinhood Chain** (EVM chain id 4663) and **Base** (8453) are read the same way as BNB: through
+`src/chain/alchemy.ts` on their own RPC URLs (`ROBINHOOD_RPC_URL`, `BASE_RPC_URL`), which need to be
+Alchemy URLs for address lookups. Their own Blockscout instances (robinhoodchain.blockscout.com,
+base.blockscout.com) answered every scripted request with a Cloudflare challenge (HTTP 403,
+`cf-mitigated: challenge`, checked 2026-10-23), and Etherscan's free plan refuses Base. The keyless
+defaults (`https://rpc.mainnet.chain.robinhood.com`, `https://mainnet.base.org`) are enough for
+deposit checks, which use plain `eth_*` calls and are pinned to each chain's id. Gas on both is ETH,
+so their rows are stored under chains `robinhood` / `base` and their tokens priced under DefiLlama's
+`robinhood:` / `base:` keys -- never as Ethereum mainnet's. Alchemy serves internal (trace)
+transfers on Base only, so Robinhood Chain's (and BNB's) history covers top-level native transfers
+and token transfers, not native value moved by internal calls.
 
 **`DEV_SKIP_AUTH=1`**: local dev only, treats every request as signed in as a fixed fake user
 (no wallet, no cookie needed) so every feature can be driven without going through the real

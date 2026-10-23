@@ -2,15 +2,43 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { buildApp } from "../src/app.ts";
+import { AlchemyProvider } from "../src/chain/alchemy.ts";
 import { TransferStore } from "../src/chain/store.ts";
 import { loadConfig } from "../src/config.ts";
-import { ETH_A, ETH_B, ETH_C, ethTransfer, FakeProvider, makeApp, signup, SOL_A, type Client, type TestApp } from "./helpers.ts";
+import { openDb } from "../src/db/index.ts";
+import { budgetMs } from "../src/lib/http.ts";
+import { alchemyFetch, ETH_A, ETH_B, ETH_C, ethTransfer, FakeProvider, makeApp, signup, SOL_A, type Client, type TestApp } from "./helpers.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
 /** A transfer on Base: same EVM shape as `ethTransfer`, stamped with Base's chain id. */
 const baseTransfer = (from: string, to: string, blockTime: number, opts: Parameters<typeof ethTransfer>[3] = {}) => ethTransfer(from, to, blockTime, { chain: "base", ...opts });
+
+describe("Base provider wiring", () => {
+  it("buildApp reads Base through AlchemyProvider on BASE_RPC_URL, checked against chain id 8453, internal transfers included", async () => {
+    const url = "https://base-mainnet.g.alchemy.test/v2/k";
+    const config = { ...loadConfig({ NODE_ENV: "test", BASE_RPC_URL: url } as NodeJS.ProcessEnv), dbPath: ":memory:" };
+    const urls: string[] = [];
+    const bodies: any[] = [];
+    const inner = alchemyFetch("0x2105", urls);
+    const fetchImpl = (async (u: string, init?: RequestInit) => (bodies.push(JSON.parse(String(init!.body))), inner(u, init))) as unknown as typeof fetch;
+    const { app, ctx } = await buildApp(config, { db: openDb(":memory:"), fetchImpl, logger: false });
+    try {
+      const p = ctx.providers.base;
+      expect(p).toBeInstanceOf(AlchemyProvider);
+      expect(p).toMatchObject({ chain: "base", id: "alchemy-base", name: "Alchemy (Base)" });
+      const page = await p.fetchStreamPage(ETH_A, "incoming", null, budgetMs(5000));
+      expect(page.transfers[0]).toMatchObject({ chain: "base", tokenSymbol: "ETH", priceCoin: "coingecko:ethereum" });
+      expect(urls.every((u) => u === url)).toBe(true);
+      // Base is the one of the three where Alchemy serves internal (trace) transfers.
+      expect(bodies.find((b) => b.method === "alchemy_getAssetTransfers").params[0].category).toContain("internal");
+    } finally {
+      await app.close();
+    }
+  });
+});
 
 describe("Base as a first-class chain", () => {
   let t: TestApp;
@@ -27,11 +55,11 @@ describe("Base as a first-class chain", () => {
   });
   afterEach(async () => t.close());
 
-  it("config: zero-config defaults to Base's public RPC and Blockscout's PRO API, both overridable", () => {
+  it("config: zero-config defaults to Base's public RPC (lookups need it to be an Alchemy URL), overridable", () => {
     const d = loadConfig({ NODE_ENV: "test" } as NodeJS.ProcessEnv);
-    expect(d).toMatchObject({ baseRpcUrl: "https://mainnet.base.org", baseBlockscoutUrl: "https://api.blockscout.com/8453", blockscoutApiKey: null });
-    const o = loadConfig({ NODE_ENV: "test", BASE_RPC_URL: " https://base.rpc.example ", BASE_BLOCKSCOUT_URL: "https://bs.example/", BLOCKSCOUT_API_KEY: " proapi_x " } as NodeJS.ProcessEnv);
-    expect(o).toMatchObject({ baseRpcUrl: "https://base.rpc.example", baseBlockscoutUrl: "https://bs.example", blockscoutApiKey: "proapi_x" });
+    expect(d.baseRpcUrl).toBe("https://mainnet.base.org");
+    const o = loadConfig({ NODE_ENV: "test", BASE_RPC_URL: " https://base.rpc.example " } as NodeJS.ProcessEnv);
+    expect(o.baseRpcUrl).toBe("https://base.rpc.example");
   });
 
   it("transfers and counterparties for a Base address come from the Base provider, never Ethereum's", async () => {

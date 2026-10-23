@@ -193,8 +193,8 @@ const pageTimes = (items: { timestamp: string | null }[]) => {
 /** Blockscout's hosted multichain "PRO API" host (`https://api.blockscout.com/<chain id>/api/v2/...`).
  *  Its docs say the `apikey` param is "required on every tier, including free" -- a keyless call is
  *  answered 402 -- so a provider pointed here without a key refuses up front with a message that
- *  says what's missing, instead of surfacing an opaque "HTTP 402" from every lookup. It's how Base is
- *  read (config.ts's baseBlockscoutUrl): base.blockscout.com itself challenges every server-side call. */
+ *  says what's missing, instead of surfacing an opaque "HTTP 402" from every lookup. (Base was read this
+ *  way until it moved to AlchemyProvider, chain/alchemy.ts; no chain is wired to the PRO API now.) */
 const BLOCKSCOUT_PRO_HOST = "api.blockscout.com";
 
 export type BlockscoutOptions = {
@@ -203,8 +203,9 @@ export type BlockscoutOptions = {
   apiKey?: string | null;
 };
 
-/** One per EVM chain that has its own Blockscout instance (eth.blockscout.com for Ethereum,
- *  robinhoodchain.blockscout.com for Robinhood Chain, the PRO API's /8453 for Base) -- `chain` says
+/** One per EVM chain read through a Blockscout instance -- today only Ethereum (eth.blockscout.com).
+ *  Robinhood Chain and Base used it too, until their own instances started answering every scripted
+ *  request with a Cloudflare challenge; they read AlchemyProvider now (chain/alchemy.ts). `chain` says
  *  which chain its rows belong to, and defaults to Ethereum so existing callers keep their meaning. */
 export class BlockscoutProvider implements ChainProvider {
   readonly chain: Chain;

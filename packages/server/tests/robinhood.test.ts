@@ -1,104 +1,52 @@
-// Robinhood Chain (EVM chain id 4663) as its own chain: the shared Blockscout provider pointed at
-// its own instance, the per-chain pricing keys, every route that validates a (chain, address), and
-// the migration that widens the two chain CHECKs.
-//
-// The Blockscout bodies below are hand-built in the exact /api/v2 shape the recorded Ethereum
-// fixtures use (tests/fixtures/blockscout/), not recordings: robinhoodchain.blockscout.com's API
-// answered every scripted request with a Cloudflare challenge (HTTP 403, `cf-mitigated: challenge`)
-// when this was written, so there was nothing real to record. The token is the real USDG contract.
+// Robinhood Chain (EVM chain id 4663) as its own chain: read through AlchemyProvider on its own RPC
+// URL (chain/alchemy.ts, tested in alchemy.test.ts), the per-chain pricing keys, every route that
+// validates a (chain, address), and the migration that widens the two chain CHECKs. Its own Blockscout
+// instance (robinhoodchain.blockscout.com) isn't used: its API answered every scripted request with a
+// Cloudflare challenge (HTTP 403, `cf-mitigated: challenge`). The token below is the real USDG contract.
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { BlockscoutProvider } from "../src/chain/ethereum.ts";
+import { buildApp } from "../src/app.ts";
+import { AlchemyProvider } from "../src/chain/alchemy.ts";
 import { LLAMA_CHAIN_PREFIX, NATIVE_COIN } from "../src/chain/prices.ts";
 import { TransferStore } from "../src/chain/store.ts";
 import { loadConfig } from "../src/config.ts";
-import { Db } from "../src/db/index.ts";
+import { Db, openDb } from "../src/db/index.ts";
 import { budgetMs } from "../src/lib/http.ts";
-import { ProviderError } from "../src/lib/errors.ts";
-import { ETH_A, ETH_B, ethTransfer, makeApp, signup, type Client, type TestApp } from "./helpers.ts";
+import { alchemyFetch, ETH_A, ETH_B, ethTransfer, makeApp, signup, type Client, type TestApp } from "./helpers.ts";
 
 const USDG = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168";
-const BASE = "https://robinhoodchain.blockscout.test";
 const HASH = `0x${"1".repeat(64)}`;
-const TS = "2026-10-20T12:00:00.000000Z";
 
-const page = (items: unknown[]) => ({ items, next_page_params: null });
-const bsTx = { hash: HASH, block_number: 9_000_000, timestamp: TS, from: { hash: ETH_A.toLowerCase() }, to: { hash: ETH_B.toLowerCase() }, value: "250000000000000000", status: "ok" };
-const bsTokenTransfer = {
-  transaction_hash: HASH,
-  log_index: 3,
-  block_number: 9_000_000,
-  timestamp: TS,
-  from: { hash: ETH_A },
-  to: { hash: ETH_B },
-  token: { address_hash: USDG.toLowerCase(), decimals: "6", name: "Global Dollar", symbol: "USDG", type: "ERC-20" },
-  total: { decimals: "6", value: "12500000" },
-};
-
-/** Answers only at BASE -- a request that went to eth.blockscout.com (or anywhere else) fails the test. */
-function robinhoodBlockscout(urls: string[]): typeof fetch {
-  return (async (input: string | URL) => {
-    const url = String(input);
-    urls.push(url);
-    if (!url.startsWith(`${BASE}/api/v2/`)) return new Response("wrong host", { status: 418 });
-    const path = new URL(url).pathname;
-    const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
-    if (path.endsWith("/transactions")) return json(page([bsTx]));
-    if (path.endsWith("/token-transfers")) return json(page([bsTokenTransfer]));
-    if (path.endsWith("/internal-transactions")) return json(page([]));
-    if (path.endsWith("/token-balances")) return json([{ token: bsTokenTransfer.token, token_id: null, value: "40000000" }]);
-    if (path === `/api/v2/addresses/${ETH_A}`) return json({ hash: ETH_A, coin_balance: "1500000000000000000", is_contract: false });
-    return new Response("not found", { status: 404 });
-  }) as typeof fetch;
-}
-
-describe("Robinhood Chain via its own Blockscout instance", () => {
-  it("stores rows under chain robinhood: native as ETH priced off Ethereum's ETH, tokens under DefiLlama's robinhood key", async () => {
+describe("Robinhood Chain provider", () => {
+  it("buildApp reads Robinhood Chain through AlchemyProvider on ROBINHOOD_RPC_URL, checked against chain id 4663, rows tagged robinhood / ETH", async () => {
+    const url = "https://robinhood-mainnet.g.alchemy.test/v2/k";
+    const config = { ...loadConfig({ NODE_ENV: "test", ROBINHOOD_RPC_URL: url } as NodeJS.ProcessEnv), dbPath: ":memory:" };
     const urls: string[] = [];
-    const p = new BlockscoutProvider(BASE, robinhoodBlockscout(urls), "robinhood");
-    expect(p.chain).toBe("robinhood");
-    expect(p.id).toBe("blockscout-robinhood");
-    expect(p.name).toBe("Blockscout (robinhoodchain.blockscout.test)");
-
-    const native = await p.fetchStreamPage(ETH_A.toLowerCase(), "transactions", null, budgetMs(5000));
-    expect(urls[0]).toBe(`${BASE}/api/v2/addresses/${ETH_A}/transactions`);
-    expect(native.transfers).toEqual([
-      expect.objectContaining({ chain: "robinhood", id: `${HASH}_t0`, from: ETH_A, to: ETH_B, tokenId: "native", tokenSymbol: "ETH", amountRaw: "250000000000000000", priceCoin: "coingecko:ethereum" }),
-    ]);
-
-    const tokens = await p.fetchStreamPage(ETH_A, "token-transfers", null, budgetMs(5000));
-    expect(tokens.transfers).toEqual([
-      expect.objectContaining({ chain: "robinhood", id: `${HASH}_3`, tokenId: USDG, tokenSymbol: "USDG", tokenDecimals: 6, tokenStandard: "erc20", priceCoin: `robinhood:${USDG}` }),
-    ]);
-
-    const balances = await p.fetchBalances(ETH_A, budgetMs(5000));
-    expect(balances).toEqual([
-      expect.objectContaining({ tokenId: "native", symbol: "ETH", amountRaw: "1500000000000000000", priceCoin: "coingecko:ethereum" }),
-      expect.objectContaining({ tokenId: USDG, symbol: "USDG", decimals: 6, amountRaw: "40000000", priceCoin: `robinhood:${USDG}` }),
-    ]);
-    // Every request went to Robinhood Chain's own instance.
-    expect(urls.every((u) => u.startsWith(BASE))).toBe(true);
+    const { app, ctx } = await buildApp(config, { db: openDb(":memory:"), fetchImpl: alchemyFetch("0x1237", urls), logger: false });
+    try {
+      const p = ctx.providers.robinhood;
+      expect(p).toBeInstanceOf(AlchemyProvider);
+      expect(p).toMatchObject({ chain: "robinhood", id: "alchemy-robinhood", name: "Alchemy (Robinhood Chain)" });
+      const page = await p.fetchStreamPage(ETH_A, "outgoing", null, budgetMs(5000));
+      // ETH on Robinhood Chain, priced off Ethereum's ETH -- but stored under chain robinhood.
+      expect(page.transfers[0]).toMatchObject({ chain: "robinhood", tokenSymbol: "ETH", tokenName: "Ether", priceCoin: "coingecko:ethereum" });
+      expect(urls.every((u) => u === url)).toBe(true);
+      expect(await p.ping()).toEqual({ ok: true });
+    } finally {
+      await app.close();
+    }
   });
 
-  it("the Ethereum provider is unchanged by the new parameter: chain, id and price keys stay Ethereum's", async () => {
-    const p = new BlockscoutProvider(BASE, robinhoodBlockscout([]));
-    expect(p.chain).toBe("ethereum");
-    expect(p.id).toBe("blockscout");
-    const tokens = await p.fetchStreamPage(ETH_A, "token-transfers", null, budgetMs(5000));
-    expect(tokens.transfers[0]).toMatchObject({ chain: "ethereum", priceCoin: `ethereum:${USDG}` });
-  });
-
-  it("a Cloudflare challenge page (what the instance served scripted clients when this was written) is a provider error naming the chain's instance, never a URL", async () => {
-    const challenge = (async () =>
-      new Response("<!DOCTYPE html><title>Just a moment...</title>", { status: 403, headers: { "content-type": "text/html", "cf-mitigated": "challenge" } })) as unknown as typeof fetch;
-    const p = new BlockscoutProvider(BASE, challenge, "robinhood");
-    const err = await p.fetchStreamPage(ETH_A, "transactions", null, budgetMs(5000)).catch((e) => e);
-    expect(err).toBeInstanceOf(ProviderError);
-    expect(err.message).toBe("blockscout-robinhood returned HTTP 403");
-    expect(err.message).not.toContain("blockscout.test");
-    expect((await p.ping()).ok).toBe(false);
+  it("an RPC on another chain is refused before any Robinhood Chain row is read", async () => {
+    const config = { ...loadConfig({ NODE_ENV: "test", ROBINHOOD_RPC_URL: "https://eth-mainnet.g.alchemy.test/v2/k" } as NodeJS.ProcessEnv), dbPath: ":memory:" };
+    const { app, ctx } = await buildApp(config, { db: openDb(":memory:"), fetchImpl: alchemyFetch("0x1"), logger: false });
+    try {
+      await expect(ctx.providers.robinhood.fetchStreamPage(ETH_A, "incoming", null, budgetMs(5000))).rejects.toThrow("ROBINHOOD_RPC_URL answers for chain id 1, not Robinhood Chain's 4663 -- check the URL");
+    } finally {
+      await app.close();
+    }
   });
 
   it("stored rows price per chain: a robinhood native transfer is ETH, never SOL; its tokens never price as Ethereum mainnet's", () => {
@@ -112,13 +60,11 @@ describe("Robinhood Chain via its own Blockscout instance", () => {
 });
 
 describe("Robinhood Chain config", () => {
-  it("zero-config defaults to the chain's own public RPC and per-chain Blockscout instance; env vars override", () => {
+  it("zero-config defaults to the chain's own public RPC (lookups need it to be an Alchemy URL); env var overrides", () => {
     const d = loadConfig({ NODE_ENV: "test" } as NodeJS.ProcessEnv);
     expect(d.robinhoodRpcUrl).toBe("https://rpc.mainnet.chain.robinhood.com");
-    expect(d.robinhoodBlockscoutUrl).toBe("https://robinhoodchain.blockscout.com");
-    const o = loadConfig({ NODE_ENV: "test", ROBINHOOD_RPC_URL: " https://rh-rpc.example/key ", ROBINHOOD_BLOCKSCOUT_URL: "https://rh-explorer.example/" } as NodeJS.ProcessEnv);
+    const o = loadConfig({ NODE_ENV: "test", ROBINHOOD_RPC_URL: " https://rh-rpc.example/key " } as NodeJS.ProcessEnv);
     expect(o.robinhoodRpcUrl).toBe("https://rh-rpc.example/key");
-    expect(o.robinhoodBlockscoutUrl).toBe("https://rh-explorer.example");
   });
   it("deposit settings: no Robinhood Chain wallet unless configured; USDG is the default token, extended (never replaced) by env", () => {
     const d = loadConfig({ NODE_ENV: "test" } as NodeJS.ProcessEnv);

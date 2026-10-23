@@ -66,15 +66,19 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
   if (config.devSkipAuth) ensureDevUser(db); // local dev only -- config.ts refuses this when production is true
   const providers: Record<Chain, ChainProvider> = {
     ethereum: o.providers?.ethereum ?? new BlockscoutProvider(config.ethBlockscoutUrl, o.fetchImpl),
-    // Same provider class as Ethereum, its own chain's Blockscout instance: Robinhood Chain speaks the
-    // identical /api/v2 shape, and the "robinhood" argument is what keeps its rows (and their token
-    // prices) from being stored as Ethereum mainnet's.
-    robinhood: o.providers?.robinhood ?? new BlockscoutProvider(config.robinhoodBlockscoutUrl, o.fetchImpl, "robinhood"),
-    // BNB Chain through Alchemy's enhanced API on its own RPC URL: Etherscan V2 (the only other hosted
-    // BSC indexer this used) refuses chain 56 on its free tier.
+    // BNB Chain, Robinhood Chain and Base through Alchemy's enhanced API, each on its own RPC URL (the
+    // one its deposit checks use too). Their hosted indexers can't be read server-side: Etherscan V2
+    // refuses chain 56 on its free tier, and Robinhood Chain's and Base's own Blockscout instances
+    // answer every scripted request with a Cloudflare challenge. Robinhood Chain and Base pay gas in
+    // ETH; the chain each provider is built with keeps their rows (and token prices) apart from
+    // Ethereum mainnet's. Alchemy serves internal (trace) transfers on Base only.
+    robinhood:
+      o.providers?.robinhood ??
+      new AlchemyProvider({ chain: "robinhood", chainId: 4663, nativeSymbol: "ETH", nativeName: "Ether", rpcUrl: config.robinhoodRpcUrl, rpcEnv: "ROBINHOOD_RPC_URL", fetchImpl: o.fetchImpl }),
     bnb: o.providers?.bnb ?? new AlchemyProvider({ chain: "bnb", chainId: 56, nativeSymbol: "BNB", nativeName: "BNB", rpcUrl: config.bnbRpcUrl, rpcEnv: "BNB_RPC_URL", fetchImpl: o.fetchImpl }),
-    // Base too, read through Blockscout's hosted PRO API (which needs the free key -- see config.ts).
-    base: o.providers?.base ?? new BlockscoutProvider(config.baseBlockscoutUrl, o.fetchImpl, "base", { apiKey: config.blockscoutApiKey }),
+    base:
+      o.providers?.base ??
+      new AlchemyProvider({ chain: "base", chainId: 8453, nativeSymbol: "ETH", nativeName: "Ether", rpcUrl: config.baseRpcUrl, rpcEnv: "BASE_RPC_URL", internal: true, fetchImpl: o.fetchImpl }),
     solana:
       o.providers?.solana ??
       new SolanaRpcProvider(config.solanaRpcUrl, config.solanaRpcCustom, o.fetchImpl, {

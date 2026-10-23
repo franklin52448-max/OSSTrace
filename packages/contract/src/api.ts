@@ -252,7 +252,7 @@ export type BountyAsset = "native" | { contract: string };
  *  trace Bitcoin addresses, so it must never leak into `Chain`. A Bitcoin deposit has no
  *  sender-ownership check (no BTC wallet-connect standard to sign in with, no single clean
  *  "sender" per tx) -- its `fromAddress` is display-only, see server chain/deposits.ts. */
-export type DepositChain = Exclude<Chain, "robinhood"> | "bitcoin";
+export type DepositChain = Chain | "bitcoin";
 export type BountyDeposit = {
   id: string;
   chain: DepositChain;
@@ -285,7 +285,7 @@ export type Bounty = {
   deposits: BountyDeposit[];
 };
 export type CreateBounty = { title: string; description: string; reward: string };
-export type BountyWallets = { ethereum?: string; solana?: string; bnb?: string; bitcoin?: string };
+export type BountyWallets = { ethereum?: string; solana?: string; bnb?: string; robinhood?: string; bitcoin?: string };
 // GET /api/bounties/wallets -> BountyWallets (public config; a chain missing means it's not configured)
 // GET /api/bounties -> Bounty[] (no auth -- "anyone can browse"); GET /api/bounties/:id -> Bounty
 // POST /api/bounties (CreateBounty) -> Bounty
@@ -294,8 +294,8 @@ export type BountyWallets = { ethereum?: string; solana?: string; bnb?: string; 
 // POST /api/bounties/:id/cancel {reason} -> Bounty (opener only)
 // POST /api/bounties/:id/deposits {chain: DepositChain, txRef} -> BountyDeposit (any signed-in user; the
 //   real on-chain payment is independently verified server-side, not trusted from the request. For
-//   ethereum/solana/bnb the caller's own signed-in wallet must be the tx's sender -- for bnb that's an
-//   "ethereum"-signed-in wallet, the same key and address; for bitcoin (paste-a-txid only) there is no
+//   ethereum/solana/bnb/robinhood the caller's own signed-in wallet must be the tx's sender -- for bnb and
+//   robinhood that's an "ethereum"-signed-in wallet, the same key and address; for bitcoin (paste-a-txid only) there is no
 //   sender check -- any signed-in user can record a verified payment to the wallet)
 
 export type HealthResponse = { ok: true; version: string; chains: ChainStatus[]; /** false when ALLOW_SIGNUP=false; clients treat undefined as true */ allowSignup?: boolean };

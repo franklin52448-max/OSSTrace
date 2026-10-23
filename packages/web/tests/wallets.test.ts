@@ -176,6 +176,22 @@ test("switchEvmNetwork: refuses to go on when the wallet says yes but stays on t
   await assert.rejects(switchEvmNetwork(w, "bnb"), /switch it to BNB Smart Chain/);
 });
 
+test("switchEvmNetwork: a mainnet wallet is moved to Robinhood Chain (4663 = 0x1237), adding it with the chain's own RPC/explorer if unknown -- both chains say ETH, so only the chain id tells them apart", async () => {
+  const { switchEvmNetwork } = await import("../src/wallets.ts");
+  const w = new NetworkWallet("0x1");
+  await switchEvmNetwork(w, "robinhood");
+  assert.equal(BigInt(w.chainId), 4663n);
+  const add = w.calls.find((c) => c.method === "wallet_addEthereumChain")?.params?.[0] as { chainId: string; nativeCurrency: { symbol: string; decimals: number }; rpcUrls: string[]; blockExplorerUrls: string[] };
+  assert.equal(add.chainId, "0x1237");
+  assert.deepEqual(add.nativeCurrency, { name: "Ether", symbol: "ETH", decimals: 18 });
+  assert.deepEqual(add.rpcUrls, ["https://rpc.mainnet.chain.robinhood.com"]);
+  assert.deepEqual(add.blockExplorerUrls, ["https://robinhoodchain.blockscout.com"]);
+  // And back: an Ethereum deposit after it must not be sent on Robinhood Chain.
+  await switchEvmNetwork(w, "ethereum");
+  assert.equal(w.chainId, "0x1");
+  await assert.rejects(switchEvmNetwork(new NetworkWallet("0x1", ["0x1", "0x1237"], false), "robinhood"), /switch it to Robinhood Chain/);
+});
+
 test("sendEthereumNative: builds a plain value transfer with the exact wei amount, no data field", async () => {
   const { sendEthereumNative } = await import("../src/wallets.ts");
   const provider = new FakeEthereumProvider();

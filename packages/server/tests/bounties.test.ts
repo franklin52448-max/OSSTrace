@@ -624,4 +624,137 @@ describe("bounties", () => {
       expect(c.depositAllowedTokens.ethereum.has(USDT_BSC)).toBe(false);
     });
   });
+
+  describe("Robinhood Chain deposits (the same EVM verifier, on the chain's own public RPC)", () => {
+    const RH_RPC = "https://rpc.mainnet.chain.robinhood.com"; // config's zero-config default
+    const RH_WALLET = "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB";
+    const USDG = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168"; // the real USDG contract on Robinhood Chain
+    const MAINNET_USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+    const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+    const topic = (addr: string) => `0x${"0".repeat(24)}${addr.slice(2).toLowerCase()}`;
+    const amountData = (raw: bigint) => `0x${raw.toString(16).padStart(64, "0")}`;
+    const wallet = new Wallet("0x" + "7".repeat(64));
+    const HASH = `0x${"9".repeat(64)}`;
+
+    type RpcTx = { to: string | null; from: string; value: string; blockNumber: string | null };
+    type RpcReceipt = { status: string; logs: { address: string; topics: string[]; data: string }[] };
+    /** JSON-RPC at Robinhood Chain's RPC only. Anything else -- Ethereum's Blockscout, an Ethereum RPC,
+     *  Robinhood Chain's own Blockscout -- answers 418, so a request routed to the wrong place can't
+     *  quietly verify. */
+    function rhRpcFetch(opts: { tx?: RpcTx | null; receipt?: RpcReceipt | null; decimals?: number }, seen: string[] = []): typeof fetch {
+      return (async (input: string | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url !== RH_RPC || init?.method !== "POST") return new Response("wrong endpoint", { status: 418 });
+        const { method } = JSON.parse(String(init.body)) as { method: string };
+        seen.push(method);
+        const result =
+          method === "eth_getTransactionByHash" ? (opts.tx ?? null) : method === "eth_getTransactionReceipt" ? (opts.receipt ?? null) : method === "eth_call" ? amountData(BigInt(opts.decimals ?? 18)) : null;
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), { status: 200, headers: { "content-type": "application/json" } });
+      }) as typeof fetch;
+    }
+    const nativeTx = (from: string): RpcTx => ({ to: RH_WALLET.toLowerCase(), from: from.toLowerCase(), value: "0x3782dace9d900000" /* 4 ETH */, blockNumber: "0x89" });
+    const ok: RpcReceipt = { status: "0x1", logs: [] };
+    const tokenReceipt = (token: string, from: string, raw: bigint): RpcReceipt => ({ status: "0x1", logs: [{ address: token.toLowerCase(), topics: [TRANSFER_TOPIC, topic(from), topic(RH_WALLET)], data: amountData(raw) }] });
+    const tokenTx = (from: string, token: string): RpcTx => ({ to: token.toLowerCase(), from: from.toLowerCase(), value: "0x0", blockNumber: "0x89" });
+
+    const app = (fetchImpl: typeof fetch, over: Partial<Config> = {}) =>
+      makeBountyApp(fetchImpl, new FakeProvider("ethereum"), new FakeProvider("solana"), { depositWallets: { ethereum: ETH_WALLET, robinhood: RH_WALLET }, ...over });
+
+    it("records native ETH on Robinhood Chain for the Ethereum-signed-in sender, as chain robinhood, and lists the wallet", async () => {
+      const seen: string[] = [];
+      const { app: a, close } = await app(rhRpcFetch({ tx: nativeTx(wallet.address), receipt: ok }, seen));
+      try {
+        expect((await new Client(a).get("/api/bounties/wallets")).json()).toEqual({ ethereum: ETH_WALLET, robinhood: RH_WALLET });
+        const u = await signupEthereum(a, wallet);
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH.toUpperCase().replace("0X", "0x") });
+        expect(r.statusCode).toBe(201);
+        expect(r.json()).toMatchObject({ chain: "robinhood", asset: "native", amount: "4", txRef: HASH, toWallet: RH_WALLET });
+        expect(seen).toEqual(expect.arrayContaining(["eth_getTransactionByHash", "eth_getTransactionReceipt"]));
+        // The same payment again (any casing) is a replay; the bounty shows it under Robinhood Chain.
+        expect((await u.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH })).statusCode).toBe(409);
+        expect((await u.get(`/api/bounties/${b.id}`)).json().deposits).toEqual([expect.objectContaining({ chain: "robinhood", asset: "native" })]);
+      } finally {
+        await close();
+      }
+    });
+
+    it("records USDG at its real on-chain decimals (6, read via decimals())", async () => {
+      const { app: a, close } = await app(rhRpcFetch({ tx: tokenTx(wallet.address, USDG), receipt: tokenReceipt(USDG, wallet.address, 25_000_000n), decimals: 6 }));
+      try {
+        const u = await signupEthereum(a, wallet);
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH });
+        expect(r.statusCode).toBe(201);
+        expect(r.json()).toMatchObject({ chain: "robinhood", asset: { contract: USDG.toLowerCase() }, amount: "25" });
+      } finally {
+        await close();
+      }
+    });
+
+    it("Ethereum's allowlist doesn't carry over: a token at mainnet USDC's address is not a tracked asset on Robinhood Chain", async () => {
+      const { app: a, close } = await app(rhRpcFetch({ tx: tokenTx(wallet.address, MAINNET_USDC), receipt: tokenReceipt(MAINNET_USDC, wallet.address, 5_000_000n), decimals: 6 }));
+      try {
+        const u = await signupEthereum(a, wallet);
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH });
+        expect(r.statusCode).toBe(400);
+        expect(r.json().error.message).toBe("That transaction pays the right wallet, but not in an asset this server tracks for Robinhood Chain deposits (native ETH or USDG)");
+      } finally {
+        await close();
+      }
+    });
+
+    it("the sender must be the caller's own signed-in wallet: another Ethereum account and a Solana account are both refused", async () => {
+      const { app: a, close } = await app(rhRpcFetch({ tx: nativeTx(wallet.address), receipt: ok }));
+      try {
+        const otherEth = await signupEthereum(a, new Wallet("0x" + "8".repeat(64)));
+        const b = (await otherEth.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const r1 = await otherEth.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH });
+        expect(r1.statusCode).toBe(403);
+        const sol = await signup(a, "rh-solana-account");
+        const r2 = await sol.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH });
+        expect(r2.statusCode).toBe(403);
+        expect(r2.json().error.message).toMatch(/wasn't sent from your connected wallet/i);
+        expect((await otherEth.get(`/api/bounties/${b.id}`)).json().deposits).toEqual([]);
+      } finally {
+        await close();
+      }
+    });
+
+    it("a reverted tx, an unknown hash and a malformed hash are each refused with their own message", async () => {
+      const reverted = await app(rhRpcFetch({ tx: nativeTx(wallet.address), receipt: { status: "0x0", logs: [] } }));
+      try {
+        const u = await signupEthereum(reverted.app, wallet);
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        expect((await u.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH })).json().error.message).toBe("That transaction didn't succeed on-chain");
+        const bad = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: "0x1234" });
+        expect(bad.statusCode).toBe(400);
+        expect(bad.json().error.message).toBe("That doesn't look like a real Robinhood Chain transaction hash");
+      } finally {
+        await reverted.close();
+      }
+      const missing = await app(rhRpcFetch({ tx: null, receipt: null }));
+      try {
+        const u = await signupEthereum(missing.app, wallet);
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        expect((await u.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH })).json().error.message).toBe("That transaction wasn't found");
+      } finally {
+        await missing.close();
+      }
+    });
+
+    it("is refused when no Robinhood Chain wallet is configured, even with an Ethereum one set", async () => {
+      const { app: a, close } = await app(rhRpcFetch({ tx: nativeTx(wallet.address), receipt: ok }), { depositWallets: { ethereum: ETH_WALLET } });
+      try {
+        const u = await signupEthereum(a, wallet);
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "robinhood", txRef: HASH });
+        expect(r.statusCode).toBe(400);
+        expect(r.json().error.message).toMatch(/no robinhood deposit wallet/i);
+      } finally {
+        await close();
+      }
+    });
+  });
 });

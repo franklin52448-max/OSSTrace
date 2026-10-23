@@ -7,6 +7,12 @@
 // Unlike Ethereum it always has an RPC -- BNB Chain's own public endpoint is the zero-config default
 // (config.ts's bnbRpcUrl) -- so there is no REST fallback to need.
 //
+// Robinhood Chain is the same again (verifyRobinhoodDeposit): its own public RPC is the default
+// (config.ts's robinhoodRpcUrl), so it never needs its Blockscout instance for this -- which matters,
+// because that instance's API has been seen refusing scripted clients outright. Each chain's deposit
+// is looked up on that chain's own endpoint only, and EIP-155 signatures commit to the chain id, so
+// a mainnet tx hash isn't found on Robinhood Chain's RPC; deposits are deduped per (chain, tx hash).
+//
 // Ethereum has two verification paths now. When a dedicated `ETH_RPC_URL` is configured (see
 // config.ts), deposits are checked via real `eth_getTransactionByHash`/`eth_getTransactionReceipt`
 // JSON-RPC calls -- the same approach the old standalone @osstrace/bounties service originally
@@ -53,6 +59,17 @@ export const DEFAULT_ALLOWED_TOKENS_ETHEREUM = new Set<string>([
 export const DEFAULT_ALLOWED_TOKENS_BNB = new Set<string>([
   "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // USDC (Binance-Peg)
   "0x55d398326f99059fF775485246999027B3197955", // USDT (Binance-Peg BSC-USD)
+]);
+/** Robinhood Chain has no USDC or USDT deployment (neither CoinGecko's `usd-coin`/`tether` entries
+ *  nor DefiLlama's stablecoin tracker list one on it as of 2026-10). Its largest stablecoin is USDG,
+ *  Paxos's Global Dollar -- the address below is the one CoinGecko's `global-dollar` coin lists for
+ *  its `robinhood` platform, DefiLlama's stablecoin tracker counts ~$690M of USDG on "Robinhood
+ *  Chain", DefiLlama's coins API prices `robinhood:<it>` at ~$1.00, and the contract itself, read
+ *  through the chain's own public RPC, answers name() "Global Dollar", symbol() "USDG", decimals() 6
+ *  and a ~690M totalSupply: four independent agreements, not a guess. Anything else (e.g. Ethena's
+ *  USDe, also on the chain) is an operator's call via DEPOSIT_ALLOWED_TOKENS_ROBINHOOD. */
+export const DEFAULT_ALLOWED_TOKENS_ROBINHOOD = new Set<string>([
+  "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", // USDG (Global Dollar)
 ]);
 export const DEFAULT_ALLOWED_TOKENS_SOLANA = new Set<string>([
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
@@ -327,6 +344,15 @@ export async function verifyBnbDeposit(http: HttpClient, bnbRpcUrl: string, txHa
   if (!wallet) return { ok: false, reason: "not_configured" };
   if (!ETH_TX_HASH_FORMAT.test(txHash)) return { ok: false, reason: "malformed_reference" };
   return verifyEvmDepositViaRpc(http, bnbRpcUrl, txHash, wallet, allowedTokens, budget);
+}
+
+/** Robinhood Chain: the same EVM RPC verification, against `robinhoodRpcUrl`, with its own allowlist
+ *  (a contract address only means something on its own chain -- Ethereum's USDC address is nothing
+ *  here, and USDG's here is nothing on mainnet). */
+export async function verifyRobinhoodDeposit(http: HttpClient, robinhoodRpcUrl: string, txHash: string, wallet: string | undefined, allowedTokens: Set<string>, budget: Budget): Promise<DepositVerification> {
+  if (!wallet) return { ok: false, reason: "not_configured" };
+  if (!ETH_TX_HASH_FORMAT.test(txHash)) return { ok: false, reason: "malformed_reference" };
+  return verifyEvmDepositViaRpc(http, robinhoodRpcUrl, txHash, wallet, allowedTokens, budget);
 }
 
 const BTC_TXID_FORMAT = /^[0-9a-fA-F]{64}$/;

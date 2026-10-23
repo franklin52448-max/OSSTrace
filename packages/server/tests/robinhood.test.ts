@@ -120,6 +120,17 @@ describe("Robinhood Chain config", () => {
     expect(o.robinhoodRpcUrl).toBe("https://rh-rpc.example/key");
     expect(o.robinhoodBlockscoutUrl).toBe("https://rh-explorer.example");
   });
+  it("deposit settings: no Robinhood Chain wallet unless configured; USDG is the default token, extended (never replaced) by env", () => {
+    const d = loadConfig({ NODE_ENV: "test" } as NodeJS.ProcessEnv);
+    expect(d.depositWallets.robinhood).toBeUndefined();
+    expect([...d.depositAllowedTokens.robinhood]).toEqual([USDG]);
+    // Ethereum's USDC/USDT never leak into Robinhood Chain's allowlist (or vice versa).
+    expect(d.depositAllowedTokens.robinhood.has("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")).toBe(false);
+    expect(d.depositAllowedTokens.ethereum.has(USDG)).toBe(false);
+    const o = loadConfig({ NODE_ENV: "test", DEPOSIT_WALLET_ROBINHOOD: ` ${ETH_B} `, DEPOSIT_ALLOWED_TOKENS_ROBINHOOD: "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34, " } as NodeJS.ProcessEnv);
+    expect(o.depositWallets.robinhood).toBe(ETH_B);
+    expect([...o.depositAllowedTokens.robinhood]).toEqual([USDG, "0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34"]);
+  });
 });
 
 describe("Robinhood Chain through the API", () => {
@@ -208,6 +219,23 @@ describe("migrations 009/010: widening the labels and bounty_deposits chain CHEC
     // Deleting a label still cascades to its tag links: label_tags' foreign key resolves to the new table.
     db.run("DELETE FROM labels WHERE id = 'l1'");
     expect(db.all("SELECT * FROM label_tags")).toEqual([]);
+    db.close();
+  });
+
+  it("010 keeps every existing deposit (bnb ones too) and its case-insensitive dedupe, then accepts robinhood deposits", () => {
+    const { db, rest } = dbBefore("010");
+    db.run("INSERT INTO bounties (id, status, title, description, reward, opened_by, opened_at) VALUES ('b1', 'open', 'T', 'D', 'R', 'u1', ?)", now);
+    const deposit = (id: string, chain: string, txRef: string) =>
+      db.run("INSERT INTO bounty_deposits (id, bounty_id, chain, amount, tx_ref, from_address, to_wallet, recorded_by, recorded_at) VALUES (?, 'b1', ?, '1', ?, ?, ?, 'u1', ?)", id, chain, txRef, ETH_A, ETH_B, now);
+    deposit("d1", "ethereum", HASH);
+    deposit("db", "bnb", HASH);
+    expect(() => deposit("d2", "robinhood", HASH)).toThrow(/CHECK/);
+
+    rest();
+    expect(db.all<{ id: string }>("SELECT id FROM bounty_deposits").map((r) => r.id).sort()).toEqual(["d1", "db"]);
+    deposit("d2", "robinhood", HASH); // same hash, other chain: a different payment
+    expect(() => deposit("d3", "robinhood", HASH.toUpperCase().replace("0X", "0x"))).toThrow(/UNIQUE/);
+    expect(db.all("PRAGMA foreign_key_check")).toEqual([]);
     db.close();
   });
 });

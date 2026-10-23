@@ -135,3 +135,26 @@ previous-output address, when the explorer resolves it) is display-only. The cos
 watching the public wallet could attach another person's BTC payment to a bounty of their choosing;
 the one-tx-one-bounty rule in §4 still holds, so a payment can't be counted twice. The web UI only
 offers Bitcoin in the "paste the reference" form, never the connect-and-send one.
+
+## Addendum (2026-10-23): Robinhood Chain
+
+Robinhood Chain (EVM chain id 4663, an Arbitrum Orbit L2 whose gas token is ETH) is a full `Chain`
+("robinhood") and takes deposits exactly the way BNB does: `verifyRobinhoodDeposit` runs the shared
+EVM RPC verifier (`verifyEvmDepositViaRpc`) against the chain's own public RPC (`ROBINHOOD_RPC_URL`,
+default `https://rpc.mainnet.chain.robinhood.com`), into `DEPOSIT_WALLET_ROBINHOOD`. It never needs
+the chain's Blockscout instance for this -- useful, since that instance's API has been seen refusing
+scripted clients with a Cloudflare challenge.
+
+- **Allowlist.** Robinhood Chain has no USDC or USDT. Its default allowlist is USDG (Paxos's Global
+  Dollar, `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168`), checked four ways before it went in:
+  CoinGecko's `global-dollar` lists it for the `robinhood` platform, DefiLlama's stablecoin tracker
+  counts ~$690M of USDG on the chain, DefiLlama's coins API prices it at ~$1.00, and the contract
+  itself (via the chain's RPC) answers "Global Dollar"/"USDG"/6 decimals with a matching supply.
+  Ethena's USDe is also on the chain; adding it (or anything else) is an operator call via
+  `DEPOSIT_ALLOWED_TOKENS_ROBINHOOD`.
+- **Sender check.** Applies, against an *Ethereum* sign-in (`DEPOSIT_SIGNER`), for BNB's reason:
+  sign-in verifies an EOA's own personal_sign signature, and an EOA's address comes from its key
+  alone, never the chain id.
+- **Connect-and-send** moves the wallet to chain 4663 first (`switchEvmNetwork`). This matters more
+  here than for BNB: both chains' native unit is "ETH", so a wallet left on Ethereum mainnet would
+  show nothing amiss while sending real mainnet ETH that then never verifies on Robinhood Chain.

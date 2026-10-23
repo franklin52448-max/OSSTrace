@@ -85,6 +85,16 @@ const EVM_NETWORKS = {
     rpcUrls: ["https://bsc-dataseed.bnbchain.org"],
     blockExplorerUrls: ["https://bscscan.com"],
   },
+  // Chain id 4663. Its native currency is ETH, so a wallet on the wrong one of these two shows the
+  // very same "ETH" balance and symbol -- nothing on the wallet's own screen would flag the mix-up,
+  // which is why the chain id check below is the guard, not the user's eye.
+  robinhood: {
+    chainId: "0x1237",
+    chainName: "Robinhood Chain",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: ["https://rpc.mainnet.chain.robinhood.com"],
+    blockExplorerUrls: ["https://robinhoodchain.blockscout.com"],
+  },
 } as const;
 
 const onNetwork = async (provider: EthereumProvider, chainId: string) => BigInt((await provider.request({ method: "eth_chainId" })) as string) === BigInt(chainId);

@@ -55,6 +55,7 @@ function mockOutboundFetch(): typeof fetch {
 const SOL_WALLET = "11111111111111111111111111111111";
 const ETH_WALLET = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
 const BTC_WALLET = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
+const RH_WALLET = "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB";
 
 function solanaKeypair(seed: string): { address: string; secretKey: Uint8Array } {
   const kp = nacl.sign.keyPair.fromSeed(createHash("sha256").update(seed).digest());
@@ -95,7 +96,7 @@ before(async () => {
     // testHooks: true also skips the per-IP wallet-verify throttle (routes/auth.ts) -- this file
     // does many real logins from one IP, which a real deployment's abuse guard would otherwise
     // (correctly) rate-limit.
-    configOverrides: { depositWallets: { ethereum: ETH_WALLET, solana: SOL_WALLET, bitcoin: BTC_WALLET }, testHooks: true },
+    configOverrides: { depositWallets: { ethereum: ETH_WALLET, solana: SOL_WALLET, bitcoin: BTC_WALLET, robinhood: RH_WALLET }, testHooks: true },
     fetchImpl: mockOutboundFetch(),
   });
   process.env["VITE_SERVER_URL"] = server.url;
@@ -273,6 +274,7 @@ test("Funding: shows the configured receiving wallets to everyone, with no depos
   await waitFor(() => text().includes(SOL_WALLET), "the configured Solana wallet");
   assert.ok(text().includes(ETH_WALLET), "the configured Ethereum wallet is shown too");
   assert.ok(text().includes(BTC_WALLET), "and the configured Bitcoin wallet");
+  assert.ok(text().includes(RH_WALLET), "and the configured Robinhood Chain wallet");
   assert.ok(text().includes("No deposits recorded yet"));
   await backToBoard();
 });
@@ -360,7 +362,7 @@ test("Funding: Bitcoin is paste-only -- picking it in the paste form asks for a 
   await openRow("Funding bitcoin check");
   await click(await waitFor(() => (text().includes("Back this bounty") ? getButton("Back this bounty") : null), "the Back this bounty button"));
   const chainPicker = getControl<HTMLSelectElement>("Payment chain");
-  assert.deepEqual([...chainPicker.options].map((o) => o.value), ["solana", "ethereum", "bitcoin"]);
+  assert.deepEqual([...chainPicker.options].map((o) => o.value), ["solana", "ethereum", "robinhood", "bitcoin"]);
   await choose(chainPicker, "bitcoin");
   assert.ok(text().includes("Bitcoin can't be sent from this page"), "the paste-only explanation");
   await fill(getByPlaceholder("Transaction ID (txid)"), "ab".repeat(32));

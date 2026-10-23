@@ -31,14 +31,20 @@ type Wallets = BountyWallets;
 
 const NATIVE_SYMBOL: Record<DepositChain, string> = { ...NATIVE_SYMBOLS, bitcoin: "BTC" };
 const CHAIN_NAME: Record<DepositChain, string> = { ...CHAIN_NAMES, bitcoin: "Bitcoin" };
-const TX_REF_PLACEHOLDER: Record<DepositChain, string> = { solana: "Transaction signature", ethereum: "Transaction hash (0x…)", bnb: "Transaction hash (0x…)", bitcoin: "Transaction ID (txid)" };
+const TX_REF_PLACEHOLDER: Record<DepositChain, string> = {
+  solana: "Transaction signature",
+  ethereum: "Transaction hash (0x…)",
+  bnb: "Transaction hash (0x…)",
+  robinhood: "Transaction hash (0x…)",
+  bitcoin: "Transaction ID (txid)",
+};
 /** Display/selection order everywhere in this panel. */
-const DEPOSIT_CHAINS: readonly DepositChain[] = ["solana", "ethereum", "bnb", "bitcoin"];
+const DEPOSIT_CHAINS: readonly DepositChain[] = ["solana", "ethereum", "bnb", "robinhood", "bitcoin"];
 /** The chains a connected browser wallet can send on: every deposit chain but Bitcoin (paste-only).
  *  Derived from DepositChain, so a chain that gains deposits must also say how it's sent here. */
 type SendChain = Exclude<DepositChain, "bitcoin">;
-const SEND_CHAINS: readonly SendChain[] = ["solana", "ethereum", "bnb"];
-const TOKEN_STANDARD: Record<SendChain, string> = { solana: "SPL token", ethereum: "ERC-20 token", bnb: "BEP-20 token" };
+const SEND_CHAINS: readonly SendChain[] = ["solana", "ethereum", "bnb", "robinhood"];
+const TOKEN_STANDARD: Record<SendChain, string> = { solana: "SPL token", ethereum: "ERC-20 token", bnb: "BEP-20 token", robinhood: "ERC-20 token" };
 
 /** The shared icon for the two app-wide chains; a plain orange "₿" disc for Bitcoin -- an honest
  *  generic mark, not an attempt at the exact brand artwork. */
@@ -59,8 +65,11 @@ function short(value: string, head = 6, tail = 4): string {
   return value.length > head + tail + 1 ? `${value.slice(0, head)}…${value.slice(-tail)}` : value;
 }
 
+/** Robinhood Chain's native unit is ETH too, so its label says which ETH: the totals chips sit side
+ *  by side, and "1 ETH" next to "1 ETH" would read as one asset. */
 function assetLabel(chain: DepositChain, asset: DepositAsset): string {
-  return asset === "native" ? NATIVE_SYMBOL[chain] : short(asset.contract, 6, 4);
+  if (asset !== "native") return short(asset.contract, 6, 4);
+  return chain === "robinhood" ? `${NATIVE_SYMBOL[chain]} (Robinhood Chain)` : NATIVE_SYMBOL[chain];
 }
 
 function assetKey(chain: DepositChain, asset: DepositAsset): string {
@@ -284,6 +293,11 @@ function FundForm({ bountyId, wallets, onRecorded }: { bountyId: string; wallets
           <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount" required inputMode="decimal" className="ctl w-full" />
           {chain === "solana" && (
             <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Memo (optional, shown as a cross-check — not required)" maxLength={200} className="ctl w-full" />
+          )}
+          {chain === "robinhood" && (
+            <p className="text-xs text-ink-faint">
+              Sent from your Ethereum wallet on Robinhood Chain (chain id 4663) — it's asked to switch to that network, or add it, before anything is sent.
+            </p>
           )}
           <p className="text-xs text-ink-faint">
             Your wallet shows the real amount and destination before you approve — review it there. The signature is sent here and independently re-checked on-chain before anything is recorded.

@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Bounty, BountyDeposit, BountySubmission, BountyWallets, DepositChain } from "@osstrace/contract";
 import { requireUser, type Ctx } from "../context.ts";
 import { HttpClient, budgetMs } from "../lib/http.ts";
-import { verifyBitcoinDeposit, verifyBnbDeposit, verifyEthereumDeposit, verifySolanaDeposit, type DepositVerification } from "../chain/deposits.ts";
+import { verifyBitcoinDeposit, verifyBnbDeposit, verifyEthereumDeposit, verifyRobinhoodDeposit, verifySolanaDeposit, type DepositVerification } from "../chain/deposits.ts";
 import { normalizeAddress, type WalletChain } from "../auth/wallet.ts";
 import { ApiErr, badRequest, conflict, forbidden, notFound } from "../lib/errors.ts";
 import { nowIso } from "../lib/time.ts";
@@ -37,10 +37,12 @@ type SubmissionRow = { id: string; bounty_id: string; submitted_by: string; pr_u
  * The sign-in that proves ownership of a deposit's sender, per deposit chain. BNB has no login of its
  * own and doesn't need one: a BNB address *is* an Ethereum address (same secp256k1 key, same 0x
  * form), and wallet sign-in only accepts an EOA's own personal_sign signature (auth/wallet.ts), so a
- * wallet signed in as "ethereum" controls exactly the BNB account at that address. Bitcoin has no
- * entry: it has no sender check at all (see the deposit route).
+ * wallet signed in as "ethereum" controls exactly the BNB account at that address. Robinhood Chain
+ * is the same case: an EOA's address comes from its key alone, never the chain id, so the key that
+ * signed in as 0xabc on Ethereum is the only one that can send from 0xabc on chain 4663. Bitcoin has
+ * no entry: it has no sender check at all (see the deposit route).
  */
-const DEPOSIT_SIGNER: Record<Exclude<DepositChain, "bitcoin">, WalletChain> = { solana: "solana", ethereum: "ethereum", bnb: "ethereum" };
+const DEPOSIT_SIGNER: Record<Exclude<DepositChain, "bitcoin">, WalletChain> = { solana: "solana", ethereum: "ethereum", bnb: "ethereum", robinhood: "ethereum" };
 
 type DepositRow = { id: string; bounty_id: string; chain: DepositChain; asset_contract: string | null; amount: string; tx_ref: string; from_address: string; to_wallet: string; memo: string | null; recorded_by: string; recorded_at: string };
 
@@ -193,6 +195,7 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
       solana: () => verifySolanaDeposit(http, config.solanaRpcUrl, txRef, wallet, config.depositAllowedTokens.solana, budget),
       ethereum: () => verifyEthereumDeposit(http, config.ethBlockscoutUrl, config.ethRpcUrl, txRef, wallet, config.depositAllowedTokens.ethereum, budget),
       bnb: () => verifyBnbDeposit(http, config.bnbRpcUrl, txRef, wallet, config.depositAllowedTokens.bnb, budget),
+      robinhood: () => verifyRobinhoodDeposit(http, config.robinhoodRpcUrl, txRef, wallet, config.depositAllowedTokens.robinhood, budget),
       bitcoin: () => verifyBitcoinDeposit(http, config.esploraUrl, txRef, wallet, budget),
     };
     const verified = await verifiers[body.chain]();
@@ -205,11 +208,16 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
         not_confirmed:
           body.chain === "bitcoin" ? "That transaction isn't confirmed in a block yet -- try again once it has at least one confirmation" : "That transaction didn't succeed on-chain",
         wrong_wallet: "That transaction doesn't pay the configured deposit wallet",
-        unsupported_asset: "That transaction pays the right wallet, but not in an asset this server tracks for deposits (native SOL/ETH/BNB, USDC or USDT)",
+        // Robinhood Chain gets its own list: it has no USDC/USDT, so the generic one would be wrong there.
+        unsupported_asset:
+          body.chain === "robinhood"
+            ? "That transaction pays the right wallet, but not in an asset this server tracks for Robinhood Chain deposits (native ETH or USDG)"
+            : "That transaction pays the right wallet, but not in an asset this server tracks for deposits (native SOL/ETH/BNB, USDC or USDT)",
         malformed_reference: {
           solana: "That doesn't look like a real Solana signature",
           ethereum: "That doesn't look like a real Ethereum transaction hash",
           bnb: "That doesn't look like a real BNB Chain transaction hash",
+          robinhood: "That doesn't look like a real Robinhood Chain transaction hash",
           bitcoin: "That doesn't look like a real Bitcoin transaction ID (64 hex characters)",
         }[body.chain],
       };

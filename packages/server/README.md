@@ -38,6 +38,17 @@ challenge`), while eth.blockscout.com didn't. Lookups then report "blockscout-ro
 403" as the provider error -- never an empty wallet -- until it lifts or the URL points elsewhere.
 Deposit checks don't depend on it (they use the RPC).
 
+**Base** (EVM chain id 8453) needs a free key. Its own Blockscout instance (base.blockscout.com) hits
+the same Cloudflare challenge for every scripted request (checked 2026-10-23), and Etherscan's free
+plan refuses Base ("Paid Plan required" in its own `/v2/chainlist`), so Base is read through
+Blockscout's hosted multichain PRO API (`BASE_BLOCKSCOUT_URL`, default
+`https://api.blockscout.com/8453`) -- the same `/api/v2` shape, the same Blockscout provider -- with a
+free `BLOCKSCOUT_API_KEY` from dev.blockscout.com (no card). The key is only ever sent to
+api.blockscout.com; without it, health and every Base lookup report that it's missing -- never an
+empty wallet. Deposit checks use Base's own public RPC (`BASE_RPC_URL`, default
+`https://mainnet.base.org`) and are pinned to chain id 8453. Gas on Base is ETH, so its rows are
+stored under chain `base` and its tokens priced under DefiLlama's `base:` key.
+
 **`DEV_SKIP_AUTH=1`**: local dev only, treats every request as signed in as a fixed fake user
 (no wallet, no cookie needed) so every feature can be driven without going through the real
 Phantom/MetaMask flow. Refused outright when `NODE_ENV=production`, so it can never activate on a

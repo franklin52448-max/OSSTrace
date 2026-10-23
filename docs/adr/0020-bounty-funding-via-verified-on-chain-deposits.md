@@ -158,3 +158,21 @@ scripted clients with a Cloudflare challenge.
 - **Connect-and-send** moves the wallet to chain 4663 first (`switchEvmNetwork`). This matters more
   here than for BNB: both chains' native unit is "ETH", so a wallet left on Ethereum mainnet would
   show nothing amiss while sending real mainnet ETH that then never verifies on Robinhood Chain.
+
+## Addendum (2026-10-23): Base
+
+Base (EVM chain id 8453, an OP Stack L2 whose gas token is ETH) is a full `Chain` ("base") and takes
+deposits the same way: `verifyBaseDeposit` runs the shared EVM RPC verifier against Base's own
+official public RPC (`BASE_RPC_URL`, default `https://mainnet.base.org`), into `DEPOSIT_WALLET_BASE`.
+
+- **Chain id pinned.** Unlike the other EVM paths, Base's verification also checks the transaction's
+  own EIP-155 chain id is 8453 (`expectChainId` on the shared verifier): one wallet address exists on
+  every EVM chain, so a `BASE_RPC_URL` mistakenly pointed at another chain must not make that chain's
+  payment verify as a Base one.
+- **Allowlist.** Circle's native Base USDC (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`, a
+  FiatTokenProxy whose `name()`/`decimals()` read "USD Coin"/6 over Base's RPC, tagged Circle's on
+  BaseScan) -- not the older bridged USDbC. No USDT default: Tether doesn't issue on Base itself;
+  adding a bridged copy is an operator call via `DEPOSIT_ALLOWED_TOKENS_BASE`.
+- **Sender check** against an *Ethereum* sign-in (`DEPOSIT_SIGNER`), for BNB's reason, and
+  **connect-and-send** moves the wallet to chain 8453 first (`switchEvmNetwork`), for Robinhood
+  Chain's: both are ETH-native, so only the chain id tells them apart.

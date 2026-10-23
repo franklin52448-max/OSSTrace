@@ -1,7 +1,8 @@
 // Chain picker with each chain's mark. A native <select> can't show images in its options, so this
 // is a small listbox: button + popup, keyboard-operable (arrows / Home / End / Enter / Escape).
 //
-// Marks: Simple Icons (https://simpleicons.org, CC0-1.0), filled in each project's brand colours.
+// Marks: Simple Icons (https://simpleicons.org, CC0-1.0), filled in each project's brand colours --
+// except Base's, which is drawn here rather than copied: a plain disc in Base's own brand blue.
 import { useEffect, useId, useRef, useState } from "react";
 import { CHAIN_NAMES, type Chain } from "@osstrace/contract";
 import { cx } from "./prism/components.tsx";
@@ -12,7 +13,11 @@ export const CHAIN_OPTIONS: readonly { value: Chain; label: string }[] = [
   { value: "solana", label: CHAIN_NAMES.solana },
   { value: "bnb", label: CHAIN_NAMES.bnb },
   { value: "robinhood", label: CHAIN_NAMES.robinhood },
+  { value: "base", label: CHAIN_NAMES.base },
 ];
+
+/** Base's brand blue (base.org's "Base Blue"). */
+const BASE_BLUE = "#0052FF";
 
 /** The chains the older standalone feature services (pathfinder, cases...) were built for. Their
  *  own backends only know these two, so their pickers must not offer a chain they'd reject. */
@@ -20,6 +25,13 @@ export const LEGACY_SERVICE_CHAINS = ["ethereum", "solana"] as const satisfies r
 
 export function ChainIcon({ chain, size = 18, className }: { chain: Chain; size?: number; className?: string }) {
   const gradientId = useId();
+  if (chain === "base") {
+    return (
+      <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" className={cx("shrink-0", className)}>
+        <circle cx="12" cy="12" r="12" fill={BASE_BLUE} />
+      </svg>
+    );
+  }
   if (chain === "robinhood") {
     // Robinhood's feather, on Robinhood Chain's own lime disc: the same Simple Icons (CC0) path and
     // colours the home page's chain row already uses for it (HomeFeatures.tsx), copied from that

@@ -34,7 +34,22 @@ afterEach(async () => {
 });
 
 test("explorers.ts: only the chains this project actually has data for", () => {
-  assert.deepEqual(Object.keys(explorers.EXPLORERS).sort(), ["bnb", "ethereum", "robinhood", "solana"]);
+  assert.deepEqual(Object.keys(explorers.EXPLORERS).sort(), ["base", "bnb", "ethereum", "robinhood", "solana"]);
+});
+
+test("explorers.ts: Base links to BaseScan's real address and tx pages", () => {
+  assert.equal(explorers.explorerName("base"), "BaseScan");
+  assert.equal(explorers.explorerAddressUrl("base", "0xabc"), "https://basescan.org/address/0xabc");
+  assert.equal(explorers.explorerTxUrl("base", "0xdef"), "https://basescan.org/tx/0xdef");
+});
+
+test("AddressChip: a Base address opens on BaseScan, not Etherscan", async () => {
+  const addr = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+  const r = await render(createElement(AddressChip as ComponentType<any>, { info: { address: addr, chain: "base" } }));
+  const link = r.container.querySelector<HTMLButtonElement>('button[aria-label="View on BaseScan"]');
+  assert.ok(link, "no 'View on BaseScan' button");
+  link.click();
+  assert.equal(opened[0]!.url, `https://basescan.org/address/${addr}`);
 });
 
 test("explorers.ts: Robinhood Chain links go to its own Blockscout instance, never Etherscan", () => {

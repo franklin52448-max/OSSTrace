@@ -1,9 +1,9 @@
 import { CHAIN_NAMES as NAME, NATIVE_SYMBOLS, type Chain } from "@osstrace/contract";
 import { cn } from "./cn.ts";
 
-/** A chain's short code. Usually its native symbol -- but Robinhood Chain's native unit is "ETH"
- *  too, and a badge reading "ETH" would make its rows indistinguishable from Ethereum's. */
-export const CHAIN_SHORT: Record<Chain, string> = { ...NATIVE_SYMBOLS, robinhood: "RH" };
+/** A chain's short code. Usually its native symbol -- but Robinhood Chain's and Base's native unit
+ *  is "ETH" too, and a badge reading "ETH" would make their rows indistinguishable from Ethereum's. */
+export const CHAIN_SHORT: Record<Chain, string> = { ...NATIVE_SYMBOLS, robinhood: "RH", base: "BASE" };
 const SHORT = CHAIN_SHORT;
 
 /** Text badge for a chain (no third-party logos). */

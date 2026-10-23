@@ -93,8 +93,12 @@ export class SyncService {
 
   private load(chain: Chain, address: string, provider: ChainProvider) {
     const row = this.db.get<SyncRow>("SELECT streams_json, covered_from, complete, head_at, last_error, warning FROM address_sync WHERE chain = ? AND address = ?", chain, address);
-    const streams: Record<string, StreamState> = row ? JSON.parse(row.streams_json) : {};
-    for (const s of provider.streams()) streams[s] ??= { started: false, cursor: null, oldest: null, newest: null, done: false };
+    const saved: Record<string, StreamState> = row ? JSON.parse(row.streams_json) : {};
+    // Only the current provider's streams: a row saved by a chain's previous provider (BNB once read
+    // Etherscan's five streams, Base and Robinhood Chain Blockscout's three) would otherwise keep
+    // names nothing fetches any more, which never start -- "not loaded yet" and "partial" forever.
+    const streams: Record<string, StreamState> = {};
+    for (const s of provider.streams()) streams[s] = saved[s] ?? { started: false, cursor: null, oldest: null, newest: null, done: false };
     return { row, streams };
   }
 

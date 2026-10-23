@@ -122,4 +122,23 @@ describe("transfers, counterparties and sync", () => {
     expect(r.sync.message).toMatch(/internal: fake-ethereum timed out/);
     await t2.close();
   });
+
+  it("a chain whose provider changed: streams saved by the old provider are dropped, not left 'not loaded yet' forever", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    // What a failed lookup under BNB's old Etherscan provider left behind: five streams, none started.
+    const old = Object.fromEntries(["transactions", "internal-transactions", "token-transfers", "nft-transfers", "multi-token-transfers"].map((s) => [s, { started: false, cursor: null, oldest: null, newest: null, done: false, failUntil: Date.now() + 300_000, failMsg: "Etherscan refused BNB Smart Chain" }]));
+    t.ctx.db.run(
+      "INSERT INTO address_sync (chain, address, streams_json, covered_from, complete, head_at, last_error, updated_at) VALUES ('bnb', ?, ?, NULL, 0, NULL, 'Etherscan refused BNB Smart Chain', ?)",
+      ETH_A,
+      JSON.stringify(old),
+      new Date().toISOString(),
+    );
+    t.bnb.add([ethTransfer(ETH_B, ETH_A, now - 10, { chain: "bnb" })]);
+    const r = (await c.get(`/api/transfers?base=bnb:${ETH_A}&timeLast=7d`)).json();
+    expect(r.transfers).toHaveLength(1);
+    expect(r.sync.state).toBe("ready");
+    expect(r.sync.message).toBeUndefined();
+    const saved = JSON.parse(t.ctx.db.get<{ s: string }>("SELECT streams_json AS s FROM address_sync WHERE chain = 'bnb' AND address = ?", ETH_A)!.s);
+    expect(Object.keys(saved)).toEqual(["main"]);
+  });
 });

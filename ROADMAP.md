@@ -123,11 +123,41 @@ folders, separate agents, same plugin architecture that made this possible in th
     - [ ] Any second bridge protocol. Each needs its own cited contracts and its own real way
           to link the two legs.
 
-## Wave 5 — breadth
+## Wave 5 — breadth: more chains
 
-- [ ] **More chains** beyond Ethereum/Solana (Bitcoin, Tron, etc.) — each is its own
-      `ChainAdapter` implementation, independently addable at any point once a real data source is
-      identified for that chain (see `packages/chains/README.md`)
+Each chain is its own `ChainProvider` implementation, independently addable at any point once a
+real, zero-fake-data source is identified for it (see `packages/chains/README.md`). Ordered by
+real dependency/difficulty, not by hype — an EVM chain mostly reuses Ethereum's existing
+Blockscout/Etherscan-V2 plumbing; a non-EVM chain needs its own real design.
+
+- **Bitcoin**
+  - [x] Bounty deposits only (paste-a-txid, no sender-ownership check — Bitcoin has no
+        wallet-connect standard and no clean single "sender" per tx; see `chain/deposits.ts`'s
+        `verifyBitcoinDeposit`)
+  - [ ] Full parity with Ethereum/Solana (Explorer/Tracer/Visualizer) — approved, not yet built.
+        Bitcoin's UTXO model (multiple inputs/outputs per tx, no account balance) doesn't map onto
+        this project's account-model `RawTransfer` shape the way an EVM chain does — needs its own
+        real design for what a BTC "transfer" even means here, not just a new API client.
+- **In progress now** (EVM, each reuses as much of Ethereum's existing adapter as its own data
+  source allows):
+  - [ ] BNB Chain (BSC) — no free Blockscout instance exists for it, so it needs its own
+        Etherscan-V2-based provider (reuses the existing `ETHERSCAN_API_KEY`, one key covers 60+
+        EVM chains via a `chainid` param)
+  - [ ] Robinhood Chain — has its own dedicated Blockscout instance
+        (`robinhoodchain.blockscout.com`), likely close to a direct reuse of the existing
+        `BlockscoutProvider`
+  - [ ] Base — Coinbase's L2; real native USDC contract already identified for bounty deposits
+- **Next — EVM, same reuse pattern**: Arbitrum, Optimism, Polygon, Avalanche C-Chain, Linea,
+  zkSync Era, Mantle
+- **Then — beyond EVM, each needs its own real design, not a copy of the Ethereum adapter**:
+  Tron (own API via TronGrid, account-model but not EVM), Sui, Aptos (Move VM, different data
+  model than anything built so far), Cosmos Hub + major Cosmos chains (IBC, different indexer
+  story per chain)
+- **Not doing: privacy coins** (Monero, Zcash's shielded pool, Dash PrivateSend, etc.) — ring
+  signatures/stealth addresses/shielded pools mean there is no public address-to-balance or
+  sender/receiver mapping to trace in the first place, without that wallet's own private view key.
+  This isn't a harder version of the same feature, it's a different thing a tracer can't honestly
+  claim to do for an arbitrary address — see the "no mock/fake data" ground rule below.
 
 ## Wave 6 — going from "works locally" to "works for real users"
 

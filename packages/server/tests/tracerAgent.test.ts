@@ -389,6 +389,20 @@ describe("tracer agent", () => {
     expect(usdc.transfers[0]!.token.id.toLowerCase()).toBe(USDC.toLowerCase());
   });
 
+  it("list_transfers: an omitted-but-empty optional arg (a model sends \"\" or null instead of leaving the key out -- confirmed live with gpt-4.1-mini on a real 'who first funded this address' question) is treated as not given, not rejected", async () => {
+    await setup([
+      { tools: [{ name: "list_transfers", args: { chain: "ethereum", address: ETH_A, counterparty: "", asset: null, timeGte: "" } }] },
+      { content: "listed" },
+    ]);
+    t.eth.add([ethTransfer(ETH_B, ETH_A, base + 10, { amountRaw: "1000000000000000000" })]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "who first funded this wallet?" })).json() as TracerAgentChatResponse;
+    expect(res.toolCalls[0]!.result).not.toHaveProperty("error");
+    const transfers = (res.toolCalls[0]!.result as { transfers: unknown[] }).transfers;
+    expect(transfers).toHaveLength(1);
+  });
+
   it("rename / annotate / remove act on this doc's real node ids only", async () => {
     await setup([
       { tools: [{ name: "get_doc_state", args: {} }] },

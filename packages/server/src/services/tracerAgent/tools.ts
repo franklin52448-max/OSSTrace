@@ -57,6 +57,15 @@ const fail = (m: string): never => {
   throw new ToolError(m);
 };
 
+/** A model calling a tool often sends `""` or `null` for an argument it has no value for, instead
+ * of leaving the key out entirely, even though the JSON Schema marks it optional and omitting it
+ * works fine -- confirmed live: gpt-4.1-mini did exactly this for list_transfers' `counterparty`
+ * on a genuine "who first funded this address" query (no counterparty to give), and `z.string()
+ * .min(1).optional()` then rejected the empty string on every retry even though omitting the key
+ * entirely would have passed. Wrap every optional tool argument in this so the model's "no value"
+ * shape -- however it chooses to spell that -- is treated the same as actually omitted. */
+const opt = <T extends z.ZodTypeAny>(schema: T) => z.preprocess((v) => (v === "" || v === null ? undefined : v), schema.optional());
+
 // ---------- limits (ADR 0008's caps where a tool reuses its idea of "how far") ----------
 /** expand_node's hop cap: ADR 0008 §4's `maxHops` max. */
 export const MAX_HOPS = 3;
@@ -232,7 +241,7 @@ const findConnections = defineTool({
     },
     additionalProperties: false,
   },
-  args: z.object({ addresses: z.array(nodeRef).max(MAX_CONNECT_NODES).optional(), mode: z.enum(["direct", "indirect"]).default("direct") }).strict(),
+  args: z.object({ addresses: opt(z.array(nodeRef).max(MAX_CONNECT_NODES)), mode: z.enum(["direct", "indirect"]).default("direct") }).strict(),
   async run(env, { addresses, mode }) {
     if (mode === "indirect" && !env.userId) fail("Indirect mode needs a connected wallet (it's signed-in only). Direct mode works without one.");
     const taken = occupied(env.doc.read());
@@ -362,7 +371,7 @@ const expandNode = defineTool({
     required: ["chain", "address", "hops"],
     additionalProperties: false,
   },
-  args: z.object({ chain: chainSchema, address: z.string().min(1).max(128), hops: z.number().int().min(1).max(MAX_HOPS), breadth: z.number().int().min(1).max(MAX_BREADTH).optional() }).strict(),
+  args: z.object({ chain: chainSchema, address: z.string().min(1).max(128), hops: z.number().int().min(1).max(MAX_HOPS), breadth: opt(z.number().int().min(1).max(MAX_BREADTH)) }).strict(),
   async run(env, { chain, address, hops, breadth = DEFAULT_BREADTH }) {
     const start = addrArg(chain, address);
     const taken = occupied(env.doc.read());
@@ -475,13 +484,13 @@ const listTransfers = defineTool({
       flow: z.enum(["all", "in", "out", "self"]).default("all"),
       sortBy: z.enum(["time", "value", "usd"]).default("time"),
       sortDir: z.enum(["asc", "desc"]).default("desc"),
-      asset: z.string().min(1).max(128).optional(),
-      counterparty: z.string().min(1).max(128).optional(),
-      timeGte: iso.optional(),
-      timeLte: iso.optional(),
-      timeLast: z.enum(["1h", "12h", "1d", "7d", "30d", "90d", "1y", "all"]).optional(),
-      usdGte: z.number().finite().min(0).max(1e15).optional(),
-      usdLte: z.number().finite().min(0).max(1e15).optional(),
+      asset: opt(z.string().min(1).max(128)),
+      counterparty: opt(z.string().min(1).max(128)),
+      timeGte: opt(iso),
+      timeLte: opt(iso),
+      timeLast: opt(z.enum(["1h", "12h", "1d", "7d", "30d", "90d", "1y", "all"])),
+      usdGte: opt(z.number().finite().min(0).max(1e15)),
+      usdLte: opt(z.number().finite().min(0).max(1e15)),
       limit: z.number().int().min(1).max(MAX_LIST).default(20),
     })
     .strict(),

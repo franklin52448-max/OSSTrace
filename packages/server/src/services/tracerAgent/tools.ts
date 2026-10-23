@@ -442,7 +442,9 @@ const expandNode = defineTool({
     const unavailable: string[] = [];
     let budgetExhausted = 0;
     for (let hop = 1; hop <= hops && frontier.length; hop++) {
-      const next: TraceNode[] = [];
+      // Keyed by node id: a node reached from two parents in one hop is one node to expand (or to
+      // report as not expanded), not two.
+      const next = new Map<string, TraceNode>();
       for (const n of frontier) {
         if (expanded.has(n.id) || n.kind !== "address" || !n.chain || !n.address) continue;
         if (syncs >= MAX_EXPAND_SYNCS || nodesAdded >= MAX_NODES_PER_EXPAND || Date.now() > env.deadline - 5000) {
@@ -497,10 +499,10 @@ const expandNode = defineTool({
             env.doc.commit([{ type: "create_edge", edge }]);
             edgesAdded++;
           }
-          next.push(r.node);
+          next.set(r.node.id, r.node);
         }
       }
-      frontier = next;
+      frontier = [...next.values()];
     }
     const depthCapped = frontier.filter((n) => !expanded.has(n.id)).length;
     return {

@@ -587,6 +587,17 @@ describe("tracer agent", () => {
     expect(res2.doc.nodes.some((n) => n.id === addressNodeId("scratch", "ethereum", ETH_C))).toBe(false);
   });
 
+  it("expand_node: a node reached from two parents in the last hop is counted once in what wasn't expanded", async () => {
+    await setup([{ tools: [{ name: "expand_node", args: { chain: "ethereum", address: ETH_A, hops: 2 } }] }, { content: "expanded" }]);
+    const D = evm(1);
+    // A -> B, A -> C, and both B and C -> D: D turns up twice in hop 2.
+    t.eth.add([ethTransfer(ETH_A, ETH_B, base + 1), ethTransfer(ETH_A, ETH_C, base + 2), ethTransfer(ETH_B, D, base + 3), ethTransfer(ETH_C, D, base + 4)]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "expand A two hops" })).json() as TracerAgentChatResponse;
+    expect(res.toolCalls[0]!.result).toMatchObject({ ok: true, nodesAdded: 3, edgesAdded: 4, notExpanded: { depthCap: 1, budgetExhausted: 0 } });
+  });
+
   it("rename / annotate / remove act on this doc's real node ids only", async () => {
     await setup([
       { tools: [{ name: "get_doc_state", args: {} }] },

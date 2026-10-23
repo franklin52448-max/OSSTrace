@@ -77,14 +77,24 @@ own words, and it goes on the public board. Anyone submits a PR against it; the 
 **opener** records which submission wins (not a moderator — that role doesn't exist anymore, see
 the status table above).
 
-**What it does *not* do — on purpose:** hold, escrow, or move any funds. A bounty's reward is
-free text exactly as the poster wrote it ("100,000 tokens", "$500, token TBD"), never parsed as a
-real currency amount. The actual payout happens off-platform, between the bounty's opener and
-whoever they themselves mark as the winning submission. See
+A bounty's reward is free text exactly as the poster wrote it ("100,000 tokens", "$500, token
+TBD"), never parsed as a real currency amount, and the actual payout happens off-platform, between
+the bounty's opener and whoever they themselves mark as the winning submission. See
 [ADR 0009](docs/adr/0009-bounty-program-v1-is-tracking-only.md) for why: a real token-escrow
 system would be custody, which conflicts with this project's own non-goal of staying read-only /
-non-custodial — so v1 ships the real, honest part (the board and its workflow) without pretending
-to be a bank it isn't.
+non-custodial — so v1 shipped the board and its workflow without pretending to be a bank it isn't.
+
+**Optional real backing** ([ADR 0020](docs/adr/0020-bounty-funding-via-verified-on-chain-deposits.md)):
+anyone can also back a bounty with a real on-chain payment — SOL, ETH, an SPL token, or an ERC-20
+— to a wallet this project controls, and the board shows that deposit as **verified**, a checked
+fact read straight off the chain, not a claim. This genuinely is a wallet the project controls
+receiving real third-party funds, so to be precise about what that does and doesn't mean: **it is
+not escrow.** Nothing in this project's code holds funds under any release condition, proves a
+payout will happen, or moves money anywhere, ever — a deposit just sits in that wallet exactly as
+a reward dropped in a drawer would, and payout stays entirely manual, off-platform, and the
+operator's own responsibility, same as every other bounty. Depositing doesn't require trusting the
+*software* with custody logic that doesn't exist; it does require trusting the operator to
+actually pay out, same as any informal bounty always has.
 
 **The first bounty posted** is an AI agent that answers real on-chain questions in plain language
 by actually calling this project's own tools, not by guessing:

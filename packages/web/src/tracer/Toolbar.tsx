@@ -1,8 +1,63 @@
-import { Eye, Group, Maximize2, Minus, Plus, Redo2, Share2, Trash2, Undo2, Ungroup } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Eye, GripVertical, Group, Maximize2, Minus, Plus, Redo2, Share2, Trash2, Undo2, Ungroup } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Button, IconButton } from "../kit/Button.tsx";
 import { Switch } from "../kit/Switch.tsx";
 import { cn } from "../kit/cn.ts";
+
+const EDIT_POS_KEY = "osstrace.tracer.editToolbarOffset";
+
+/** Offset from the edit pill's default position (bottom-centered), dragged by its grip handle and
+ * saved per browser -- same localStorage-per-visitor pattern as theme.ts/motion.ts, just for one
+ * widget's position rather than a site-wide preference. */
+function useDraggableOffset(): { dx: number; dy: number; dragging: boolean; onGripPointerDown: (e: React.PointerEvent) => void } {
+  const [offset, setOffset] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem(EDIT_POS_KEY);
+      const parsed = raw ? (JSON.parse(raw) as { dx?: number; dy?: number }) : null;
+      return { dx: parsed?.dx ?? 0, dy: parsed?.dy ?? 0 };
+    } catch {
+      return { dx: 0, dy: 0 };
+    }
+  });
+  const [dragging, setDragging] = useState(false);
+  const start = useRef<{ x: number; y: number; dx: number; dy: number } | null>(null);
+
+  const onGripPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    start.current = { x: e.clientX, y: e.clientY, dx: offset.dx, dy: offset.dy };
+    setDragging(true);
+  };
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: PointerEvent) => {
+      if (!start.current) return;
+      setOffset({ dx: start.current.dx + (e.clientX - start.current.x), dy: start.current.dy + (e.clientY - start.current.y) });
+    };
+    const onUp = () => {
+      setDragging(false);
+      start.current = null;
+      setOffset((o) => {
+        try {
+          window.localStorage.setItem(EDIT_POS_KEY, JSON.stringify(o));
+        } catch {
+          // Storage blocked (private mode etc.): the position just won't survive a reload.
+        }
+        return o;
+      });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [dragging]);
+
+  return { ...offset, dragging, onGripPointerDown };
+}
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 export const MOD = isMac ? "⌘" : "Ctrl+";
@@ -57,8 +112,9 @@ export function Toolbar(props: {
   className?: string;
 }) {
   const p = props;
+  const drag = useDraggableOffset();
   return (
-    <div className={cn("pointer-events-none flex flex-wrap items-end justify-between gap-2", p.className)}>
+    <div className={cn("pointer-events-none relative flex flex-wrap items-end gap-2", p.className)}>
       <div className={cn(pill, "pointer-events-auto")}>
         {p.readOnly ? (
           <span className="flex h-7 items-center gap-1.5 px-2 text-xs text-muted">
@@ -83,7 +139,22 @@ export function Toolbar(props: {
         </div>
       </div>
       {!p.readOnly ? (
-        <div className={cn(pill, "pointer-events-auto")} role="toolbar" aria-label="Edit">
+        <div
+          className={cn(pill, "pointer-events-auto absolute bottom-0 left-1/2", drag.dragging ? "cursor-grabbing" : undefined)}
+          style={{ transform: `translateX(-50%) translate(${drag.dx}px, ${drag.dy}px)` }}
+          role="toolbar"
+          aria-label="Edit"
+        >
+          <button
+            type="button"
+            aria-label="Drag to move this toolbar"
+            title="Drag to move"
+            onPointerDown={drag.onGripPointerDown}
+            className="flex h-7 w-4 cursor-grab items-center justify-center text-faint hover:text-muted active:cursor-grabbing"
+          >
+            <GripVertical aria-hidden className="size-3.5" />
+          </button>
+          <Sep />
           {p.group ? (
             <>
               <span title={p.group.disabledReason ?? undefined}>

@@ -32,7 +32,30 @@ function preloadFontsPlugin(): Plugin {
   };
 }
 
+/** Replaces `import.meta.env.<name>` with a string literal in every source module before anything
+ * else sees it -- including when the variable is unset, which Vite's own env handling leaves as a
+ * runtime lookup. That makes an off flag's guard a plain `"" === "true"` the bundler folds away, so
+ * a lazily imported module behind it (the Tracer agent panel, see src/tracer/agent/flag.ts) is never
+ * emitted as a chunk, and the flag's name never appears in the built `import.meta.env` object. */
+function inlineFlagPlugin(name: string): Plugin {
+  const needle = `import.meta.env.${name}`;
+  let value = "";
+  return {
+    name: "osstrace-inline-flag",
+    enforce: "pre",
+    configResolved(resolved) {
+      // The same env Vite itself loaded (.env files for this mode + process.env), from the real root.
+      const v: unknown = resolved.env[name];
+      value = typeof v === "string" ? v : "";
+    },
+    transform(code, id) {
+      if (id.includes("/node_modules/") || !code.includes(needle)) return null;
+      return { code: code.replaceAll(needle, JSON.stringify(value)), map: null };
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), preloadFontsPlugin()],
+  plugins: [inlineFlagPlugin("VITE_ENABLE_TRACER_AGENT"), react(), tailwindcss(), preloadFontsPlugin()],
   server: { port: 5301 },
 });

@@ -1,8 +1,9 @@
-import { Eye, GripVertical, Group, Link2, Maximize2, Minus, Plus, Redo2, Share2, Trash2, Undo2, Ungroup } from "lucide-react";
+import { Eye, GripVertical, Group, Link2, Maximize2, Minus, Plus, Redo2, Share2, Sparkles, Trash2, Undo2, Ungroup } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, IconButton } from "../kit/Button.tsx";
 import { Switch } from "../kit/Switch.tsx";
 import { cn } from "../kit/cn.ts";
+import { TRACER_AGENT_ENABLED } from "./agent/flag.ts";
 
 const EDIT_POS_KEY = "osstrace.tracer.editToolbarOffset";
 
@@ -114,6 +115,8 @@ export function Toolbar(props: {
   indirectOn: boolean;
   onIndirectOn: (v: boolean) => void;
   indirectLocked: boolean;
+  /** The agent panel toggle; only ever shown when the build-time flag is on (agent/flag.ts). */
+  agent?: { open: boolean; onToggle: () => void } | null;
   className?: string;
 }) {
   const p = props;
@@ -185,6 +188,14 @@ export function Toolbar(props: {
             <Switch checked={p.indirectOn && !p.indirectLocked} disabled={p.indirectLocked} onCheckedChange={p.onIndirectOn} label="Also search for indirect (shared-counterparty) links" />
           </span>
           <Sep />
+          {TRACER_AGENT_ENABLED && p.agent ? (
+            <>
+              <Button variant={p.agent.open ? "secondary" : "ghost"} size="sm" aria-pressed={p.agent.open} icon={<Sparkles aria-hidden className="size-3.5" />} onClick={p.agent.onToggle}>
+                Agent
+              </Button>
+              <Sep />
+            </>
+          ) : null}
           <Button variant="primary" size="sm" className="ml-0.5" icon={<Plus aria-hidden className="size-3.5" />} onClick={p.onAdd}>
             Add
           </Button>

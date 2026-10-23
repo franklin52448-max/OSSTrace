@@ -112,6 +112,6 @@ test("validateAddress checks the new chains' addresses by EVM shape, with each c
 
 test("supportedChainNames lists every chain, Ethereum first and Solana last", async () => {
   const { supportedChainNames } = await import("../src/chainList.ts");
-  assert.equal(supportedChainNames("or"), "Ethereum, BNB Chain, Robinhood Chain, Base, Arbitrum One, OP Mainnet, Zora, Lens Chain, Data Network or Solana");
-  assert.ok(supportedChainNames("and").endsWith("Data Network and Solana"));
+  assert.equal(supportedChainNames("or"), "Ethereum, BNB Chain, Robinhood Chain, Base, Arbitrum One, OP Mainnet, Zora, Lens Chain, Data Network, Gnosis Chain, Ronin, Rootstock or Solana");
+  assert.ok(supportedChainNames("and").endsWith("Rootstock and Solana"));
 });

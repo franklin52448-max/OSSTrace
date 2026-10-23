@@ -68,6 +68,13 @@ export type Config = {
   lensRpcUrl: string;
   /** Data Network (formerly Story): the chain's id here is "story", so its env var is STORY_RPC_URL. */
   storyRpcUrl: string;
+  /** Never logged. Gnosis Chain, Ronin and Rootstock JSON-RPC, the same shape again (deposits over
+   *  plain `eth_*`, address history and balances when it's an Alchemy URL). Each defaults to the
+   *  chain's own operator's public RPC (no key; chain ids 100 / 2020 / 30 checked against each one
+   *  2026-10-23). */
+  gnosisRpcUrl: string;
+  roninRpcUrl: string;
+  rootstockRpcUrl: string;
   /** Bitcoin bounty-deposit verification source (an Esplora-API block explorer, no key needed) --
    *  Blockstream.info by default; mempool.space speaks the same API and can be swapped in via
    *  ESPLORA_URL. Bitcoin is deposit-only here: nothing else in this server reads Bitcoin. */
@@ -110,6 +117,12 @@ export const DEFAULT_LENS_RPC = "https://rpc.lens.xyz";
 /** The Data Network's own public RPC (chain id 1514, no key) -- the rebranded name of Story's
  *  mainnet.storyrpc.io, which answers for the same chain. */
 export const DEFAULT_STORY_RPC = "https://mainnet.datarpc.io";
+/** Gnosis Chain's own public RPC, listed in Gnosis's docs (chain id 100, no key, rate-limited). */
+export const DEFAULT_GNOSIS_RPC = "https://rpc.gnosischain.com";
+/** Ronin's public RPC, run by Sky Mavis (chain id 2020, no key, rate-limited). */
+export const DEFAULT_RONIN_RPC = "https://api.roninchain.com/rpc";
+/** Rootstock's public node, run by RootstockLabs (chain id 30, no key, rate-limited). */
+export const DEFAULT_ROOTSTOCK_RPC = "https://public-node.rsk.co";
 
 const bool = (v: string | undefined, dflt: boolean) => {
   if (v === undefined || v === "") return dflt;
@@ -192,6 +205,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const zoraRpcUrl = rpcUrlFrom(env, "ZORA", DEFAULT_ZORA_RPC);
   const lensRpcUrl = rpcUrlFrom(env, "LENS", DEFAULT_LENS_RPC);
   const storyRpcUrl = rpcUrlFrom(env, "STORY", DEFAULT_STORY_RPC);
+  const gnosisRpcUrl = rpcUrlFrom(env, "GNOSIS", DEFAULT_GNOSIS_RPC);
+  const roninRpcUrl = rpcUrlFrom(env, "RONIN", DEFAULT_RONIN_RPC);
+  const rootstockRpcUrl = rpcUrlFrom(env, "ROOTSTOCK", DEFAULT_ROOTSTOCK_RPC);
 
   const solscanApiKey = env.SOLSCAN_API_KEY?.trim() || null;
 
@@ -225,6 +241,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     zoraRpcUrl,
     lensRpcUrl,
     storyRpcUrl,
+    gnosisRpcUrl,
+    roninRpcUrl,
+    rootstockRpcUrl,
     esploraUrl: (env.ESPLORA_URL ?? "https://blockstream.info").replace(/\/$/, ""),
     defillamaUrl: (env.DEFILLAMA_URL ?? "https://coins.llama.fi").replace(/\/$/, ""),
     jupiterTokensUrl: (env.JUPITER_TOKENS_URL ?? "https://lite-api.jup.ag/tokens/v2").replace(/\/$/, ""),

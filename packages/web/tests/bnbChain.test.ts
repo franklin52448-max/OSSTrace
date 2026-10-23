@@ -71,7 +71,7 @@ test("labels import: a bnb row is accepted, kept apart from the same address on 
   assert.equal(rows[0]!.errors.length, 0);
   assert.equal(rows[0]!.chain, "bnb");
   assert.equal(rows[1]!.errors.length, 0, "same address on another chain is not a duplicate");
-  assert.match(rows[2]!.errors[0]!, /Unknown chain "bitcoin" \(use solana, ethereum, bnb, robinhood, base, arbitrum, optimism, zora, lens, story\)/);
+  assert.match(rows[2]!.errors[0]!, /Unknown chain "bitcoin" \(use solana, ethereum, bnb, robinhood, base, arbitrum, optimism, zora, lens, story, gnosis, ronin, rootstock\)/);
 });
 
 test("ChainBadge names BNB Chain, short and long", async () => {

@@ -105,6 +105,17 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
         fetchImpl: o.fetchImpl,
       }),
     story: o.providers?.story ?? new AlchemyProvider({ chain: "story", chainId: 1514, nativeSymbol: "DATA", nativeName: "DATA", rpcUrl: config.storyRpcUrl, rpcEnv: "STORY_RPC_URL", fetchImpl: o.fetchImpl }),
+    // Gnosis Chain, Ronin and Rootstock: the same provider again, none paying gas in ETH -- Gnosis Chain
+    // in xDAI (a dollar stablecoin), Ronin in RON, Rootstock in RBTC (BTC-pegged). Alchemy serves
+    // internal transfers on none of them (-32602, checked 2026-10-23); on Rootstock it leaves out every
+    // row's block time, which the provider reads from the block instead.
+    gnosis:
+      o.providers?.gnosis ??
+      new AlchemyProvider({ chain: "gnosis", chainId: 100, nativeSymbol: "xDAI", nativeName: "xDAI", rpcUrl: config.gnosisRpcUrl, rpcEnv: "GNOSIS_RPC_URL", fetchImpl: o.fetchImpl }),
+    ronin: o.providers?.ronin ?? new AlchemyProvider({ chain: "ronin", chainId: 2020, nativeSymbol: "RON", nativeName: "Ronin", rpcUrl: config.roninRpcUrl, rpcEnv: "RONIN_RPC_URL", fetchImpl: o.fetchImpl }),
+    rootstock:
+      o.providers?.rootstock ??
+      new AlchemyProvider({ chain: "rootstock", chainId: 30, nativeSymbol: "RBTC", nativeName: "Smart Bitcoin", rpcUrl: config.rootstockRpcUrl, rpcEnv: "ROOTSTOCK_RPC_URL", fetchImpl: o.fetchImpl }),
     solana:
       o.providers?.solana ??
       new SolanaRpcProvider(config.solanaRpcUrl, config.solanaRpcCustom, o.fetchImpl, {

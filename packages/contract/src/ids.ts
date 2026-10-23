@@ -22,7 +22,7 @@ export const isEvmAddress = (s: string) => /^0x[0-9a-fA-F]{40}$/.test(s.trim());
 export const isSolanaAddress = (s: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s.trim());
 
 /** The chains whose addresses are 0x + 40 hex (secp256k1, EIP-55): one address is the same account on each. */
-export const EVM_CHAINS: readonly Chain[] = ["ethereum", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story"] as const;
+export const EVM_CHAINS: readonly Chain[] = ["ethereum", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story", "gnosis", "ronin", "rootstock"] as const;
 export const isEvmChain = (chain: Chain): boolean => EVM_CHAINS.includes(chain);
 
 /**

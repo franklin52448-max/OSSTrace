@@ -27,6 +27,10 @@ export const bucketOf = (t: number) => Math.floor(t / HOUR) * HOUR;
 // chain's Circle USDC prices at ~$1.00, 6 dp), Zora "zora" (USDzC, WETH), Lens Chain "lens" (WGHO),
 // and the Data Network "sty" -- DefiLlama's key from its Story days: `sty:0x1514...0000` (WIP) prices at
 // DATA's own price, while `story:`, `data:` and `data_network:` keys all price as nothing.
+//
+// And on 2026-10-23 again: Gnosis Chain is "xdai" (`xdai:0xe91d...a97d`, WXDAI, prices at ~$1.00), Ronin
+// "ronin" (WRON), Rootstock "rsk" (RIF, WRBTC) -- DefiLlama's own chain keys. ("gnosis:" and "rootstock:"
+// happen to answer the same today, as aliases; the canonical keys are used.)
 export const LLAMA_CHAIN_PREFIX: Record<Chain, string> = {
   ethereum: "ethereum",
   solana: "solana",
@@ -38,6 +42,9 @@ export const LLAMA_CHAIN_PREFIX: Record<Chain, string> = {
   zora: "zora",
   lens: "lens",
   story: "sty",
+  gnosis: "xdai",
+  ronin: "ronin",
+  rootstock: "rsk",
 };
 /** Native coins are keyed by their CoinGecko id on DefiLlama (BNB's is "binancecoin", not "bnb").
  *  Robinhood Chain pays gas in real ETH -- CoinGecko's asset platform for it says `native_coin_id:
@@ -45,7 +52,9 @@ export const LLAMA_CHAIN_PREFIX: Record<Chain, string> = {
  *  Base's gas asset is ether too (bridged 1:1, the same asset), so the same series -- and so is
  *  Arbitrum One's, OP Mainnet's and Zora's. Lens Chain's gas token is GHO ("coingecko:gho", ~$1.00),
  *  and the Data Network's is DATA, whose CoinGecko id is still "story-2" from before the rebrand
- *  (DefiLlama answers it with symbol "DATA"). */
+ *  (DefiLlama answers it with symbol "DATA"). Gnosis Chain's xDAI is "coingecko:xdai" (~$1.00), Ronin's
+ *  RON "coingecko:ronin", and Rootstock's RBTC "coingecko:rootstock" -- RBTC's own series (symbol RBTC),
+ *  which tracks BTC 1:1 but is the asset actually held, so it's priced as itself. */
 export const NATIVE_COIN: Record<Chain, string> = {
   ethereum: "coingecko:ethereum",
   solana: "coingecko:solana",
@@ -57,6 +66,9 @@ export const NATIVE_COIN: Record<Chain, string> = {
   zora: "coingecko:ethereum",
   lens: "coingecko:gho",
   story: "coingecko:story-2",
+  gnosis: "coingecko:xdai",
+  ronin: "coingecko:ronin",
+  rootstock: "coingecko:rootstock",
 };
 export const tokenCoin = (chain: Chain, tokenId: string) => `${LLAMA_CHAIN_PREFIX[chain]}:${tokenId}`;
 

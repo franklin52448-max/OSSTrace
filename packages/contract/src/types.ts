@@ -25,8 +25,15 @@
 //   (native token DATA; chainid.network, CoinGecko and the chain's own foundation site all say so as of
 //   2026-10). The id stays "story" -- the network's original name and Alchemy's own subdomain for it
 //   (story-mainnet) -- while everything shown to a person says "Data Network" and "DATA".
-export type Chain = "solana" | "ethereum" | "bnb" | "robinhood" | "base" | "arbitrum" | "optimism" | "zora" | "lens" | "story";
-export const CHAINS: readonly Chain[] = ["solana", "ethereum", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story"] as const;
+//
+// Three more, the same way again, none with a login of its own -- and none of them paying gas in ETH:
+// - "gnosis": Gnosis Chain (formerly xDai, chain id 100). Its native currency is xDAI, a dollar
+//   stablecoin (bridged DAI), not ETH.
+// - "ronin": Ronin (chain id 2020), gas paid in RON, its own coin.
+// - "rootstock": Rootstock (RSK, a Bitcoin sidechain, chain id 30). Gas is paid in RBTC ("Smart
+//   Bitcoin", pegged 1:1 to BTC) -- its own EVM-native unit, priced as RBTC, never as Ethereum's ETH.
+export type Chain = "solana" | "ethereum" | "bnb" | "robinhood" | "base" | "arbitrum" | "optimism" | "zora" | "lens" | "story" | "gnosis" | "ronin" | "rootstock";
+export const CHAINS: readonly Chain[] = ["solana", "ethereum", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story", "gnosis", "ronin", "rootstock"] as const;
 export const isChain = (v: unknown): v is Chain => typeof v === "string" && (CHAINS as readonly string[]).includes(v);
 
 /** Display name per chain -- one place, so a new chain can't end up as "Solana" in a two-way ternary. */
@@ -41,11 +48,15 @@ export const CHAIN_NAMES: Record<Chain, string> = {
   zora: "Zora",
   lens: "Lens Chain",
   story: "Data Network",
+  gnosis: "Gnosis Chain",
+  ronin: "Ronin",
+  rootstock: "Rootstock",
 };
 /** Each chain's native unit, known without a successful balance call. Robinhood Chain's, Base's,
  *  Arbitrum One's, OP Mainnet's and Zora's really are ETH (bridged from Ethereum), not a token of their
  *  own -- so this symbol alone can't tell their transfers from Ethereum's; show the chain next to it.
- *  Lens Chain's is GHO and the Data Network's is DATA (formerly IP), each that chain's own. */
+ *  Lens Chain's is GHO and the Data Network's is DATA (formerly IP), each that chain's own. Gnosis
+ *  Chain's is xDAI (a dollar stablecoin), Ronin's RON and Rootstock's RBTC (BTC-pegged). */
 export const NATIVE_SYMBOLS: Record<Chain, string> = {
   solana: "SOL",
   ethereum: "ETH",
@@ -57,6 +68,9 @@ export const NATIVE_SYMBOLS: Record<Chain, string> = {
   zora: "ETH",
   lens: "GHO",
   story: "DATA",
+  gnosis: "xDAI",
+  ronin: "RON",
+  rootstock: "RBTC",
 };
 
 export type XY = { x: number; y: number };

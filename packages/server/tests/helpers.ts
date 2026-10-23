@@ -149,8 +149,9 @@ export type TestApp = {
   bnb: FakeProvider;
   rh: FakeProvider;
   base: FakeProvider;
-  /** Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network's fakes, by chain id. */
-  more: Record<"arbitrum" | "optimism" | "zora" | "lens" | "story", FakeProvider>;
+  /** Arbitrum One, OP Mainnet, Zora, Lens Chain, the Data Network, Gnosis Chain, Ronin and Rootstock's
+   *  fakes, by chain id. */
+  more: Record<"arbitrum" | "optimism" | "zora" | "lens" | "story" | "gnosis" | "ronin" | "rootstock", FakeProvider>;
   sent: { url: string; body: string; headers: Record<string, string> }[];
   close: () => Promise<void>;
 };
@@ -170,6 +171,9 @@ export async function makeApp(over: Partial<Config> = {}, opts: { sendWebhook?: 
     zora: new FakeProvider("zora"),
     lens: new FakeProvider("lens"),
     story: new FakeProvider("story"),
+    gnosis: new FakeProvider("gnosis"),
+    ronin: new FakeProvider("ronin"),
+    rootstock: new FakeProvider("rootstock"),
   };
   const sent: TestApp["sent"] = [];
   const { app, ctx, worker } = await buildApp(config, {

@@ -34,7 +34,20 @@ afterEach(async () => {
 });
 
 test("explorers.ts: only the chains this project actually has data for", () => {
-  assert.deepEqual(Object.keys(explorers.EXPLORERS).sort(), ["arbitrum", "base", "bnb", "ethereum", "lens", "optimism", "robinhood", "solana", "story", "zora"]);
+  assert.deepEqual(Object.keys(explorers.EXPLORERS).sort(), ["arbitrum", "base", "bnb", "ethereum", "gnosis", "lens", "optimism", "robinhood", "ronin", "rootstock", "solana", "story", "zora"]);
+});
+
+test("explorers.ts: Gnosis Chain, Ronin and Rootstock link to each chain's own real explorer", () => {
+  const cases = [
+    ["gnosis", "Gnosisscan", "https://gnosisscan.io"],
+    ["ronin", "Ronin Explorer", "https://explorer.roninchain.com"],
+    ["rootstock", "Rootstock Explorer", "https://explorer.rootstock.io"],
+  ] as const;
+  for (const [chain, name, origin] of cases) {
+    assert.equal(explorers.explorerName(chain), name);
+    assert.equal(explorers.explorerAddressUrl(chain, "0xabc"), `${origin}/address/0xabc`);
+    assert.equal(explorers.explorerTxUrl(chain, "0xdef"), `${origin}/tx/0xdef`);
+  }
 });
 
 test("explorers.ts: Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network link to each chain's own real explorer", () => {

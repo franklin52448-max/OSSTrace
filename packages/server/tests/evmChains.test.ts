@@ -1,7 +1,7 @@
-// Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network (chain id "story", formerly Story):
-// five more EVM chains, each read through the same AlchemyProvider as BNB Chain / Robinhood Chain /
-// Base (chain/alchemy.ts, tested in alchemy.test.ts) on its own RPC URL. Each block below runs once per
-// chain, the same checks base.test.ts makes for Base.
+// Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network (chain id "story", formerly Story),
+// then Gnosis Chain, Ronin and Rootstock: eight more EVM chains, each read through the same
+// AlchemyProvider as BNB Chain / Robinhood Chain / Base (chain/alchemy.ts, tested in alchemy.test.ts) on
+// its own RPC URL. Each block below runs once per chain, the same checks base.test.ts makes for Base.
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -99,6 +99,45 @@ const CASES: Case[] = [
     llamaPrefix: "sty",
     token: "0x1514000000000000000000000000000000000000", // WIP (wrapped native)
   },
+  {
+    chain: "gnosis",
+    name: "Gnosis Chain",
+    chainId: 100,
+    env: "GNOSIS_RPC_URL",
+    configKey: "gnosisRpcUrl",
+    defaultRpc: "https://rpc.gnosischain.com",
+    nativeSymbol: "xDAI",
+    nativeName: "xDAI",
+    nativeCoin: "coingecko:xdai",
+    llamaPrefix: "xdai",
+    token: "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d", // WXDAI
+  },
+  {
+    chain: "ronin",
+    name: "Ronin",
+    chainId: 2020,
+    env: "RONIN_RPC_URL",
+    configKey: "roninRpcUrl",
+    defaultRpc: "https://api.roninchain.com/rpc",
+    nativeSymbol: "RON",
+    nativeName: "Ronin",
+    nativeCoin: "coingecko:ronin",
+    llamaPrefix: "ronin",
+    token: "0xe514d9DEB7966c8BE0ca922de8a064264eA6bcd4", // WRON
+  },
+  {
+    chain: "rootstock",
+    name: "Rootstock",
+    chainId: 30,
+    env: "ROOTSTOCK_RPC_URL",
+    configKey: "rootstockRpcUrl",
+    defaultRpc: "https://public-node.rsk.co",
+    nativeSymbol: "RBTC",
+    nativeName: "Smart Bitcoin",
+    nativeCoin: "coingecko:rootstock",
+    llamaPrefix: "rsk",
+    token: "0x542fDA317318eBF1d3DEAf76E0b632741A7e677d", // WRBTC
+  },
 ];
 
 describe.each(CASES)("$name provider wiring", (k) => {
@@ -119,7 +158,7 @@ describe.each(CASES)("$name provider wiring", (k) => {
       expect(urls.length).toBeGreaterThan(0);
       expect(urls.every((u) => u === url)).toBe(true);
       expect(bodies.find((b) => b.method === "eth_chainId")).toBeDefined();
-      // Alchemy answers -32602 for the internal category on all five (checked live 2026-10-23).
+      // Alchemy answers -32602 for the internal category on all eight (checked live 2026-10-23).
       expect(bodies.find((b) => b.method === "alchemy_getAssetTransfers").params[0].category).toEqual(["external", "erc20", "erc721", "erc1155"]);
     } finally {
       await app.close();
@@ -155,6 +194,30 @@ describe("Lens Chain wiring: no double-counted native transfers, real block time
     try {
       const page = await ctx.providers.lens.fetchStreamPage(ETH_A, "incoming", null, budgetMs(5000));
       expect(page.transfers).toEqual([expect.objectContaining({ chain: "lens", id: `${hash}_t0`, tokenSymbol: "GHO", amountRaw: "500000000000000000", blockTime: 0x6adb8abc })]);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe("Rootstock wiring: real block times where Alchemy leaves them out", () => {
+  it("reads each row's block time from its block (Alchemy answers metadata: null on Rootstock), never drops the row", async () => {
+    const hash = `0x${"3b".repeat(32)}`;
+    const ext = { blockNum: "0x8eacfe", uniqueId: `${hash}:external`, hash, from: ETH_B.toLowerCase(), to: ETH_A.toLowerCase(), value: 0.001, erc721TokenId: null, erc1155Metadata: null, tokenId: null, asset: "RBTC", category: "external", rawContract: { value: "0x38d7ea4c68000", address: null, decimal: "0x12" }, metadata: null };
+    const blocks: string[] = [];
+    const fetchImpl = (async (_u: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init!.body));
+      const reply = (x: unknown) => new Response(JSON.stringify(x), { status: 200 });
+      if (Array.isArray(body)) return reply(body.map((b: any) => (blocks.push(b.params[0]), { jsonrpc: "2.0", id: b.id, result: { timestamp: "0x6adb8abc" } })));
+      if (body.method === "eth_chainId") return reply({ jsonrpc: "2.0", id: body.id, result: "0x1e" });
+      return reply({ jsonrpc: "2.0", id: body.id, result: { transfers: [ext] } });
+    }) as unknown as typeof fetch;
+    const config = { ...loadConfig({ NODE_ENV: "test", ROOTSTOCK_RPC_URL: "https://rootstock-mainnet.g.alchemy.test/v2/k" } as NodeJS.ProcessEnv), dbPath: ":memory:" };
+    const { app, ctx } = await buildApp(config, { db: openDb(":memory:"), fetchImpl, logger: false });
+    try {
+      const page = await ctx.providers.rootstock.fetchStreamPage(ETH_A, "incoming", null, budgetMs(5000));
+      expect(page.transfers).toEqual([expect.objectContaining({ chain: "rootstock", id: `${hash}_t0`, tokenId: "native", tokenSymbol: "RBTC", amountRaw: "1000000000000000", blockTime: 0x6adb8abc, priceCoin: "coingecko:rootstock" })]);
+      expect(blocks).toEqual(["0x8eacfe"]);
     } finally {
       await app.close();
     }
@@ -262,6 +325,33 @@ describe("migration 015 (labels.chain CHECK widened to the five new EVM chains)"
       for (const chain of ["optimism", "zora", "lens", "story"]) expect((await c.post("/api/labels", { chain, address: ETH_A, name: `After ${chain}` })).statusCode).toBe(201);
       expect(() => t.ctx.db.run("UPDATE labels SET chain = 'bitcoin' WHERE id = ?", lab.id)).toThrow(/CHECK constraint failed/);
       expect(() => t.ctx.db.run("UPDATE labels SET chain = 'data' WHERE id = ?", lab.id)).toThrow(/CHECK constraint failed/);
+    } finally {
+      await t.close();
+    }
+  });
+});
+
+describe("migration 017 (labels.chain CHECK widened to Gnosis Chain, Ronin and Rootstock)", () => {
+  it("keeps every existing label -- including the 015 chains' -- and its tag links, and now accepts each new chain", async () => {
+    const t = await makeApp();
+    try {
+      const c = await signup(t.app, "migrator-017");
+      const tag = (await c.post("/api/tags", { name: "keep", color: "#123456" })).json();
+      const lab = (await c.post("/api/labels", { chain: "ethereum", address: ETH_A, name: "Before", tagIds: [tag.id] })).json();
+      expect((await c.post("/api/labels", { chain: "story", address: ETH_B, name: "On Data Network" })).statusCode).toBe(201);
+      expect((await c.post("/api/labels", { chain: "gnosis", address: ETH_C, name: "On Gnosis" })).statusCode).toBe(201);
+      // Re-run the migration's own SQL against a database that already has data in it.
+      t.ctx.db.tx(() => t.ctx.db.exec(readFileSync(join(here, "../src/db/migrations/017_labels_gnosis_ronin_rootstock.sql"), "utf8")));
+      expect(t.ctx.db.all("SELECT label_id, tag_id FROM label_tags")).toEqual([{ label_id: lab.id, tag_id: tag.id }]);
+      expect(t.ctx.db.all("SELECT chain, name FROM labels ORDER BY name")).toEqual([
+        { chain: "ethereum", name: "Before" },
+        { chain: "story", name: "On Data Network" },
+        { chain: "gnosis", name: "On Gnosis" },
+      ]);
+      for (const chain of ["ronin", "rootstock"]) expect((await c.post("/api/labels", { chain, address: ETH_A, name: `After ${chain}` })).statusCode).toBe(201);
+      expect(() => t.ctx.db.run("UPDATE labels SET chain = 'bitcoin' WHERE id = ?", lab.id)).toThrow(/CHECK constraint failed/);
+      expect(() => t.ctx.db.run("UPDATE labels SET chain = 'rsk' WHERE id = ?", lab.id)).toThrow(/CHECK constraint failed/);
+      expect(() => t.ctx.db.run("UPDATE labels SET chain = 'xdai' WHERE id = ?", lab.id)).toThrow(/CHECK constraint failed/);
     } finally {
       await t.close();
     }

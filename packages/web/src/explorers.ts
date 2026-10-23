@@ -7,9 +7,11 @@ import type { Chain } from "@osstrace/contract";
  * explorer. Arbitrum One links to Arbiscan and OP Mainnet to Optimistic Etherscan (each chain's
  * Etherscan-family explorer); Zora and Lens Chain to their own official explorers, and the Data
  * Network to datanetscan.io, its Blockscout instance (storyscan.io, its name as Story, now redirects
- * there). (The server reads every EVM chain but Ethereum through Alchemy --
- * packages/server/src/chain/alchemy.ts -- which is a keyed data source, not somewhere a person clicks
- * through to.) */
+ * there). Gnosis Chain links to Gnosisscan (its Etherscan-family explorer), Ronin to Ronin's own
+ * official explorer (explorer.roninchain.com, a Blockscout instance), and Rootstock to the Rootstock
+ * Explorer (explorer.rootstock.io; explorer.rsk.co redirects there). (The server reads every EVM chain
+ * but Ethereum through Alchemy -- packages/server/src/chain/alchemy.ts -- which is a keyed data source,
+ * not somewhere a person clicks through to.) */
 export const EXPLORERS: Record<Chain, { name: string; address: string; tx: string }> = {
   ethereum: { name: "Etherscan", address: "https://etherscan.io/address/", tx: "https://etherscan.io/tx/" },
   solana: { name: "Solscan", address: "https://solscan.io/account/", tx: "https://solscan.io/tx/" },
@@ -21,6 +23,9 @@ export const EXPLORERS: Record<Chain, { name: string; address: string; tx: strin
   zora: { name: "Zora Explorer", address: "https://explorer.zora.energy/address/", tx: "https://explorer.zora.energy/tx/" },
   lens: { name: "Lens Explorer", address: "https://explorer.lens.xyz/address/", tx: "https://explorer.lens.xyz/tx/" },
   story: { name: "DataNetScan", address: "https://www.datanetscan.io/address/", tx: "https://www.datanetscan.io/tx/" },
+  gnosis: { name: "Gnosisscan", address: "https://gnosisscan.io/address/", tx: "https://gnosisscan.io/tx/" },
+  ronin: { name: "Ronin Explorer", address: "https://explorer.roninchain.com/address/", tx: "https://explorer.roninchain.com/tx/" },
+  rootstock: { name: "Rootstock Explorer", address: "https://explorer.rootstock.io/address/", tx: "https://explorer.rootstock.io/tx/" },
 };
 
 export function explorerName(chain: Chain): string {

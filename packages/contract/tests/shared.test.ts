@@ -105,6 +105,22 @@ describe("chain detection", () => {
     expect(isChain("data")).toBe(false);
     expect(isChain("arb")).toBe(false);
   });
+  it("Gnosis Chain, Ronin and Rootstock are EVM chains, each its own, none paying gas in ETH", () => {
+    const addr = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+    const t = "11111111-1111-4111-8111-111111111111";
+    for (const chain of ["gnosis", "ronin", "rootstock"] as const) {
+      expect(isChain(chain)).toBe(true);
+      expect(isEvmChain(chain)).toBe(true);
+      expect(normalizeAddress(chain, addr.toLowerCase())).toBe(addr);
+      expect(isAddressOnChain(chain, "So11111111111111111111111111111111111111112")).toBe(false);
+      expect(chainForAddress(addr, chain)).toBe(chain);
+      expect(addressNodeId(t, chain, addr)).not.toBe(addressNodeId(t, "ethereum", addr));
+    }
+    expect([CHAIN_NAMES.gnosis, CHAIN_NAMES.ronin, CHAIN_NAMES.rootstock]).toEqual(["Gnosis Chain", "Ronin", "Rootstock"]);
+    // Gnosis Chain's gas token is the xDAI stablecoin and Rootstock's is RBTC -- never "ETH".
+    expect([NATIVE_SYMBOLS.gnosis, NATIVE_SYMBOLS.ronin, NATIVE_SYMBOLS.rootstock]).toEqual(["xDAI", "RON", "RBTC"]);
+    for (const alias of ["xdai", "rsk", "gno", "ron"]) expect(isChain(alias)).toBe(false);
+  });
 });
 
 describe("deterministic ids", () => {

@@ -6,6 +6,7 @@ import { CopyButton } from "./prism/components.tsx";
 import { ChainSelect, LEGACY_SERVICE_CHAINS } from "./ChainSelect.tsx";
 import { Loading, Notice, PageHeader } from "./ui.tsx";
 import { formatTimestamp } from "./timeDisplay.ts";
+import { explorerName, explorerTxUrl } from "./explorers.ts";
 
 const VISUALIZER_URL = import.meta.env["VITE_VISUALIZER_URL"] ?? "http://localhost:5302";
 /** Same `#address/<chain>/<address>` route App.tsx's router reads. */
@@ -75,8 +76,8 @@ type GraphState = { status: "idle" } | { status: "loading" } | { status: "error"
 
 const SYMBOL: Record<ChainId, string> = { ethereum: "ETH", solana: "SOL" };
 const TX_URL: Record<ChainId, (hash: string) => string> = {
-  ethereum: (hash) => `https://etherscan.io/tx/${hash}`,
-  solana: (hash) => `https://solscan.io/tx/${hash}`,
+  ethereum: (hash) => explorerTxUrl("ethereum", hash),
+  solana: (hash) => explorerTxUrl("solana", hash),
 };
 const OMISSION_TEXT: Record<OmittedTransaction["reason"], string> = {
   "self-transfer": "self-transfer (sent to itself)",
@@ -273,7 +274,8 @@ interface View {
 
 type Gesture =
   | { kind: "pan"; startX: number; startY: number; view: View; moved: boolean }
-  | { kind: "drag"; id: string; startX: number; startY: number; origin: Point; moved: boolean };
+  | { kind: "drag"; id: string; startX: number; startY: number; origin: Point; moved: boolean }
+  | { kind: "edge"; url: string; startX: number; startY: number; moved: boolean };
 
 function nodeRadius(node: GraphNode): number {
   return node.role === "center" ? 18 : 8 + Math.min(10, Math.sqrt(node.stats.txCount) * 3);
@@ -385,6 +387,13 @@ function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; se
     gesture.current = { kind: "drag", id, startX: event.clientX, startY: event.clientY, origin, moved: false };
   }
 
+  // A press on a transfer line: a click (no drag) opens that transaction on its block explorer.
+  function onEdgePointerDown(event: React.PointerEvent<SVGGElement>, url: string): void {
+    event.stopPropagation();
+    svgRef.current?.setPointerCapture(event.pointerId);
+    gesture.current = { kind: "edge", url, startX: event.clientX, startY: event.clientY, moved: false };
+  }
+
   function onPointerMove(event: React.PointerEvent<SVGSVGElement>): void {
     const g = gesture.current;
     if (!g) return;
@@ -394,7 +403,7 @@ function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; se
     if (!g.moved) return;
     if (g.kind === "pan") {
       setView({ ...g.view, x: g.view.x + dx, y: g.view.y + dy });
-    } else {
+    } else if (g.kind === "drag") {
       const k = view.k;
       setPositions((prev) => new Map(prev).set(g.id, { x: g.origin.x + dx / k, y: g.origin.y + dy / k }));
     }
@@ -404,6 +413,7 @@ function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; se
     const g = gesture.current;
     gesture.current = null;
     if (g?.kind === "drag" && !g.moved) onSelect(g.id);
+    if (g?.kind === "edge" && !g.moved) window.open(g.url, "_blank", "noopener,noreferrer");
   }
 
   const nodesById = new Map(report.nodes.map((n) => [n.id, n]));
@@ -455,14 +465,31 @@ function GraphCanvas({ report, selectedId, onSelect }: { report: GraphReport; se
               const my = (y1 + y2) / 2 + ux * bend;
               const dimmed = focusId !== null && focusId !== report.center.value && link.source !== focusId && link.target !== focusId;
               const color = link.direction === "in" ? "#4ad6a0" : "#f5a35c";
+              // Click target: the first transfer in this link (a link can group several transfers).
+              const firstEdge = report.edges.find((e) => e.source === link.source && e.target === link.target);
+              const edgeUrl = firstEdge ? TX_URL[sourceNode.address.chain](firstEdge.hash) : null;
+              const linePath = `M${x1},${y1} Q${mx},${my} ${x2},${y2}`;
               return (
                 <g key={link.key} opacity={dimmed ? 0.15 : 0.85}>
+                  {edgeUrl && (
+                    <path
+                      d={linePath}
+                      fill="none"
+                      stroke="transparent"
+                      strokeWidth={12 / Math.sqrt(view.k)}
+                      className="cursor-pointer"
+                      onPointerDown={(e) => onEdgePointerDown(e, edgeUrl)}
+                    >
+                      <title>{`${firstEdge?.hash ?? ""}\nOpen on ${explorerName(sourceNode.address.chain)}`}</title>
+                    </path>
+                  )}
                   <path
-                    d={`M${x1},${y1} Q${mx},${my} ${x2},${y2}`}
+                    d={linePath}
                     fill="none"
                     stroke={color}
                     strokeWidth={(1.2 + Math.log2(link.count)) / Math.sqrt(view.k)}
                     markerEnd={`url(#arrow-${link.direction})`}
+                    pointerEvents="none"
                   />
                   {link.count > 1 && (
                     <text x={mx} y={my} fill={color} fontSize={10 / Math.sqrt(view.k)} textAnchor="middle" dy="-3">

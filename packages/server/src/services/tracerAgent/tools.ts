@@ -587,7 +587,8 @@ const expandNode = defineTool({
 const listTransfers = defineTool({
   name: "list_transfers",
   description:
-    "List an address's real transfers with the same filters/sorting as the Transfers panel: flow (in/out/self/all), sortBy (time/value/usd), sortDir, asset ('native', a token contract/mint, or a symbol like USDC), counterparty, a date range or timeLast, USD bounds. Read-only: changes nothing on the canvas.",
+    "List an address's real transfers with the same filters/sorting as the Transfers panel: flow (in/out/self/all), sortBy (time/value/usd), sortDir, asset ('native', a token contract/mint, or a symbol like USDC), counterparty, a date range or timeLast, USD bounds. Read-only: changes nothing on the canvas. " +
+    "sortBy 'value' is the raw token amount, which can't be compared across tokens -- for \"largest\" across tokens use 'usd', or set asset. sortBy 'usd' and USD bounds only rank transfers that have a USD price; unpriced ones sort last or are left out.",
   parameters: {
     type: "object",
     properties: {
@@ -692,6 +693,15 @@ const listTransfers = defineTool({
       ...(q.usdLte !== undefined ? { usdLte: q.usdLte } : {}),
     });
     const back = res.sync.coveredFrom ? ` (loaded back to ${res.sync.coveredFrom.slice(0, 10)})` : "";
+    // "The largest transfer" is the question these sorts get asked, and both have a blind spot the
+    // rows alone don't show: amounts of different tokens aren't comparable (a million of a
+    // worthless token outranks 1 ETH by value), and a transfer with no price can't rank by USD.
+    const rankNote =
+      q.sortBy === "value" && tokens.length !== 1
+        ? "Sorted by raw token amount across different tokens -- amounts of different tokens aren't comparable, so this is not \"largest by value\". Sort by usd, or filter to one asset, for that."
+        : q.sortBy === "usd" || q.usdGte !== undefined || q.usdLte !== undefined
+          ? "Only transfers with a USD price are ranked by USD (unpriced ones sort last or are left out by a USD bound), so a large transfer of an unpriced token may not appear here."
+          : null;
     const partialNote =
       res.sync.state === "ready"
         ? null
@@ -709,6 +719,7 @@ const listTransfers = defineTool({
       more: res.nextCursor !== null,
       sync: { state: res.sync.state, coveredFrom: res.sync.coveredFrom, ...(res.sync.anonCapped ? { anonCapped: true } : {}) },
       ...(symbolNote ? { warning: symbolNote } : {}),
+      ...(rankNote ? { rankNote } : {}),
       ...(partialNote ? { note: partialNote } : {}),
     };
   },

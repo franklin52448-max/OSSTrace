@@ -496,6 +496,35 @@ describe("tracer agent", () => {
     expect(usdc.transfers[0]!.token.id.toLowerCase()).toBe(USDC.toLowerCase());
   });
 
+  it("list_transfers: a 'largest' sort says what it can't rank -- amounts across tokens by value, unpriced transfers by USD", async () => {
+    const JUNK = "0x2222222222222222222222222222222222222222";
+    await setup([
+      {
+        tools: [
+          { name: "list_transfers", args: { chain: "ethereum", address: ETH_A, flow: "in", sortBy: "value", limit: 1 } },
+          { name: "list_transfers", args: { chain: "ethereum", address: ETH_A, flow: "in", sortBy: "usd", limit: 1 } },
+          { name: "list_transfers", args: { chain: "ethereum", address: ETH_A, flow: "in", sortBy: "value", asset: "native", limit: 1 } },
+          { name: "list_transfers", args: { chain: "ethereum", address: ETH_A, flow: "in", limit: 1 } },
+        ],
+      },
+      { content: "ok" },
+    ]);
+    t.eth.add([
+      ethTransfer(ETH_B, ETH_A, base + 1, { amountRaw: "1000000000000000000" }), // 1 ETH, $2000
+      ethTransfer(ETH_C, ETH_A, base + 2, { tokenId: JUNK, tokenSymbol: "JUNK", tokenName: "Junk", tokenDecimals: 0, tokenStandard: "erc20", amountRaw: "1000000", priceCoin: null }),
+    ]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "what's the largest thing A received?" })).json() as TracerAgentChatResponse;
+    const [byValue, byUsd, oneAsset, byTime] = res.toolCalls.map((x) => x.result as { transfers: { token: { symbol: string } }[]; rankNote?: string });
+    expect(byValue!.transfers[0]!.token.symbol).toBe("JUNK"); // a million of an unpriced token "outranks" 1 ETH by amount...
+    expect(byValue!.rankNote).toMatch(/amounts of different tokens aren't comparable, so this is not "largest by value"/); // ...and the result says that's no ranking
+    expect(byUsd!.transfers[0]!.token.symbol).toBe("ETH");
+    expect(byUsd!.rankNote).toMatch(/a large transfer of an unpriced token may not appear here/);
+    expect(oneAsset!.rankNote).toBeUndefined(); // one asset: amounts are comparable
+    expect(byTime!.rankNote).toBeUndefined();
+  });
+
   it("list_transfers: an omitted-but-empty optional arg (a model sends \"\" or null instead of leaving the key out -- confirmed live with gpt-4.1-mini on a real 'who first funded this address' question) is treated as not given, not rejected", async () => {
     await setup([
       { tools: [{ name: "list_transfers", args: { chain: "ethereum", address: ETH_A, counterparty: "", asset: null, timeGte: "" } }] },

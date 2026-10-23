@@ -1,9 +1,25 @@
 import { describe, expect, it } from "vitest";
+import { Wallet } from "ethers";
+import nacl from "tweetnacl";
+import type { FastifyInstance } from "fastify";
 import { loadConfig, type Config } from "../src/config.ts";
 import { buildApp } from "../src/app.ts";
 import { openDb } from "../src/db/index.ts";
 import { PriceService } from "../src/chain/prices.ts";
 import { Client, FakeProvider, llamaFetch, signup, testWallet } from "./helpers.ts";
+
+/** Runs the real challenge -> sign -> verify flow for an Ethereum wallet and returns a signed-in client. */
+async function signupEthereum(app: FastifyInstance, wallet: Wallet): Promise<Client> {
+  const c = new Client(app);
+  const address = wallet.address;
+  const chal = await c.post("/api/auth/challenge", { chain: "ethereum", address });
+  if (chal.statusCode !== 200) throw new Error(`challenge failed: ${chal.statusCode} ${chal.body}`);
+  const { message } = chal.json() as { message: string };
+  const signature = await wallet.signMessage(message);
+  const r = await c.post("/api/auth/verify", { chain: "ethereum", address, signature });
+  if (r.statusCode !== 200) throw new Error(`verify failed: ${r.statusCode} ${r.body}`);
+  return c;
+}
 
 const SOL_WALLET = "11111111111111111111111111111111";
 const ETH_WALLET = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
@@ -87,22 +103,28 @@ describe("bounties", () => {
     }
   });
 
-  it("records a real verified Solana native deposit, rejects a replay and a wrong-wallet payment", async () => {
+  it("records a real verified Solana native deposit, rejects a replay, a malformed signature, and someone else's transaction", async () => {
     const stub = new FakeProvider("solana");
-    const payer = testWallet("depositor").address;
+    // The signed-in depositor's own wallet is the tx's real sender -- the deposit route now requires
+    // that match (previously it didn't, letting anyone attach any public on-chain payment to any bounty).
+    const payer = testWallet("depositor");
     const solTx = {
-      transaction: { message: { accountKeys: [payer, SOL_WALLET], instructions: [] } },
+      transaction: { message: { accountKeys: [payer.address, SOL_WALLET], instructions: [] } },
       meta: { err: null, preBalances: [5_000_000_000, 1_000_000_000], postBalances: [3_998_000_000, 2_000_000_000] },
     };
     const { app, close } = await makeBountyApp(depositFetch({ solTx }), stub, stub);
     try {
-      const u = await signup(app, "sol-depositor");
+      const u = new Client(app);
+      const chal = await u.post("/api/auth/challenge", { chain: "solana", address: payer.address });
+      const { message } = chal.json() as { message: string };
+      const signature = Buffer.from(nacl.sign.detached(new TextEncoder().encode(message), payer.secretKey)).toString("base64");
+      await u.post("/api/auth/verify", { chain: "solana", address: payer.address, signature });
       const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
 
       const fakeSig = "A".repeat(64); // valid base58 charset + length, so it routes into real RPC verification (mocked above)
       const good = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "solana", txRef: fakeSig });
       expect(good.statusCode).toBe(201);
-      expect(good.json()).toMatchObject({ asset: "native", amount: "1", toWallet: SOL_WALLET, fromAddress: payer }); // 2_000_000_000 - 1_000_000_000 lamports = 1 SOL
+      expect(good.json()).toMatchObject({ asset: "native", amount: "1", toWallet: SOL_WALLET, fromAddress: payer.address }); // 2_000_000_000 - 1_000_000_000 lamports = 1 SOL
 
       // replay of the same tx_ref is rejected
       const replay = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "solana", txRef: fakeSig });
@@ -111,6 +133,14 @@ describe("bounties", () => {
       // malformed signature is rejected without even hitting the RPC
       const malformed = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "solana", txRef: "not-a-real-signature" });
       expect(malformed.statusCode).toBe(400);
+
+      // a different signed-in user can't attach THIS (real, public) payment to their own bounty --
+      // the tx really happened on-chain, but it wasn't sent from their wallet.
+      const stranger = await signup(app, "stranger-watching-the-wallet");
+      const strangersBounty = (await stranger.post("/api/bounties", { title: "T2", description: "D", reward: "R" })).json();
+      const stolen = await stranger.post(`/api/bounties/${strangersBounty.id}/deposits`, { chain: "solana", txRef: "B".repeat(64) });
+      expect(stolen.statusCode).toBe(403);
+      expect(stolen.json().error.message).toMatch(/sent from your connected wallet/i);
     } finally {
       await close();
     }
@@ -118,12 +148,13 @@ describe("bounties", () => {
 
   it("records a real verified Ethereum ERC-20 deposit via Blockscout, with decimals already resolved", async () => {
     const stub = new FakeProvider("ethereum");
-    const sender = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359";
+    const wallet = new Wallet("0x" + "7".repeat(64));
+    const sender = wallet.address;
     const bsTx = { status: "ok", value: "0", to: { hash: ETH_WALLET }, from: { hash: sender } };
     const bsTransfers = { items: [{ to: { hash: ETH_WALLET }, from: { hash: sender }, token: { address_hash: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: "6" }, total: { value: "5500000" } }] };
     const { app, close } = await makeBountyApp(depositFetch({ bsTx, bsTransfers }), stub, stub);
     try {
-      const u = await signup(app, "eth-depositor");
+      const u = await signupEthereum(app, wallet);
       const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
       const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "ethereum", txRef: `0x${"a".repeat(64)}` });
       expect(r.statusCode).toBe(201);

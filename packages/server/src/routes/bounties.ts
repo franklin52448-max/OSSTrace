@@ -5,6 +5,7 @@ import type { Bounty, BountyDeposit, BountySubmission } from "@osstrace/contract
 import { requireUser, type Ctx } from "../context.ts";
 import { HttpClient, budgetMs } from "../lib/http.ts";
 import { verifyEthereumDeposit, verifySolanaDeposit } from "../chain/deposits.ts";
+import { normalizeAddress } from "../auth/wallet.ts";
 import { ApiErr, badRequest, conflict, forbidden, notFound } from "../lib/errors.ts";
 import { nowIso } from "../lib/time.ts";
 import { chain, parse } from "../schemas.ts";
@@ -181,9 +182,16 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
       throw badRequest(messages[verified.reason]);
     }
 
+    const d = verified.deposit;
+    // Deposit transactions are public on-chain data -- without this check, anyone signed in could
+    // watch the deposit wallet and attach someone else's transaction (meant for a different bounty)
+    // to one of their own choosing, first-come-first-served. The caller must be the real sender.
+    if (u.chain !== body.chain || !u.walletAddress || normalizeAddress(body.chain, u.walletAddress) !== normalizeAddress(body.chain, d.fromAddress)) {
+      throw forbidden("That transaction wasn't sent from your connected wallet");
+    }
+
     const id = randomUUID();
     const now = nowIso();
-    const d = verified.deposit;
     db.run(
       "INSERT INTO bounty_deposits (id, bounty_id, chain, asset_contract, amount, tx_ref, from_address, to_wallet, memo, recorded_by, recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       id,

@@ -132,9 +132,20 @@ function placeNear(anchor: XY | null, taken: XY[]): XY {
   return p;
 }
 
+/** `address` with a leading `chain:` dropped when it names `chain` itself. The system prompt (and
+ *  find_connections' own schema) asks for chain:address form, so a model passes "ethereum:0x…" in a
+ *  field whose chain is already its own argument; a prefix naming a different chain is refused rather
+ *  than silently picking one of the two. */
+function dropChainPrefix(chain: Chain, s: string): string {
+  const i = s.indexOf(":");
+  if (i <= 0 || !isChain(s.slice(0, i))) return s;
+  if (s.slice(0, i) !== chain) fail(`"${safeText(s, 80)}" names chain ${s.slice(0, i)}, but chain is ${chain} -- use the same chain for both`);
+  return s.slice(i + 1).trim();
+}
+
 /** A validated, normalized (chain, address) from model input, or a ToolError. */
 function addrArg(chain: Chain, address: string): AddrKey {
-  const a = address.trim();
+  const a = dropChainPrefix(chain, address.trim());
   if (!isAddressOnChain(chain, a)) fail(`"${safeText(a, 60)}" is not a valid ${chain} address`);
   return { chain, address: normalizeAddress(chain, a) };
 }
@@ -507,7 +518,7 @@ const listTransfers = defineTool({
     let tokens: string[] = [];
     let symbolNote: string | null = null;
     if (q.asset) {
-      const asset = q.asset.trim();
+      const asset = dropChainPrefix(q.chain, q.asset.trim());
       if (asset.toLowerCase() === "native") tokens = ["native"];
       else if (isAddressOnChain(q.chain, asset) || isEvmAddress(asset)) tokens = [asset];
       else {

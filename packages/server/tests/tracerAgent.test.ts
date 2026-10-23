@@ -430,6 +430,37 @@ describe("tracer agent", () => {
     expect(node.note ?? null).toBeNull();
   });
 
+  it("single-address args accept the chain:address form the system prompt asks for; a prefix naming another chain is refused", async () => {
+    const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+    await setup([
+      {
+        tools: [
+          { name: "add_node", args: { chain: "ethereum", address: `ethereum:${ETH_A}` } },
+          { name: "list_transfers", args: { chain: "ethereum", address: `ethereum:${ETH_A}`, counterparty: `ethereum:${ETH_B}`, asset: `ethereum:${USDC}` } },
+          { name: "expand_node", args: { chain: "ethereum", address: `ethereum:${ETH_A}`, hops: 1 } },
+          { name: "add_node", args: { chain: "base", address: `ethereum:${ETH_C}` } },
+        ],
+      },
+      { content: "ok" },
+    ]);
+    t.eth.add([
+      ethTransfer(ETH_B, ETH_A, base + 10, { tokenId: USDC, tokenSymbol: "USDC", tokenName: "USD Coin", tokenDecimals: 6, tokenStandard: "erc20", amountRaw: "7000000" }),
+      ethTransfer(ETH_A, ETH_C, base + 20),
+    ]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "add A, list its USDC from B, expand it" })).json() as TracerAgentChatResponse;
+    const errors = res.toolCalls.map((x) => (x.result as { error?: string }).error ?? "ok");
+    expect(errors.slice(0, 3)).toEqual(["ok", "ok", "ok"]);
+    expect(res.toolCalls[0]!.result).toMatchObject({ nodeId: addressNodeId(id, "ethereum", ETH_A), alreadyOnCanvas: false });
+    const usdc = (res.toolCalls[1]!.result as { transfers: { token: { id: string } }[] }).transfers;
+    expect(usdc).toHaveLength(1); // not "no transfers": the prefixed asset/counterparty were read as the addresses they are
+    expect(usdc[0]!.token.id.toLowerCase()).toBe(USDC.toLowerCase());
+    expect(res.toolCalls[2]!.result).toMatchObject({ ok: true, rootNodeId: addressNodeId(id, "ethereum", ETH_A) });
+    expect(errors[3]).toMatch(/names chain ethereum, but chain is base/);
+    expect(((await c.get(`/api/traces/${id}`)).json() as Trace).nodes.some((n) => n.chain === "base")).toBe(false);
+  });
+
   it("rename / annotate / remove act on this doc's real node ids only", async () => {
     await setup([
       { tools: [{ name: "get_doc_state", args: {} }] },

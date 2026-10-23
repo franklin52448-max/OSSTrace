@@ -65,3 +65,7 @@ ff43d186fd76c08362783fd38b976e9ba300279e:packages/server/tests/fixtures/solana/t
 # The project's own $OSSTRACE token contract address (Solana, pump.fun) -- deliberately public,
 # shown on the homepage itself for anyone to copy.
 cb0f1dee31f8333669062c83916b240c1c7db405:packages/web/src/App.tsx:generic-api-key:38
+
+# A fake Alchemy pagination cursor (a random UUID-like string) used as test fixture data in
+# AlchemyProvider's tests -- a pageKey is an opaque pagination token, not a credential.
+0f5ad1b2346b7296da294012499c815ea49f8e1f:packages/server/tests/alchemy.test.ts:generic-api-key:131

@@ -127,7 +127,12 @@ function nameOf(doc: TraceDoc | null, id: unknown, fallback?: unknown): string {
 export function describeToolCall(call: AgentToolCall, doc: TraceDoc | null): AgentStep {
   const { tool, result: r } = call;
   const step = (status: AgentStepStatus, summary: string, href?: string): AgentStep => ({ tool, status, summary, ...(href ? { href } : {}) });
-  if (r["ok"] === false) return step("failed", str(r["error"]) ?? "This step didn't work.");
+  // A call the server refused before running it (an unknown tool, arguments that didn't parse or
+  // pass the schema) failed on the model's side: its error text is written for the model --
+  // "Invalid arguments -- hops: ...", "Change the arguments, or tell the user..." -- so the user
+  // gets what it means for them instead. Any other error is already worded for the user; the
+  // result's `hint` is advice to the model and isn't shown.
+  if (r["ok"] === false) return step("failed", r["refused"] === true ? "Skipped: the agent asked for this step in a way the tool doesn't accept, so nothing ran." : (str(r["error"]) ?? "This step didn't work."));
 
   switch (tool) {
     case "add_node": {
@@ -138,7 +143,10 @@ export function describeToolCall(call: AgentToolCall, doc: TraceDoc | null): Age
       const conns = Array.isArray(r["connections"]) ? r["connections"].length : 0;
       const edges = num(r["edgesAdded"]) ?? 0;
       const leads = Array.isArray(r["indirectLeads"]) ? r["indirectLeads"].length : 0;
-      const parts = [conns ? `Found ${plural(conns, "direct connection")}` : "No direct connections found"];
+      // The server says an empty result over incompletely loaded history is not proof of no
+      // connection; the panel's own line mustn't read as one either.
+      const partialHistory = (num(r["pairsWithPartialHistory"]) ?? 0) > 0;
+      const parts = [conns ? `Found ${plural(conns, "direct connection")}` : partialHistory ? "No direct connections in the history loaded so far (older history isn't loaded, so not proof there are none)" : "No direct connections found"];
       if (edges) parts.push(`drew ${plural(edges, "edge")}`);
       const undrawn = num(r["transfersNotDrawnTraceFull"]) ?? 0;
       if (undrawn) parts.push(`${plural(undrawn, "transfer")} not drawn (the trace is full)`);
@@ -150,10 +158,14 @@ export function describeToolCall(call: AgentToolCall, doc: TraceDoc | null): Age
     case "expand_node": {
       const nodes = num(r["nodesAdded"]) ?? 0;
       const edges = num(r["edgesAdded"]) ?? 0;
-      const partial = /partial|stopped short/i.test(str(r["note"]) ?? "");
+      // "Stopped short" is the result's own word for nodes it didn't get to (budget, provider errors,
+      // a full trace); an incompletely loaded history is a different caveat and is worded as itself.
+      const stoppedShort = /stopped short/i.test(str(r["note"]) ?? "");
+      const partialHistory = num(r["nodesWithPartialHistory"]) ?? 0;
       const base = nameOf(doc, r["rootNodeId"]);
       const summary = nodes || edges ? `Expanded ${base}: ${plural(nodes, "node")}, ${plural(edges, "edge")} added` : `Expanded ${base}: nothing new to add`;
-      return step(nodes || edges ? "applied" : "read", partial ? `${summary} (partial: some nodes couldn't be expanded)` : summary);
+      const caveats = [stoppedShort ? "partial: some nodes couldn't be expanded" : null, partialHistory ? "ranked from history that isn't fully loaded yet" : null].filter(Boolean);
+      return step(nodes || edges ? "applied" : "read", caveats.length ? `${summary} (${caveats.join("; ")})` : summary);
     }
     case "list_transfers": {
       const n = Array.isArray(r["transfers"]) ? r["transfers"].length : 0;

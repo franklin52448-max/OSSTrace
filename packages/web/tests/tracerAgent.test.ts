@@ -45,7 +45,8 @@ const transfer: Transfer = {
 type Status = { configured: boolean; signedIn: boolean; messageLimit: number | null; messagesRemaining: number | null };
 type ChatBody = { docId: string; message: string; doc?: TraceDoc };
 /** A scripted answer to one chat request; a function gets the request (so `doc` can be built from what the page sent). */
-type Scripted = { status: number; body: unknown } | ((req: ChatBody) => { status: number; body: unknown });
+type Reply = { status: number; body: unknown; headers?: Record<string, string> };
+type Scripted = Reply | ((req: ChatBody) => Reply);
 
 let status: Status | null;
 const script: Scripted[] = [];
@@ -68,8 +69,8 @@ before(async () => {
     let raw = "";
     req.on("data", (c) => (raw += c));
     req.on("end", () => {
-      const json = (code: number, body: unknown) => {
-        res.writeHead(code, { "content-type": "application/json" });
+      const json = (code: number, body: unknown, headers: Record<string, string> = {}) => {
+        res.writeHead(code, { "content-type": "application/json", ...headers });
         res.end(JSON.stringify(body));
       };
       if (req.url === "/api/auth/me") return json(401, { error: { code: "unauthorized", message: "not signed in" } });
@@ -80,7 +81,7 @@ before(async () => {
         const next = script.shift();
         if (!next) return json(500, { error: { code: "internal", message: "test script ran out" } });
         const r = typeof next === "function" ? next(body) : next;
-        return json(r.status, r.body);
+        return json(r.status, r.body, r.headers);
       }
       // Anything else the canvas asks for (node balances) has no stand-in: a plain 404.
       return json(404, { error: { code: "not_found", message: "no stand-in for this route" } });
@@ -227,6 +228,20 @@ test("follow-ups send the canvas as it now is, and act on it (rename, then remov
   assert.deepEqual(consoleErrors, []);
 });
 
+test("before the first message: says what the agent works from and what it can't answer, and every example maps onto a real tool", async () => {
+  await renderScratch();
+  const panel = await openAgent();
+  const t = text(panel);
+  assert.ok(t.includes("It works only from real transfers on Solana, Ethereum, BNB Chain, Robinhood Chain and Base."), t);
+  assert.ok(t.includes("It can't tell you who owns an address, predict what a wallet will do, or help with anything outside tracing, and it says so rather than guess."), t);
+  assert.ok(t.includes("It can't see what you've selected, so name the address."), t);
+  assert.ok(t.includes("Add 0x… and expand its top counterparties"));
+  assert.ok(t.includes("List the largest transfers into 0x… in the last 30 days"));
+  // expand_node adds counterparties from both directions: no example may promise one direction of it.
+  assert.ok(!t.includes("who it sent funds to"), "no example promises a direction expand_node doesn't have");
+  assert.deepEqual(consoleErrors, []);
+});
+
 test("not configured (status): says so from the start, with no input and no request to the model", async () => {
   status = { configured: false, signedIn: false, messageLimit: 5, messagesRemaining: 5 };
   await renderScratch();
@@ -321,6 +336,18 @@ test("signed in (unlimited): no counter; a failing tool is reported as failed; o
   await waitFor(() => panel.querySelector('[role="alert"]'), "the error notice");
   assert.ok(text(panel.querySelector('[role="alert"]')!).includes("Still working on your previous message."));
   assert.ok(panel.querySelector("textarea"), "still usable");
+  assert.deepEqual(consoleErrors, []);
+});
+
+test("signed in at the hourly cap: the wait is said in minutes, not as thousands of seconds", async () => {
+  status = { configured: true, signedIn: true, messageLimit: null, messagesRemaining: null };
+  script.push({ status: 429, headers: { "retry-after": "3412" }, body: { error: { code: "rate_limited", message: "Tracer agent limit reached (60 messages an hour). Try again in a bit." } } });
+  await renderScratch();
+  await openAgent();
+  await say("hi");
+  const alert = await waitFor(() => agentPanel()!.querySelector('[role="alert"]'), "the limit notice");
+  assert.equal(text(alert).trim(), "Tracer agent limit reached (60 messages an hour). Try again in a bit. (try again in 57 min)");
+  assert.ok(agentPanel()!.querySelector("textarea"), "still usable once the wait is over");
   assert.deepEqual(consoleErrors, []);
 });
 

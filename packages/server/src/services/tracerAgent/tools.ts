@@ -53,9 +53,21 @@ type ToolDef<S extends z.ZodTypeAny> = {
 /** Ties each tool's `run` argument type to its own `args` schema. */
 const defineTool = <S extends z.ZodTypeAny>(t: ToolDef<S>): ToolDef<S> => t;
 
-class ToolError extends Error {}
-const fail = (m: string): never => {
-  throw new ToolError(m);
+/**
+ * A tool's refusal. `message` is what went wrong, in words the user can read -- the panel shows it
+ * under the reply as the step's result. `hint` is what the *model* should do about it ("call
+ * get_doc_state..."): sent to the model next to the error, never shown as if it were addressed to
+ * the user, who has no get_doc_state to call.
+ */
+class ToolError extends Error {
+  readonly hint: string | undefined;
+  constructor(message: string, hint?: string) {
+    super(message);
+    this.hint = hint;
+  }
+}
+const fail = (m: string, hint?: string): never => {
+  throw new ToolError(m, hint);
 };
 
 /** A model calling a tool often sends `""` or `null` for an argument it has no value for, instead
@@ -85,6 +97,8 @@ const MAX_EXPAND_SYNCS = 40;
 const MAX_NODES_PER_EXPAND = 50;
 /** find_connections compares at most this many nodes (45 pairs). */
 const MAX_CONNECT_NODES = 10;
+/** find_connections fetches (and draws) at most this many transfers per pair, newest first. */
+const CONNECT_PAGE = 200;
 const MAX_DOC_NODES = 500; // anonTraceDoc's own bound
 /** anonTraceDoc's edge bound. A scratch canvas comes back with every message, so an agent edit that
  *  takes it past this makes the browser's next message (and Share) a 400 -- never grow past it. */
@@ -145,7 +159,7 @@ function placeNear(anchor: XY | null, taken: XY[]): XY {
 function dropChainPrefix(chain: Chain, s: string): string {
   const i = s.indexOf(":");
   if (i <= 0 || !isChain(s.slice(0, i))) return s;
-  if (s.slice(0, i) !== chain) fail(`"${safeText(s, 80)}" names chain ${s.slice(0, i)}, but chain is ${chain} -- use the same chain for both`);
+  if (s.slice(0, i) !== chain) fail(`"${safeText(s, 80)}" names chain ${s.slice(0, i)}, but the step was for ${chain}`, "Use the same chain in the address prefix and the chain argument.");
   return s.slice(i + 1).trim();
 }
 
@@ -171,7 +185,7 @@ function findNode(doc: AgentDoc, ref: string): TraceNode | null {
   if ("ambiguousEvm" in target) {
     const hits = EVM_CHAINS.map((c) => d.nodes.find((n) => n.id === addressNodeId(doc.traceId, c, target.address))).filter((n): n is TraceNode => !!n);
     if (hits.length === 1) return hits[0]!;
-    if (hits.length > 1) fail(`${safeText(s, 60)} is on the canvas on more than one chain -- use chain:address`);
+    if (hits.length > 1) fail(`${safeText(s, 60)} is on the canvas on more than one chain`, "Name it as chain:address, or ask the user which chain they mean.");
     return null;
   }
   return d.nodes.find((n) => n.id === addressNodeId(doc.traceId, target.chain, target.address)) ?? null;
@@ -196,7 +210,7 @@ function parseAddrRef(ref: string, defaultEvm: boolean): AddrKey | { ambiguousEv
 }
 
 function nodeOrFail(doc: AgentDoc, ref: string): TraceNode {
-  return findNode(doc, ref) ?? fail(`No node "${safeText(ref, 80)}" on this trace -- call get_doc_state for the real node ids`);
+  return findNode(doc, ref) ?? fail(`No node "${safeText(ref, 80)}" on this trace`, "Call get_doc_state for the real node ids.");
 }
 
 /** Adds an address node if it isn't on the canvas yet; returns the node either way. */
@@ -231,7 +245,7 @@ function transferOut(t: Transfer, subject?: AddrKey) {
   };
 }
 
-const userFacing = (e: unknown) => (e instanceof ApiErr || e instanceof ProviderError ? e.message : "unexpected error");
+const userFacing = (e: unknown) => (e instanceof ApiErr || e instanceof ProviderError ? e.message : "Something went wrong running this step.");
 
 // ---------- the tools ----------
 const chainSchema = z.enum(CHAINS as unknown as [Chain, ...Chain[]]);
@@ -315,7 +329,7 @@ const findConnections = defineTool({
 
     // Direct: the same counterparty-filtered transfer query the canvas runs, one pair at a time.
     const perPair: Transfer[][] = [];
-    const connections: { a: string; b: string; transfers: number; usd: number | null; unpricedTransfers?: number }[] = [];
+    const connections: { a: string; b: string; transfers: number; transfersCapped?: true; usd: number | null; usdCoversNewest?: number; unpricedTransfers?: number }[] = [];
     let failedPairs = 0;
     let skippedForTime = 0;
     let partialPairs = 0;
@@ -332,7 +346,7 @@ const findConnections = defineTool({
           tokens: [],
           sortKey: "time",
           sortDir: "desc",
-          limit: 200,
+          limit: CONNECT_PAGE,
         });
         perPair.push(res.transfers);
         if (res.sync.state !== "ready") partialPairs++;
@@ -342,7 +356,20 @@ const findConnections = defineTool({
           // whose transfers were later priced at ~$4M.
           const priced = res.transfers.filter((t) => t.usd !== null && t.usd !== undefined);
           const unpriced = res.transfers.length - priced.length;
-          connections.push({ a: a.id, b: b.id, transfers: res.transfers.length, usd: priced.length ? priced.reduce((s, t) => s + t.usd!, 0) : null, ...(unpriced ? { unpricedTransfers: unpriced } : {}) });
+          // The count is the query's own count of every matching transfer, not the length of the
+          // page fetched for drawing: a pair with 350 transfers came out as "200 transfers" with a
+          // USD total over those 200, both reading as the pair's totals. When the page is short
+          // of the count, the USD sum says how many (newest) transfers it covers.
+          const total = Math.max(res.count.value, res.transfers.length);
+          connections.push({
+            a: a.id,
+            b: b.id,
+            transfers: total,
+            ...(res.count.capped ? { transfersCapped: true as const } : {}),
+            usd: priced.length ? priced.reduce((s, t) => s + t.usd!, 0) : null,
+            ...(total > res.transfers.length ? { usdCoversNewest: res.transfers.length } : {}),
+            ...(unpriced ? { unpricedTransfers: unpriced } : {}),
+          });
         }
       } catch {
         failedPairs++; // one pair's provider hiccup shouldn't abort the rest, same as the canvas
@@ -416,7 +443,10 @@ const findConnections = defineTool({
             : partialPairs
               ? `No direct transfers in the history loaded so far, but that history is incomplete for ${partialPairs} of ${pairs.length} pair${pairs.length === 1 ? "" : "s"} -- older transfers aren't loaded yet, so this is NOT proof they never transacted. Tell the user that.`
               : "No direct transfers between any of these pairs (their transfer history is fully loaded)."
-          : "Each connection is a real transfer found on-chain and drawn as an edge.",
+          : `Each connection is a real transfer found on-chain and drawn as an edge (at most ${CONNECT_PAGE} per pair; a connection with usdCoversNewest has a USD sum over only that many of its newest transfers).` +
+            (partialPairs
+              ? ` History is incomplete for ${partialPairs} of ${pairs.length} pair${pairs.length === 1 ? "" : "s"}, so their transfer counts and totals cover only what's loaded so far -- lower bounds, not totals.`
+              : ""),
     };
   },
 });
@@ -433,8 +463,9 @@ const findConnections = defineTool({
 const expandNode = defineTool({
   name: "expand_node",
   description:
-    `Follow money outward from an address: add its top counterparties (by USD moved) as nodes with aggregate edges, then theirs, up to \`hops\` hops (1-${MAX_HOPS}). ` +
-    `\`breadth\` (1-${MAX_BREADTH}, default ${DEFAULT_BREADTH}) is how many counterparties per node. Hard-capped on chain lookups; the result says honestly what was not expanded and why.`,
+    `Expand outward from an address hop by hop: add its top counterparties -- addresses it sent to OR received from, both directions, ranked by USD moved -- as nodes with aggregate edges, then theirs, up to \`hops\` hops (1-${MAX_HOPS}). ` +
+    `\`breadth\` (1-${MAX_BREADTH}, default ${DEFAULT_BREADTH}) is how many counterparties per node. It does not say which way money went: get_doc_state's aggregate edges have each direction's totals, and list_transfers' flow filters by direction. ` +
+    `Hard-capped on chain lookups; the result says honestly what was not expanded and why, and when the history it ranked from was incomplete.`,
   parameters: {
     type: "object",
     properties: { chain: chainJson, address: { type: "string" }, hops: { type: "integer", minimum: 1, maximum: MAX_HOPS }, breadth: { type: "integer", minimum: 1, maximum: MAX_BREADTH } },
@@ -455,6 +486,8 @@ const expandNode = defineTool({
     let skippedTraceFull = 0;
     const unavailable: string[] = [];
     let budgetExhausted = 0;
+    /** Expanded nodes whose history wasn't fully loaded: their "top counterparties" are the top of what's loaded. */
+    let partialHistory = 0;
     for (let hop = 1; hop <= hops && frontier.length; hop++) {
       // Keyed by node id: a node reached from two parents in one hop is one node to expand (or to
       // report as not expanded), not two.
@@ -469,7 +502,8 @@ const expandNode = defineTool({
         const a = { chain: n.chain, address: n.address };
         syncs++;
         try {
-          await syncAll(env.ctx, [a], null, { maxRounds: 1, anon: !env.userId });
+          const s = await syncAll(env.ctx, [a], null, { maxRounds: 1, anon: !env.userId });
+          if (s.state !== "ready") partialHistory++;
         } catch {
           unavailable.push(key(a)); // couldn't check -- never reported as "no counterparties"
           continue;
@@ -530,11 +564,22 @@ const expandNode = defineTool({
       notExpanded: { depthCap: depthCapped, budgetExhausted, unavailable },
       counterpartiesNotAdded,
       ...(skippedTraceFull ? { notAddedTraceFull: skippedTraceFull } : {}),
-      note: skippedTraceFull
+      ...(partialHistory ? { nodesWithPartialHistory: partialHistory } : {}),
+      note: [
+        skippedTraceFull
         ? `Stopped short: the trace reached its size limit (${MAX_DOC_NODES} nodes, ${MAX_DOC_EDGES} edges), so ${skippedTraceFull} counterpart${skippedTraceFull === 1 ? "y was" : "ies were"} not added -- the picture is partial. Remove nodes to make room.`
         : budgetExhausted || unavailable.length
           ? "Stopped short: some nodes were not expanded (lookup budget or provider errors) -- the picture is partial, not complete."
           : "Aggregate edges carry real totals from the transfer history loaded so far.",
+        // One sync round per node is the whole budget, so for a busy address the ranking is the top
+        // of its newest slice, not of its history -- and without this said, the result read like the
+        // address's real top counterparties.
+        partialHistory
+          ? `For ${partialHistory} of the expanded nodes the transfer history is not fully loaded: their counterparties are the top ones in the history loaded so far, not necessarily the all-time top, and their totals are lower bounds. Tell the user that.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
     };
   },
 });
@@ -542,7 +587,8 @@ const expandNode = defineTool({
 const listTransfers = defineTool({
   name: "list_transfers",
   description:
-    "List an address's real transfers with the same filters/sorting as the Transfers panel: flow (in/out/self/all), sortBy (time/value/usd), sortDir, asset ('native', a token contract/mint, or a symbol like USDC), counterparty, a date range or timeLast, USD bounds. Read-only: changes nothing on the canvas.",
+    "List an address's real transfers with the same filters/sorting as the Transfers panel: flow (in/out/self/all), sortBy (time/value/usd), sortDir, asset ('native', a token contract/mint, or a symbol like USDC), counterparty, a date range or timeLast, USD bounds. Read-only: changes nothing on the canvas. " +
+    "sortBy 'value' is the raw token amount, which can't be compared across tokens -- for \"largest\" across tokens use 'usd', or set asset. sortBy 'usd' and USD bounds only rank transfers that have a USD price; unpriced ones sort last or are left out.",
   parameters: {
     type: "object",
     properties: {
@@ -647,6 +693,15 @@ const listTransfers = defineTool({
       ...(q.usdLte !== undefined ? { usdLte: q.usdLte } : {}),
     });
     const back = res.sync.coveredFrom ? ` (loaded back to ${res.sync.coveredFrom.slice(0, 10)})` : "";
+    // "The largest transfer" is the question these sorts get asked, and both have a blind spot the
+    // rows alone don't show: amounts of different tokens aren't comparable (a million of a
+    // worthless token outranks 1 ETH by value), and a transfer with no price can't rank by USD.
+    const rankNote =
+      q.sortBy === "value" && tokens.length !== 1
+        ? "Sorted by raw token amount across different tokens -- amounts of different tokens aren't comparable, so this is not \"largest by value\". Sort by usd, or filter to one asset, for that."
+        : q.sortBy === "usd" || q.usdGte !== undefined || q.usdLte !== undefined
+          ? "Only transfers with a USD price are ranked by USD (unpriced ones sort last or are left out by a USD bound), so a large transfer of an unpriced token may not appear here."
+          : null;
     const partialNote =
       res.sync.state === "ready"
         ? null
@@ -664,6 +719,7 @@ const listTransfers = defineTool({
       more: res.nextCursor !== null,
       sync: { state: res.sync.state, coveredFrom: res.sync.coveredFrom, ...(res.sync.anonCapped ? { anonCapped: true } : {}) },
       ...(symbolNote ? { warning: symbolNote } : {}),
+      ...(rankNote ? { rankNote } : {}),
       ...(partialNote ? { note: partialNote } : {}),
     };
   },
@@ -684,7 +740,7 @@ const removeNode = defineTool({
 
 const renameNode = defineTool({
   name: "rename_node",
-  description: `Give a node a display name on this trace (max ${NODE_LABEL_MAX} chars; empty string clears it). Only affects this trace.`,
+  description: `Give a node a display name on this trace (max ${NODE_LABEL_MAX} chars; empty string clears it). Only affects this trace. Use the name the user asked for -- never a guessed owner or identity.`,
   parameters: { type: "object", properties: { nodeId: { type: "string" }, label: { type: "string", maxLength: NODE_LABEL_MAX } }, required: ["nodeId", "label"], additionalProperties: false },
   args: z.object({ nodeId: nodeRef, label: clearable(NODE_LABEL_MAX) }).strict(),
   async run(env, { nodeId, label }) {
@@ -697,7 +753,7 @@ const renameNode = defineTool({
 
 const annotateNode = defineTool({
   name: "annotate_node",
-  description: `Set a node's investigator note on this trace (max ${NODE_NOTE_MAX} chars; empty string clears it).`,
+  description: `Set a node's investigator note on this trace (max ${NODE_NOTE_MAX} chars; empty string clears it). Write what the user asked for or what tool results showed -- never a guess written as fact.`,
   parameters: { type: "object", properties: { nodeId: { type: "string" }, note: { type: "string", maxLength: NODE_NOTE_MAX } }, required: ["nodeId", "note"], additionalProperties: false },
   args: z.object({ nodeId: nodeRef, note: clearable(NODE_NOTE_MAX) }).strict(),
   async run(env, { nodeId, note }) {
@@ -726,9 +782,22 @@ function newestThatFit<T>(xs: T[], budget: number): T[] {
   return xs.slice(i);
 }
 
+/** Transfers from `a` to `b` (an owner wallet counts as itself, as computeAggregate counts it) with no USD price. */
+function unpricedCount(ctx: Ctx, a: AddrKey, b: AddrKey): number {
+  const r = ctx.db.get<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM transfers t WHERE t.chain = ? AND (t.from_addr = ? OR t.from_owner = ?) AND (t.to_addr = ? OR t.to_owner = ?) AND t.usd IS NULL",
+    a.chain,
+    a.address,
+    a.address,
+    b.address,
+    b.address,
+  );
+  return Number(r?.n ?? 0);
+}
+
 const getDocState = defineTool({
   name: "get_doc_state",
-  description: "The current trace: its nodes (id, chain, address, label, note) and edges (with transfer/aggregate details). Call it before acting on 'that node', 'the second one', etc.",
+  description: "The current trace: its nodes (id, chain, address, label, note), oldest first, and edges (with transfer/aggregate details). A node's label and note were written by the user -- their own annotations, not sourced facts about who an address is. An aggregate edge's usdOut/txOut are from -> to and usdIn/txIn are to -> from; its USD sums priced transfers only, unpricedOut/unpricedIn count the ones with no price, and a USD of null means none had one (unknown, not $0). Call it before acting on 'that node', 'the second one', etc.",
   parameters: { type: "object", properties: {}, additionalProperties: false },
   args: z.object({}).strict(),
   async run(env) {
@@ -747,9 +816,32 @@ const getDocState = defineTool({
       ...(n.label ? { label: safeText(n.label, NODE_LABEL_MAX) } : {}),
       ...(n.note ? { note: safeText(n.note, 300) } : {}),
     }));
+    const byId = new Map(d.nodes.map((n) => [n.id, n]));
+    const recent = new Set(d.edges.slice(-300).map((e) => e.id));
     const allEdges = d.edges.map((e) => {
-      if (e.kind === "aggregate")
-        return { id: e.id, kind: e.kind, from: e.fromNodeID, to: e.toNodeID, usdOut: e.aggregate.cachedUSDOut, txOut: e.aggregate.cachedTransactionCountOut, usdIn: e.aggregate.cachedUSDIn, txIn: e.aggregate.cachedTransactionCountIn };
+      if (e.kind === "aggregate") {
+        const g = e.aggregate;
+        const from = byId.get(e.fromNodeID);
+        const to = byId.get(e.toNodeID);
+        // An aggregate's USD is a SUM over priced transfers only, so 0 next to a nonzero count was
+        // read as "$0 moved" when nothing had a price yet -- the same unknown-is-not-$0 mistake
+        // find_connections had. Counted here for address-to-address edges (what expand_node draws).
+        const pair = recent.has(e.id) && from?.kind === "address" && to?.kind === "address" && from.chain && from.chain === to.chain ? { a: { chain: from.chain, address: from.address! }, b: { chain: to.chain, address: to.address! } } : null;
+        const unOut = pair ? unpricedCount(env.ctx, pair.a, pair.b) : 0;
+        const unIn = pair ? unpricedCount(env.ctx, pair.b, pair.a) : 0;
+        return {
+          id: e.id,
+          kind: e.kind,
+          from: e.fromNodeID,
+          to: e.toNodeID,
+          usdOut: unOut && unOut >= g.cachedTransactionCountOut ? null : g.cachedUSDOut,
+          txOut: g.cachedTransactionCountOut,
+          ...(unOut ? { unpricedOut: unOut } : {}),
+          usdIn: unIn && unIn >= g.cachedTransactionCountIn ? null : g.cachedUSDIn,
+          txIn: g.cachedTransactionCountIn,
+          ...(unIn ? { unpricedIn: unIn } : {}),
+        };
+      }
       const r = rows.get(`${e.chain}:${e.transferID}`);
       const t = r ? transferOut(rowToTransferNoLabels(r, empty)) : null;
       return { id: e.id, kind: e.kind, from: e.fromNodeID, to: e.toNodeID, ...(t ? { time: t.time, token: t.token, amount: t.amount, usd: t.usd, txHash: t.txHash } : { transferId: e.transferID }) };
@@ -807,29 +899,31 @@ const MAX_ARG_CHARS = 8000;
  * Runs one model-requested tool call. The name must be on the whitelist, the arguments must parse
  * as JSON and pass that tool's strict schema (unknown keys rejected, enums and ranges enforced), and
  * only then does any code run. Every failure comes back as `{ ok: false, error }` for the model to
- * read -- never a thrown error that could leak internals, never a partial guess.
+ * read -- never a thrown error that could leak internals, never a partial guess. A call refused
+ * before any tool code ran (unknown tool, unparseable or invalid arguments) is marked `refused`:
+ * its error is about the model's request, not about the trace, and is worded for the model.
  */
 export async function runTool(env: ToolEnv, name: string, rawArgs: string): Promise<{ args: Record<string, unknown>; result: ToolResult }> {
   const tool = BY_NAME.get(name);
-  if (!tool) return { args: {}, result: { ok: false, error: `Unknown tool "${safeText(name, 60)}". Only these exist: ${TOOLS.map((t) => t.name).join(", ")}.` } };
+  if (!tool) return { args: {}, result: { ok: false, refused: true, error: `Unknown tool "${safeText(name, 60)}". Only these exist: ${TOOLS.map((t) => t.name).join(", ")}.` } };
   let parsed: unknown;
   try {
     if (rawArgs.length > MAX_ARG_CHARS) throw new Error();
     parsed = rawArgs.trim() === "" ? {} : JSON.parse(rawArgs);
   } catch {
-    return { args: {}, result: { ok: false, error: "Arguments were not valid JSON." } };
+    return { args: {}, result: { ok: false, refused: true, error: "Arguments were not valid JSON." } };
   }
   const v = (tool.args as z.ZodTypeAny).safeParse(parsed);
   if (!v.success) {
     const issue = v.error.issues[0];
     const where = issue?.path.length ? `${issue.path.join(".")}: ` : "";
-    return { args: typeof parsed === "object" && parsed ? (parsed as Record<string, unknown>) : {}, result: { ok: false, error: `Invalid arguments -- ${where}${issue?.message ?? "rejected"}` } };
+    return { args: typeof parsed === "object" && parsed ? (parsed as Record<string, unknown>) : {}, result: { ok: false, refused: true, error: `Invalid arguments -- ${where}${issue?.message ?? "rejected"}` } };
   }
   const args = v.data as Record<string, unknown>;
   try {
     return { args, result: await (tool.run as (e: ToolEnv, a: unknown) => Promise<ToolResult>)(env, args) };
   } catch (e) {
-    if (e instanceof ToolError) return { args, result: { ok: false, error: e.message } };
+    if (e instanceof ToolError) return { args, result: { ok: false, error: e.message, ...(e.hint ? { hint: e.hint } : {}) } };
     return { args, result: { ok: false, error: userFacing(e) } };
   }
 }

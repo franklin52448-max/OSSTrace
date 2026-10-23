@@ -87,11 +87,25 @@ test("describeToolCall words only what each real result says", () => {
   assert.equal(say("add_node", { ok: true, nodeId: a.id, alreadyOnCanvas: false }), "applied: Added 0x1111…1111");
   assert.equal(say("add_node", { ok: true, nodeId: a.id, alreadyOnCanvas: true }), "read: 0x1111…1111 was already on the canvas");
   assert.equal(say("add_node", { ok: false, error: "That isn't a valid address." }), "failed: That isn't a valid address.");
+  // The model's advice to itself isn't shown to the user as if it were addressed to them.
+  assert.equal(say("rename_node", { ok: false, error: 'No node "x" on this trace', hint: "Call get_doc_state for the real node ids." }), 'failed: No node "x" on this trace');
+  // A request the server refused before running it is worded for the user, not as the model's validation error.
+  for (const error of ["Invalid arguments -- hops: Number must be less than or equal to 3", "Not run: this exact call was already refused this message (Invalid arguments -- hops: ...). Change the arguments, or tell the user what went wrong.", 'Unknown tool "fetch_url". Only these exist: add_node'])
+    assert.equal(say("expand_node", { ok: false, refused: true, error }), "failed: Skipped: the agent asked for this step in a way the tool doesn't accept, so nothing ran.");
   assert.equal(say("find_connections", { ok: true, connections: [], edgesAdded: 0, pairsFailed: 1 }), "read: No direct connections found, 1 pair couldn't be checked");
+  assert.equal(
+    say("find_connections", { ok: true, connections: [], edgesAdded: 0, pairsWithPartialHistory: 1 }),
+    "read: No direct connections in the history loaded so far (older history isn't loaded, so not proof there are none)",
+  );
+  assert.equal(say("find_connections", { ok: true, connections: [{}], edgesAdded: 1, pairsWithPartialHistory: 1 }), "applied: Found 1 direct connection, drew 1 edge");
   assert.equal(say("find_connections", { ok: true, connections: [{}, {}], edgesAdded: 2, indirectLeads: [{}] }), "applied: Found 2 direct connections, drew 2 edges, 1 possible indirect link (shared counterparties, not drawn)");
   assert.equal(say("find_connections", { ok: true, connections: [{}], edgesAdded: 1, transfersNotDrawnTraceFull: 2 }), "applied: Found 1 direct connection, drew 1 edge, 2 transfers not drawn (the trace is full)");
   assert.equal(say("expand_node", { ok: true, rootNodeId: a.id, nodesAdded: 3, edgesAdded: 3, note: "Stopped short: some nodes were not expanded" }), "applied: Expanded 0x1111…1111: 3 nodes, 3 edges added (partial: some nodes couldn't be expanded)");
-  assert.equal(say("list_transfers", { ok: true, transfers: [{}, {}], sortedBy: "usd desc" }), "read: Looked at 2 transfers, sorted by usd desc");
+  assert.equal(
+    say("expand_node", { ok: true, rootNodeId: a.id, nodesAdded: 2, edgesAdded: 2, nodesWithPartialHistory: 1, note: "Aggregate edges carry real totals from the transfer history loaded so far. For 1 of the expanded nodes the transfer history is not fully loaded: ..." }),
+    "applied: Expanded 0x1111…1111: 2 nodes, 2 edges added (ranked from history that isn't fully loaded yet)",
+  );
+  assert.equal(say("list_transfers",{ ok: true, transfers: [{}, {}], sortedBy: "usd desc" }), "read: Looked at 2 transfers, sorted by usd desc");
   assert.equal(say("remove_node", { ok: true, removedNodeId: a.id, edgesRemoved: 2 }), "applied: Removed a node and 2 edges");
   assert.equal(say("annotate_node", { ok: true, nodeId: a.id, note: "exchange?" }), "applied: Added a note on 0x1111…1111");
   assert.equal(say("open_trace_doc", { ok: true, url: "#trace/scratch", persistent: false }), "read: This canvas is local-only: connect a wallet to save it");

@@ -177,6 +177,32 @@ describe("tracer agent", () => {
     expect(ac).toMatchObject({ transfers: 2, usd: 2000, unpricedTransfers: 1 });
   });
 
+  it("find_connections: a pair's transfer count is its real count, not the page drawn, and a USD sum over part of it says so", async () => {
+    await setup([{ tools: [{ name: "find_connections", args: { addresses: [`ethereum:${ETH_A}`, `ethereum:${ETH_B}`] } }] }, { content: "ok" }]);
+    t.eth.pageSize = 300; // all of it loads in one page: complete history, just more than one drawing page
+    t.eth.add(Array.from({ length: 205 }, (_, i) => ethTransfer(ETH_A, ETH_B, base + i)));
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "how many times did A pay B?" })).json() as TracerAgentChatResponse;
+    const r = res.toolCalls[0]!.result as { connections: Record<string, unknown>[]; edgesAdded: number; note: string; pairsWithPartialHistory?: number };
+    expect(r.pairsWithPartialHistory).toBeUndefined();
+    expect(r.connections[0]).toMatchObject({ transfers: 205, usd: 200 * 2000, usdCoversNewest: 200 }); // not "200 transfers, $400k" as the pair's totals
+    expect(r.edgesAdded).toBe(200);
+    expect(r.note).toMatch(/at most 200 per pair; a connection with usdCoversNewest has a USD sum over only that many of its newest transfers/);
+  });
+
+  it("find_connections: connections found in incompletely loaded history are said to be lower bounds", async () => {
+    await setup([{ tools: [{ name: "find_connections", args: { addresses: [`ethereum:${ETH_A}`, `ethereum:${ETH_B}`] } }] }, { content: "ok" }]);
+    // A paid B long ago and again recently, with 12 transfers to C in between: only the newest page loads.
+    t.eth.add([ethTransfer(ETH_A, ETH_B, base - 9000), ...Array.from({ length: 12 }, (_, i) => ethTransfer(ETH_A, ETH_C, base + i)), ethTransfer(ETH_A, ETH_B, base + 100)]);
+    const anon = new Browser(t.app);
+    const res = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "how many times did A pay B?", doc: emptyScratch() })).json() as TracerAgentChatResponse;
+    const r = res.toolCalls[0]!.result as { connections: Record<string, unknown>[]; note: string; pairsWithPartialHistory?: number };
+    expect(r.pairsWithPartialHistory).toBe(1);
+    expect(r.connections[0]).toMatchObject({ transfers: 1 }); // the one loaded, of the two there are...
+    expect(r.note).toMatch(/History is incomplete for 1 of 1 pair, so their transfer counts and totals cover only what's loaded so far -- lower bounds, not totals\./); // ...and said to be partial
+  });
+
   it("find_connections adds nothing when the addresses never transacted", async () => {
     await setup([{ tools: [{ name: "find_connections", args: { addresses: [`ethereum:${ETH_A}`, `ethereum:${ETH_C}`] } }] }, { content: "No direct transfers found." }]);
     t.eth.add([ethTransfer(ETH_A, ETH_B, base + 10), ethTransfer(ETH_C, ETH_B, base + 20)]);
@@ -470,6 +496,35 @@ describe("tracer agent", () => {
     expect(usdc.transfers[0]!.token.id.toLowerCase()).toBe(USDC.toLowerCase());
   });
 
+  it("list_transfers: a 'largest' sort says what it can't rank -- amounts across tokens by value, unpriced transfers by USD", async () => {
+    const JUNK = "0x2222222222222222222222222222222222222222";
+    await setup([
+      {
+        tools: [
+          { name: "list_transfers", args: { chain: "ethereum", address: ETH_A, flow: "in", sortBy: "value", limit: 1 } },
+          { name: "list_transfers", args: { chain: "ethereum", address: ETH_A, flow: "in", sortBy: "usd", limit: 1 } },
+          { name: "list_transfers", args: { chain: "ethereum", address: ETH_A, flow: "in", sortBy: "value", asset: "native", limit: 1 } },
+          { name: "list_transfers", args: { chain: "ethereum", address: ETH_A, flow: "in", limit: 1 } },
+        ],
+      },
+      { content: "ok" },
+    ]);
+    t.eth.add([
+      ethTransfer(ETH_B, ETH_A, base + 1, { amountRaw: "1000000000000000000" }), // 1 ETH, $2000
+      ethTransfer(ETH_C, ETH_A, base + 2, { tokenId: JUNK, tokenSymbol: "JUNK", tokenName: "Junk", tokenDecimals: 0, tokenStandard: "erc20", amountRaw: "1000000", priceCoin: null }),
+    ]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "what's the largest thing A received?" })).json() as TracerAgentChatResponse;
+    const [byValue, byUsd, oneAsset, byTime] = res.toolCalls.map((x) => x.result as { transfers: { token: { symbol: string } }[]; rankNote?: string });
+    expect(byValue!.transfers[0]!.token.symbol).toBe("JUNK"); // a million of an unpriced token "outranks" 1 ETH by amount...
+    expect(byValue!.rankNote).toMatch(/amounts of different tokens aren't comparable, so this is not "largest by value"/); // ...and the result says that's no ranking
+    expect(byUsd!.transfers[0]!.token.symbol).toBe("ETH");
+    expect(byUsd!.rankNote).toMatch(/a large transfer of an unpriced token may not appear here/);
+    expect(oneAsset!.rankNote).toBeUndefined(); // one asset: amounts are comparable
+    expect(byTime!.rankNote).toBeUndefined();
+  });
+
   it("list_transfers: an omitted-but-empty optional arg (a model sends \"\" or null instead of leaving the key out -- confirmed live with gpt-4.1-mini on a real 'who first funded this address' question) is treated as not given, not rejected", async () => {
     await setup([
       { tools: [{ name: "list_transfers", args: { chain: "ethereum", address: ETH_A, counterparty: "", asset: null, timeGte: "" } }] },
@@ -538,7 +593,7 @@ describe("tracer agent", () => {
     expect(usdc).toHaveLength(1); // not "no transfers": the prefixed asset/counterparty were read as the addresses they are
     expect(usdc[0]!.token.id.toLowerCase()).toBe(USDC.toLowerCase());
     expect(res.toolCalls[2]!.result).toMatchObject({ ok: true, rootNodeId: addressNodeId(id, "ethereum", ETH_A) });
-    expect(errors[3]).toMatch(/names chain ethereum, but chain is base/);
+    expect(errors[3]).toMatch(/names chain ethereum, but the step was for base/);
     expect(((await c.get(`/api/traces/${id}`)).json() as Trace).nodes.some((n) => n.chain === "base")).toBe(false);
   });
 
@@ -670,6 +725,62 @@ describe("tracer agent", () => {
     expect(res.toolCalls[0]!.result).toMatchObject({ ok: true, nodesAdded: 3, edgesAdded: 4, notExpanded: { depthCap: 1, budgetExhausted: 0 } });
   });
 
+  it("expand_node adds counterparties from both directions, and its description says so rather than 'follow money outward'", async () => {
+    await setup([{ tools: [{ name: "expand_node", args: { chain: "ethereum", address: ETH_A, hops: 1 } }] }, { content: "ok" }]);
+    // B only ever SENT to A: a "where did A's money go" reading of expand_node would report B as a recipient.
+    t.eth.add([ethTransfer(ETH_B, ETH_A, base + 1), ethTransfer(ETH_A, ETH_C, base + 2)]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "expand A" })).json() as TracerAgentChatResponse;
+    expect(res.toolCalls[0]!.result).toMatchObject({ ok: true, nodesAdded: 2 });
+    expect(res.doc.nodes.map((n) => n.address).sort()).toEqual([ETH_A, ETH_B, ETH_C].sort());
+    const desc = TOOL_SPECS.find((s) => s.function.name === "expand_node")!.function.description;
+    expect(desc).not.toMatch(/follow money/i);
+    expect(desc).toMatch(/sent to OR received from, both directions/);
+    expect(desc).toMatch(/does not say which way money went/);
+  });
+
+  it("expand_node on an address whose history isn't fully loaded says its 'top counterparties' are the top of what's loaded", async () => {
+    await setup([{ tools: [{ name: "expand_node", args: { chain: "ethereum", address: ETH_A, hops: 1, breadth: 1 } }] }, { content: "ok" }, { tools: [{ name: "expand_node", args: { chain: "ethereum", address: ETH_C, hops: 1 } }] }, { content: "ok" }]);
+    // A's biggest counterparty by far (B, 50 ETH) is older than the one page a sync round loads.
+    t.eth.add([ethTransfer(ETH_B, ETH_A, base - 9000, { amountRaw: "50000000000000000000" }), ...Array.from({ length: 12 }, (_, i) => ethTransfer(ETH_A, evm(i), base + i))]);
+    t.eth.add([ethTransfer(ETH_C, evm(50), base + 1)]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "who is A's top counterparty?" })).json() as TracerAgentChatResponse;
+    const r = res.toolCalls[0]!.result as { nodesWithPartialHistory?: number; note: string };
+    expect(res.doc.nodes.some((n) => n.address === ETH_B)).toBe(false); // the real top one isn't loaded, so isn't what was added...
+    expect(r.nodesWithPartialHistory).toBe(1); // ...and the result says so, rather than reading as A's real top counterparty
+    expect(r.note).toMatch(/not necessarily the all-time top, and their totals are lower bounds/);
+    // A fully loaded history says nothing of the kind.
+    const full = (await c.post("/api/tracer-agent/chat", { docId: id, message: "expand C" })).json() as TracerAgentChatResponse;
+    expect(full.toolCalls[0]!.result).not.toHaveProperty("nodesWithPartialHistory");
+    expect((full.toolCalls[0]!.result as { note: string }).note).toBe("Aggregate edges carry real totals from the transfer history loaded so far.");
+  });
+
+  it("get_doc_state: an aggregate edge whose transfers have no USD price reads as unknown, not $0, and says which way each total runs", async () => {
+    await setup([{ tools: [{ name: "expand_node", args: { chain: "ethereum", address: ETH_A, hops: 1 } }] }, { tools: [{ name: "get_doc_state", args: {} }] }, { content: "ok" }]);
+    // A -> B: two unpriced transfers. A -> C: one priced ($2000), one not. C -> A: priced.
+    t.eth.add([
+      ethTransfer(ETH_A, ETH_B, base + 1, { priceCoin: null }),
+      ethTransfer(ETH_A, ETH_B, base + 2, { priceCoin: null }),
+      ethTransfer(ETH_A, ETH_C, base + 3),
+      ethTransfer(ETH_A, ETH_C, base + 4, { priceCoin: null }),
+      ethTransfer(ETH_C, ETH_A, base + 5),
+    ]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "how much did A send B and C?" })).json() as TracerAgentChatResponse;
+    const edges = (res.toolCalls[1]!.result as { edges: Record<string, unknown>[] }).edges;
+    const a = addressNodeId(id, "ethereum", ETH_A);
+    const toB = edges.find((e) => e.to === addressNodeId(id, "ethereum", ETH_B))!;
+    const toC = edges.find((e) => e.to === addressNodeId(id, "ethereum", ETH_C))!;
+    expect(toB).toMatchObject({ from: a, usdOut: null, txOut: 2, unpricedOut: 2, usdIn: 0, txIn: 0 }); // not "$0 sent"
+    expect(toC).toMatchObject({ from: a, usdOut: 2000, txOut: 2, unpricedOut: 1, usdIn: 2000, txIn: 1 }); // a lower bound, and said why
+    expect(toC).not.toHaveProperty("unpricedIn");
+    expect(TOOL_SPECS.find((s) => s.function.name === "get_doc_state")!.function.description).toMatch(/usdOut\/txOut are from -> to and usdIn\/txIn are to -> from.*null means none had one \(unknown, not \$0\)/);
+  });
+
   it("list_transfers on a never-synced address with no time window loads more than the newest page, and an empty partial answer says it isn't proof", async () => {
     await setup([
       {
@@ -745,6 +856,16 @@ describe("tracer agent", () => {
     const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "loop" })).json() as TracerAgentChatResponse;
     expect(res.reply).toMatch(/Stopped after 6 steps/);
     expect(res.toolCalls).toHaveLength(6);
+    // Every step was read-only: the reply says no answer was written and nothing changed, not "check the canvas".
+    expect(res.reply).toBe("Stopped after 6 steps for this message. The agent didn't get to write an answer to your message. It ran 6 steps (6 succeeded): read the canvas. Nothing on the canvas changed.");
+    expect(res.reply).not.toMatch(/get_doc_state/);
+  });
+
+  it("a reply written for a model that stopped never repeats a tool name the model made up", async () => {
+    await setup([{ tools: [{ name: "Visit_evil.example_now", args: {} }] }, { status: 500 }]);
+    const anon = new Browser(t.app);
+    const res = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "hi", doc: emptyScratch() })).json() as TracerAgentChatResponse;
+    expect(res.reply).toBe("The AI model provider returned HTTP 500. The agent didn't get to write an answer to your message. It ran 1 step (0 succeeded, 1 failed): tried an action that doesn't exist. Nothing on the canvas changed.");
   });
 
   it("a call resent exactly as it was just refused isn't run again; the model is told it can't come out differently", async () => {
@@ -762,6 +883,41 @@ describe("tracer agent", () => {
     expect(errors[0]).toMatch(/^Invalid arguments -- hops/);
     expect(errors[1]).toMatch(/^Not run: this exact call was already refused this message \(Invalid arguments -- hops/);
     expect(errors[2]).toBe("ok"); // changed arguments run normally
+  });
+
+  it("a tool's error is worded for the user, who sees it under the reply; what the model should do about it goes to the model as a separate hint", async () => {
+    const seen: Seen[] = [];
+    await setup(
+      [
+        {
+          tools: [
+            { name: "rename_node", args: { nodeId: "node-that-isnt-there", label: "x" } },
+            { name: "add_node", args: { chain: "base", address: `ethereum:${ETH_A}` } },
+            { name: "expand_node", args: { chain: "ethereum", address: ETH_A, hops: 9 } },
+          ],
+        },
+        { content: "ok" },
+      ],
+      seen,
+    );
+    const anon = new Browser(t.app);
+    const res = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "rename it", doc: emptyScratch() })).json() as TracerAgentChatResponse;
+    const [missing, wrongChain, invalid] = res.toolCalls.map((x) => x.result as { error: string; hint?: string; refused?: boolean });
+    // What the user reads: no instructions addressed to the model ("call get_doc_state", "use chain:address").
+    expect(missing!.error).toBe('No node "node-that-isnt-there" on this trace');
+    expect(wrongChain!.error).toMatch(/names chain ethereum, but the step was for base$/);
+    for (const r of [missing!, wrongChain!]) {
+      expect(r.error).not.toMatch(/get_doc_state|use chain|-- use/);
+      expect(r.refused).toBeUndefined(); // it ran, and the trace said no
+    }
+    // What the model reads: the same error, plus what to do next.
+    expect(missing!.hint).toMatch(/Call get_doc_state for the real node ids/);
+    const toModel = seen[1]!.body.messages.filter((m) => m.role === "tool").map((m) => JSON.parse(m.content!) as { hint?: string; refused?: boolean });
+    expect(toModel[0]!.hint).toMatch(/get_doc_state/);
+    expect(toModel[1]!.hint).toMatch(/same chain/);
+    // Refused before running (the model's own request was invalid): marked, so the panel can say so plainly.
+    expect(invalid!.refused).toBe(true);
+    expect(toModel[2]!.refused).toBe(true);
   });
 
   it("provider failure: 502 with no upstream text, and the anon message is refunded", async () => {
@@ -786,7 +942,7 @@ describe("tracer agent", () => {
     expect((await anon.req("GET", "/api/tracer-agent/status")).json()).toMatchObject({ messagesRemaining: 5 });
     // Mid-turn, after a tool already ran: an honest stop that names what ran, not "couldn't produce an answer".
     const mid = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "add A", doc: emptyScratch() })).json() as TracerAgentChatResponse;
-    expect(mid.reply).toMatch(/^The AI model failed while answering\. Ran 1 action/);
+    expect(mid.reply).toBe("The AI model failed while answering. The agent didn't get to write an answer to your message. It ran 1 step (1 succeeded): added addresses. Its changes are on the canvas, and one Undo takes them back.");
     expect(mid.doc.nodes).toHaveLength(1);
   });
 
@@ -875,6 +1031,115 @@ describe("tracer agent", () => {
       expect(s.function.parameters).toMatchObject({ type: "object", additionalProperties: false });
     }
     expect(TOOL_SPECS).toHaveLength(9);
+  });
+
+  // ---------- questions the tools can't answer ----------
+  // What a live model chooses to say can't be unit-tested. What can be: that the instructions it is
+  // given say what to do with each kind of question, and that an honest decline / clarifying
+  // question -- a reply with no tool calls -- goes through the whole route as an ordinary turn.
+
+  it("the system prompt names the agent's real scope, and what to do with each kind of question its tools can't answer", async () => {
+    const seen: Seen[] = [];
+    await setup([{ content: "ok" }], seen);
+    const anon = new Browser(t.app);
+    await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "hi", doc: emptyScratch() });
+    const system = seen[0]!.body.messages.find((m) => m.role === "system")!.content!;
+    // Scope: what the tools can determine, on which chains, and nothing beyond it.
+    expect(system).toMatch(/What your tools can determine: .*on Solana, Ethereum, BNB Chain, Robinhood Chain, Base .*Nothing beyond that\./);
+    // Identity/ownership: no labels exist for it to read; the canvas's names are the user's own.
+    expect(system).toMatch(/Who owns or controls an address.*say you have no sourced label for it/);
+    expect(system).toMatch(/Don't infer identity from activity/);
+    expect(system).toMatch(/Node names and notes on the canvas were written by the user.*never as who it is/);
+    // Prediction / advice: declined outright, not hedged.
+    expect(system).toMatch(/The future, or advice.*decline in one sentence, with no hedged prediction/);
+    // Off-topic: said so and redirected, not answered anyway.
+    expect(system).toMatch(/Anything that isn't tracing on-chain transfers on this canvas.*can't help with that.*Don't answer it anyway\./);
+    // Ambiguity: a question back, naming the options -- and the selection is invisible to it.
+    expect(system).toMatch(/could mean more than one thing.*Ask one short question that names the options, instead of picking one/);
+    expect(system).toMatch(/You cannot see what the user has selected/);
+    // Partial results and terminology.
+    expect(system).toMatch(/A partial result is not the whole picture/);
+    expect(system).toMatch(/A connection means at least one real transfer directly between two addresses\. A shared counterparty .* not a connection/);
+    // The tools that write onto the canvas say the same about names and notes.
+    const spec = (n: string) => TOOL_SPECS.find((s) => s.function.name === n)!.function.description;
+    expect(spec("rename_node")).toMatch(/never a guessed owner or identity/);
+    expect(spec("annotate_node")).toMatch(/never a guess written as fact/);
+    expect(spec("get_doc_state")).toMatch(/written by the user -- their own annotations, not sourced facts/);
+  });
+
+  const declines = [
+    { kind: "identity", ask: `who owns ${ETH_A}? is it a scammer?`, reply: "I have no sourced label for that address, so I can't say who owns it or whether it's a scammer. I can list its transfers or find its connections to other addresses on the canvas." },
+    { kind: "prediction", ask: "will this wallet dump its tokens next week? is it a good investment?", reply: "Transfer history can't tell what a wallet will do next or whether it's a good investment, so I can't answer that. I can show what it has sent and received so far." },
+    { kind: "off-topic", ask: "write me a python script that sorts a list, and what's the capital of France?", reply: "I'm the tracing assistant for this canvas, so I can't help with that. I can add addresses, list their transfers and find connections between them." },
+    { kind: "ambiguous", ask: "show me the last transaction", reply: `There are two addresses on the canvas -- ethereum:${ETH_A} and ethereum:${ETH_B}. Which one's last transaction do you mean?` },
+  ];
+
+  it("an honest decline or clarifying question (no tool calls) is a normal read-only turn: passed through as said, nothing on the canvas touched, billed like any message", async () => {
+    const seen: Seen[] = [];
+    await setup(declines.map((d) => ({ content: d.reply })), seen);
+    t.eth.add([ethTransfer(ETH_A, ETH_B, base + 1)]); // real data exists -- the agent just isn't asked anything it can answer from it
+    const anon = new Browser(t.app);
+    const a = addressNodeId("scratch", "ethereum", ETH_A);
+    const b = addressNodeId("scratch", "ethereum", ETH_B);
+    const doc = { ...emptyScratch(), nodes: [ETH_A, ETH_B].map((address, i): TraceNode => ({ id: [a, b][i]!, kind: "address", chain: "ethereum", address, currentPosition: { x: i * 300, y: 0 }, createdAt: new Date().toISOString() })) };
+    for (const [i, d] of declines.entries()) {
+      const r = await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: d.ask, doc });
+      expect(r.statusCode, `${d.kind}: ${r.body.slice(0, 200)}`).toBe(200);
+      const res = r.json() as TracerAgentChatResponse;
+      expect(res.reply, d.kind).toBe(d.reply); // exactly what the model said -- nothing appended or swapped in
+      expect(res.toolCalls, d.kind).toEqual([]);
+      expect(res.ops, d.kind).toEqual([]);
+      expect(res.doc.nodes.map((n) => n.id), d.kind).toEqual([a, b]);
+      expect(res.doc.edges, d.kind).toEqual([]);
+      expect(res.messagesRemaining, d.kind).toBe(4 - i); // one of the five, same as any other message
+      expect(seen, d.kind).toHaveLength(i + 1); // one model round, no tool loop
+      expect(seen[i]!.body.messages.at(-1)).toMatchObject({ role: "user", content: d.ask });
+    }
+    expect(t.ctx.db.get<{ n: number }>("SELECT messages_used AS n FROM tracer_agent_anon_sessions")!.n).toBe(4);
+    // Saved like any turn, with no "[tools run: ...]" line claiming something was done.
+    const saved = t.ctx.db.all<{ role: string; content: string }>("SELECT role, content FROM tracer_agent_turns ORDER BY seq");
+    expect(saved.filter((x) => x.role === "assistant").map((x) => x.content)).toEqual(declines.map((d) => d.reply));
+  });
+
+  it("signed in: a decline on a saved trace counts against the hourly cap and leaves the trace exactly as it was", async () => {
+    await setup([{ content: declines[0]!.reply }, { content: declines[1]!.reply }]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c, ETH_A);
+    const before = JSON.stringify(((await c.get(`/api/traces/${id}`)).json() as Trace).nodes);
+    for (const d of declines.slice(0, 2)) {
+      const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: d.ask })).json() as TracerAgentChatResponse;
+      expect(res).toMatchObject({ reply: d.reply, toolCalls: [], ops: [], messagesRemaining: null });
+    }
+    expect(t.ctx.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM tracer_agent_usage WHERE principal LIKE 'user:%'")!.n).toBe(2);
+    expect(JSON.stringify(((await c.get(`/api/traces/${id}`)).json() as Trace).nodes)).toBe(before);
+  });
+
+  it("a clarifying question carries into the next message, so the user's answer to it ('the first one') has something to refer to", async () => {
+    const seen: Seen[] = [];
+    await setup([{ content: declines[3]!.reply }, { tools: [{ name: "list_transfers", args: { chain: "ethereum", address: ETH_A, limit: 1 } }] }, { content: "A's last transfer was 1 ETH to B." }], seen);
+    t.eth.add([ethTransfer(ETH_A, ETH_B, base + 1)]);
+    const anon = new Browser(t.app);
+    const doc = scratchWith(0);
+    await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "show me the last transaction", doc });
+    await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "the first one", doc });
+    const second = seen[1]!.body.messages.filter((m) => m.role !== "system").map((m) => `${m.role}:${m.content ?? ""}`);
+    expect(second).toEqual(["user:show me the last transaction", `assistant:${declines[3]!.reply}`, "user:the first one"]);
+  });
+
+  it("the system prompt states the canvas as it is now, so a turn after the user undid the agent's changes isn't read against the old history", async () => {
+    const seen: Seen[] = [];
+    await setup([{ tools: [{ name: "add_node", args: { chain: "ethereum", address: ETH_A } }] }, { content: "Added A." }, { content: "ok" }], seen);
+    const anon = new Browser(t.app);
+    const r1 = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "add A", doc: emptyScratch() })).json() as TracerAgentChatResponse;
+    expect(r1.doc.nodes).toHaveLength(1);
+    // The user pressed Undo: the canvas the browser sends next is empty again, but the history says A was added.
+    await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "rename A to hot wallet", doc: emptyScratch() });
+    const turn2 = seen[2]!.body.messages;
+    expect(turn2.find((m) => m.role === "assistant")!.content).toMatch(/add_node\(.*\) -> ok nodeId=/);
+    const system = turn2.find((m) => m.role === "system")!.content!;
+    expect(system).toMatch(/The canvas right now has 0 nodes and 0 edges\..*earlier tool results in this conversation may no longer match it: call get_doc_state/);
+    expect(seen[0]!.body.messages[0]!.content).toMatch(/The canvas right now has 0 nodes/);
+    expect(seen[1]!.body.messages[0]!.content).toMatch(/The canvas right now has 1 node and 0 edges\./); // re-read each round, after the add
   });
 
   it("scratch transfer edges come back with display data the browser can render", async () => {

@@ -24,6 +24,8 @@ import { registerViews } from "./routes/views.ts";
 import { registerLabels } from "./routes/labels.ts";
 import { registerAlerts } from "./routes/alerts.ts";
 import { registerBounties } from "./routes/bounties.ts";
+import { registerTracerAgent } from "./routes/tracerAgent.ts";
+import { OpenRouterClient } from "./services/tracerAgent/openrouter.ts";
 
 export const VERSION = "0.1.0";
 
@@ -32,6 +34,8 @@ export type AppOverrides = {
   providers?: Partial<Record<Chain, ChainProvider>>;
   prices?: PriceService;
   fetchImpl?: typeof fetch;
+  /** fetch for the Tracer agent's model provider (OpenRouter) only -- tests stub it like any other upstream. */
+  agentFetch?: typeof fetch;
   resolver?: Resolver;
   sendWebhook?: WebhookSender;
   logger?: boolean;
@@ -273,6 +277,11 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
   registerLabels(app, ctx);
   registerAlerts(app, ctx);
   registerBounties(app, ctx);
+  // The OpenRouter key goes into this one client and nowhere else (not ctx, not the model's context).
+  const agentLlm = config.tracerAgentApiKey
+    ? new OpenRouterClient(config.tracerAgentApiKey, config.tracerAgentModel, o.agentFetch ?? o.fetchImpl ?? fetch, (m) => app.log.warn(m))
+    : null;
+  registerTracerAgent(app, ctx, agentLlm);
 
   const worker = new AlertWorker(ctx, app.log);
   if (config.testHooks) {

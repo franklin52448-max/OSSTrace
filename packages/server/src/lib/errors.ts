@@ -10,6 +10,7 @@ const STATUS: Record<ErrorCode, number> = {
   conflict: 409,
   rate_limited: 429,
   provider_error: 502,
+  not_configured: 503,
   internal: 500,
 };
 

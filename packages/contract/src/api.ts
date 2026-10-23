@@ -10,6 +10,8 @@ import type {
   Counterparty,
   TagRef,
   Trace,
+  TraceEdge,
+  TraceNode,
   TraceOp,
   TraceSummary,
   Transfer,
@@ -29,6 +31,7 @@ export type ApiError = {
       | "conflict"
       | "rate_limited"
       | "provider_error" // upstream chain data provider failed or is rate limited; never replaced by fake data
+      | "not_configured" // HTTP 503: an optional feature this deployment hasn't been given its key/config for yet
       | "internal";
     message: string;
     /** For provider_error: which provider and whether a retry might help. */
@@ -155,6 +158,37 @@ export type AggregateSummaryResponse = {
   cachedAt: string;
   sync: SyncStatus;
 };
+
+// ---------- Tracer agent ----------
+// POST /api/tracer-agent/chat TracerAgentChatRequest -> TracerAgentChatResponse
+//   A conversational agent that edits the caller's own open trace through a fixed set of tools.
+//   `docId`: a saved trace's uuid (signed in, owner only; 401 anon, 404 not yours) or "scratch" for
+//   the local-only canvas (ADR 0025) -- which has no server copy, so the request MUST carry that
+//   canvas's current `doc` (400 without it). The agent edits that copy and returns it in `doc`.
+//   Saved traces: the agent's edits are already committed (same path as /batch); refetch, or apply
+//   `ops` -- the reducer is idempotent, so replaying them is a no-op either way.
+//   Errors: 503 not_configured (no OpenRouter key on this deployment -- never a stand-in reply),
+//   429 rate_limited (anon: all 5 messages used; signed in: hourly abuse cap), 409 conflict (a
+//   previous message for this conversation is still running), 502 provider_error (model provider).
+//   The anon allowance is per browser, tracked server-side via an httpOnly cookie (path
+//   /api/tracer-agent), so send the request with credentials.
+// GET /api/tracer-agent/status -> TracerAgentStatus (no side effects)
+// DELETE /api/tracer-agent/chat/:docId -> 204 (forgets this conversation's memory; refunds nothing)
+export type TracerAgentScratchDoc = { title: string; notes: string; nodes: TraceNode[]; edges: TraceEdge[] };
+export type TracerAgentChatRequest = { docId: string; message: string; doc?: TracerAgentScratchDoc };
+export type TracerAgentToolCall = { tool: string; args: Record<string, unknown>; result: Record<string, unknown> };
+export type TracerAgentChatResponse = {
+  reply: string;
+  toolCalls: TracerAgentToolCall[];
+  /** null when signed in (unlimited); otherwise this browser's remaining free messages. */
+  messagesRemaining: number | null;
+  /** Every op the agent applied this turn, in order. */
+  ops: TraceOp[];
+  /** The trace after this turn: a full `Trace` (as GET /api/traces/:id) for a saved one; the edited
+   *  local doc (adopt it as the canvas's new state) for "scratch". */
+  doc: TracerAgentScratchDoc & { shareable: boolean };
+};
+export type TracerAgentStatus = { configured: boolean; signedIn: boolean; messageLimit: number | null; messagesRemaining: number | null };
 
 // ---------- Visualizer ----------
 // POST /api/views {name, state} -> { id }; GET /api/views -> VisualizerViewSummary[]; GET /api/views/:id -> VisualizerView

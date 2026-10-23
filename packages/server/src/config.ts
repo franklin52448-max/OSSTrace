@@ -24,6 +24,13 @@ export type Config = {
   /** Never logged. Optional -- used only for a signed-in caller's deep Solana history (ADR: anon
    *  mode's Budget.preferIndexed); unset means that path just stays on the free RPC merge-cursor. */
   solscanApiKey: string | null;
+  /** Never logged, never sent to the model. Optional -- the OpenRouter key the Tracer agent
+   *  (services/tracerAgent) authenticates its LLM calls with: a key of its own, separate from any
+   *  other, so this one feature's spend can be tracked and capped on its own. Unset means the agent
+   *  answers 503 not_configured, never a stand-in reply. */
+  tracerAgentApiKey: string | null;
+  /** OpenRouter model id the Tracer agent calls (TRACER_AGENT_MODEL overrides the default). */
+  tracerAgentModel: string;
   ethBlockscoutUrl: string;
   /** Never logged. BNB Smart Chain JSON-RPC: bounty-deposit verification over plain `eth_*` calls, and
    *  -- when it's an Alchemy URL -- address history and balances through Alchemy's enhanced API
@@ -64,6 +71,19 @@ export type Config = {
   devSkipAuth: boolean;
   logLevel: string;
 };
+
+/**
+ * The Tracer agent's default model. Chosen for (1) reliable OpenAI-style function calling -- the
+ * agent can only act through tool calls, so a model that answers in prose instead of calling a
+ * tool, or emits malformed arguments, simply fails the feature, and this is OpenAI's own
+ * function-calling format natively rather than a translation of it; (2) price -- $0.40 / $1.60 per
+ * million input/output tokens on OpenRouter (checked against its public /models listing,
+ * 2026-10-23), cheap enough to offer anon visitors a few free messages; (3) not a reasoning model,
+ * so the per-call token budget goes to the answer, not hidden thinking that can eat the whole
+ * budget before a reply. Pinned to a concrete version, not a `~...-latest` alias, so behaviour
+ * doesn't change underneath a deployment. TRACER_AGENT_MODEL swaps it without a code change.
+ */
+export const DEFAULT_TRACER_AGENT_MODEL = "openai/gpt-4.1-mini";
 
 export const DEFAULT_SOLANA_RPC = "https://api.mainnet-beta.solana.com";
 /** BNB Chain's own public dataseed endpoint (no key). */
@@ -135,6 +155,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
 
   const solscanApiKey = env.SOLSCAN_API_KEY?.trim() || null;
+  const tracerAgentApiKey = env.OPENROUTER_API_KEY_TRACER_AGENT?.trim() || null;
+  const tracerAgentModel = env.TRACER_AGENT_MODEL?.trim() || DEFAULT_TRACER_AGENT_MODEL;
 
   const origins = (env.ALLOWED_ORIGINS ?? "http://127.0.0.1:5301,http://localhost:5301")
     .split(",")
@@ -157,6 +179,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     solanaRpcCustom,
     ethRpcUrl,
     solscanApiKey,
+    tracerAgentApiKey,
+    tracerAgentModel,
     ethBlockscoutUrl: (env.ETH_BLOCKSCOUT_URL ?? "https://eth.blockscout.com").replace(/\/$/, ""),
     bnbRpcUrl,
     robinhoodRpcUrl,

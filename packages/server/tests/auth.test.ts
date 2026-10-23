@@ -1,23 +1,29 @@
 import { createHash } from "node:crypto";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import nacl from "tweetnacl";
 import { Wallet } from "ethers";
 import { Client, makeApp, ORIGIN, signup, testWallet, type TestApp } from "./helpers.ts";
 
+type Challenge = { message: string; nonce: string };
+const signSolana = (message: string, secretKey: Uint8Array) => Buffer.from(nacl.sign.detached(new TextEncoder().encode(message), secretKey)).toString("base64");
+const ZERO_SIG = Buffer.from(new Uint8Array(64)).toString("base64");
+
+async function solanaChallenge(c: Client, address: string): Promise<Challenge> {
+  return (await c.post("/api/auth/challenge", { chain: "solana", address })).json() as Challenge;
+}
+
 async function solanaLogin(c: Client, seed: string) {
   const { address, secretKey } = testWallet(seed);
-  const chal = await c.post("/api/auth/challenge", { chain: "solana", address });
-  const { message } = chal.json() as { message: string };
-  const signature = Buffer.from(nacl.sign.detached(new TextEncoder().encode(message), secretKey)).toString("base64");
-  return { res: await c.post("/api/auth/verify", { chain: "solana", address, signature }), address };
+  const { message, nonce } = await solanaChallenge(c, address);
+  return { res: await c.post("/api/auth/verify", { chain: "solana", address, nonce, signature: signSolana(message, secretKey) }), address };
 }
 
 async function ethereumLogin(c: Client, wallet: Wallet) {
   const address = wallet.address;
   const chal = await c.post("/api/auth/challenge", { chain: "ethereum", address });
-  const { message } = chal.json() as { message: string };
+  const { message, nonce } = chal.json() as Challenge;
   const signature = await wallet.signMessage(message);
-  return { res: await c.post("/api/auth/verify", { chain: "ethereum", address, signature }), address };
+  return { res: await c.post("/api/auth/verify", { chain: "ethereum", address, nonce, signature }), address };
 }
 
 describe("wallet auth API", () => {
@@ -98,27 +104,88 @@ describe("wallet auth API", () => {
     const { address, secretKey } = testWallet("dave");
     const other = testWallet("eve");
 
-    // No challenge was ever requested for this address.
-    const noChallenge = await c.post("/api/auth/verify", { chain: "solana", address, signature: Buffer.from(new Uint8Array(64)).toString("base64") });
+    // A well-formed nonce that was never issued.
+    const noChallenge = await c.post("/api/auth/verify", { chain: "solana", address, nonce: "0".repeat(32), signature: ZERO_SIG });
     expect(noChallenge.statusCode).toBe(401);
 
-    const chal = await c.post("/api/auth/challenge", { chain: "solana", address });
-    const { message } = chal.json() as { message: string };
+    const chal = await solanaChallenge(c, address);
+    // The returned nonce is the message's own `Nonce:` line, not a second value.
+    expect(chal.message).toContain(`\nNonce: ${chal.nonce}\n`);
 
     // Signed with the WRONG key for this address.
-    const wrongSig = Buffer.from(nacl.sign.detached(new TextEncoder().encode(message), other.secretKey)).toString("base64");
-    expect((await c.post("/api/auth/verify", { chain: "solana", address, signature: wrongSig })).statusCode).toBe(401);
+    expect((await c.post("/api/auth/verify", { chain: "solana", address, nonce: chal.nonce, signature: signSolana(chal.message, other.secretKey) })).statusCode).toBe(401);
 
     // Correct signature: the earlier attempt already consumed the nonce, so a fresh challenge is needed.
-    const chal2 = await c.post("/api/auth/challenge", { chain: "solana", address });
-    const { message: message2 } = chal2.json() as { message: string };
-    const sig = Buffer.from(nacl.sign.detached(new TextEncoder().encode(message2), secretKey)).toString("base64");
-    const ok = await c.post("/api/auth/verify", { chain: "solana", address, signature: sig });
+    const stale = await c.post("/api/auth/verify", { chain: "solana", address, nonce: chal.nonce, signature: signSolana(chal.message, secretKey) });
+    expect(stale.statusCode).toBe(401);
+    const chal2 = await solanaChallenge(c, address);
+    const sig = signSolana(chal2.message, secretKey);
+    const ok = await c.post("/api/auth/verify", { chain: "solana", address, nonce: chal2.nonce, signature: sig });
     expect(ok.statusCode).toBe(200);
 
     // Replaying the same (now-consumed) challenge/signature fails.
-    const replay = await c.post("/api/auth/verify", { chain: "solana", address, signature: sig });
+    const replay = await c.post("/api/auth/verify", { chain: "solana", address, nonce: chal2.nonce, signature: sig });
     expect(replay.statusCode).toBe(401);
+
+    // A missing or malformed nonce is a 400, not a lookup.
+    expect((await c.post("/api/auth/verify", { chain: "solana", address, signature: sig })).statusCode).toBe(400);
+    expect((await c.post("/api/auth/verify", { chain: "solana", address, nonce: "not-a-nonce", signature: sig })).statusCode).toBe(400);
+  });
+
+  it("challenges are keyed by nonce, not address: a second challenge -- for another wallet, or the SAME wallet by someone else -- never invalidates one already in flight", async () => {
+    const alice = testWallet("nonce-alice");
+    const bob = testWallet("nonce-bob");
+    const aliceClient = new Client(t.app);
+    const bobClient = new Client(t.app);
+
+    // Interleaved: both request before either verifies.
+    const aliceChal = await solanaChallenge(aliceClient, alice.address);
+    const bobChal = await solanaChallenge(bobClient, bob.address);
+    expect(aliceChal.nonce).not.toBe(bobChal.nonce);
+
+    // The griefing case this fixes: someone else requests fresh challenges for Alice's address
+    // while she's still signing. With address-keyed challenges each of these overwrote hers.
+    const griefer = new Client(t.app);
+    for (let i = 0; i < 3; i++) expect((await griefer.post("/api/auth/challenge", { chain: "solana", address: alice.address })).statusCode).toBe(200);
+
+    const bobRes = await bobClient.post("/api/auth/verify", { chain: "solana", address: bob.address, nonce: bobChal.nonce, signature: signSolana(bobChal.message, bob.secretKey) });
+    expect(bobRes.statusCode).toBe(200);
+    const aliceRes = await aliceClient.post("/api/auth/verify", { chain: "solana", address: alice.address, nonce: aliceChal.nonce, signature: signSolana(aliceChal.message, alice.secretKey) });
+    expect(aliceRes.statusCode).toBe(200);
+    expect(aliceRes.json().user.walletAddress).toBe(alice.address);
+    expect(bobRes.json().user.walletAddress).toBe(bob.address);
+  });
+
+  it("rejects a nonce that names a different challenge than the one signed, one issued for another wallet, and an expired one", async () => {
+    const alice = testWallet("nonce-wrong-alice");
+    const bob = testWallet("nonce-wrong-bob");
+    const c = new Client(t.app);
+
+    // Two pending challenges for the same wallet: signing the first but naming the second fails
+    // (the signature is checked against the message the nonce names), and spends that second one.
+    const first = await solanaChallenge(c, alice.address);
+    const second = await solanaChallenge(c, alice.address);
+    const crossed = await c.post("/api/auth/verify", { chain: "solana", address: alice.address, nonce: second.nonce, signature: signSolana(first.message, alice.secretKey) });
+    expect(crossed.statusCode).toBe(401);
+    expect((await c.post("/api/auth/verify", { chain: "solana", address: alice.address, nonce: second.nonce, signature: signSolana(second.message, alice.secretKey) })).statusCode).toBe(401);
+
+    // A nonce issued for Bob can't be spent signing in as Alice, even with Alice's own valid
+    // signature over that exact message.
+    const bobs = await solanaChallenge(c, bob.address);
+    expect((await c.post("/api/auth/verify", { chain: "solana", address: alice.address, nonce: bobs.nonce, signature: signSolana(bobs.message, alice.secretKey) })).statusCode).toBe(401);
+
+    // Expired: past the 5-minute TTL, a correctly signed challenge no longer verifies.
+    const late = await solanaChallenge(c, alice.address);
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 5 * 60_000 + 1000 });
+    try {
+      expect((await c.post("/api/auth/verify", { chain: "solana", address: alice.address, nonce: late.nonce, signature: signSolana(late.message, alice.secretKey) })).statusCode).toBe(401);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // The first, untouched challenge is still good.
+    const ok = await c.post("/api/auth/verify", { chain: "solana", address: alice.address, nonce: first.nonce, signature: signSolana(first.message, alice.secretKey) });
+    expect(ok.statusCode).toBe(200);
   });
 
   it("rejects a malformed address up front", async () => {
@@ -145,43 +212,44 @@ describe("wallet auth API", () => {
     const c = new Client(t.app);
     const { address } = testWallet("frank");
     for (let i = 0; i < 5; i++) {
-      await c.post("/api/auth/challenge", { chain: "solana", address });
-      expect((await c.post("/api/auth/verify", { chain: "solana", address, signature: Buffer.from(new Uint8Array(64)).toString("base64") })).statusCode).toBe(401);
+      const { nonce } = await solanaChallenge(c, address);
+      expect((await c.post("/api/auth/verify", { chain: "solana", address, nonce, signature: ZERO_SIG })).statusCode).toBe(401);
     }
-    await c.post("/api/auth/challenge", { chain: "solana", address });
-    const locked = await c.post("/api/auth/verify", { chain: "solana", address, signature: Buffer.from(new Uint8Array(64)).toString("base64") });
+    const { nonce } = await solanaChallenge(c, address);
+    const locked = await c.post("/api/auth/verify", { chain: "solana", address, nonce, signature: ZERO_SIG });
     expect(locked.statusCode).toBe(429);
     expect(locked.json().error.code).toBe("rate_limited");
     expect(Number(locked.headers["retry-after"])).toBeGreaterThan(0);
   });
 
-  it("throttles challenge requests at 10/hour per wallet address, regardless of which ip asks -- real HTTP route exercises it too", async () => {
-    // Through the real route once, proving it's actually wired in (not just unit-tested below).
-    const { address } = testWallet("griefed-victim");
+  it("throttles challenge requests at 10/hour per ip, but never per wallet address -- many ips asking for one wallet can't lock its owner out", async () => {
+    // Through the real route once, proving the per-ip cap is actually wired in.
     const c = new Client(t.app);
-    for (let i = 0; i < 10; i++) expect((await c.post("/api/auth/challenge", { chain: "solana", address })).statusCode).toBe(200);
-    const blocked = await c.post("/api/auth/challenge", { chain: "solana", address });
+    for (let i = 0; i < 10; i++) expect((await c.post("/api/auth/challenge", { chain: "solana", address: testWallet(`per-ip-${i}`).address })).statusCode).toBe(200);
+    const blocked = await c.post("/api/auth/challenge", { chain: "solana", address: testWallet("per-ip-11th").address });
     expect(blocked.statusCode).toBe(429);
     expect(blocked.json().error.code).toBe("rate_limited");
 
-    // Unit-tested directly below with varied `ip` arguments: the per-ip (10) and per-wallet (10)
-    // caps happen to share a threshold, which the HTTP route can't cleanly tell apart (both
-    // increment on every call from one connection) -- checkChallengeAllowed itself can.
-    const { openDb } = await import("../src/db/index.ts");
-    const { checkChallengeAllowed } = await import("../src/auth/throttle.ts");
-    const db = openDb(":memory:");
-    try {
-      const victim = "solana:griefed-by-many-ips";
-      // 10 calls, each from a DIFFERENT ip -- each individually well under its own per-ip cap of 10,
-      // but all hitting the same wallet's shared 10/hour budget.
-      for (let i = 0; i < 10; i++) expect(() => checkChallengeAllowed(db, `10.0.0.${i}`, victim)).not.toThrow();
-      expect(() => checkChallengeAllowed(db, "10.0.0.99", victim)).toThrow(/too many/i);
+    // 15 challenges for ONE target wallet, each from a different ip (each well under its own per-ip
+    // cap): none is refused. Under the old per-address cap (10/hour, counted across all ips) the
+    // 11th was, which let anyone burn a wallet's hourly allowance and block its real owner.
+    const victim = testWallet("lockout-victim");
+    const fromIp = (ip: string) =>
+      t.app.inject({ method: "POST", url: "/api/auth/challenge", remoteAddress: ip, headers: { origin: ORIGIN, "content-type": "application/json" }, payload: JSON.stringify({ chain: "solana", address: victim.address }) });
+    for (let i = 0; i < 15; i++) expect((await fromIp(`10.0.1.${i}`)).statusCode).toBe(200);
 
-      // a different wallet, even from one of the SAME ips already used above, is unaffected
-      expect(() => checkChallengeAllowed(db, "10.0.0.5", "solana:unrelated-wallet")).not.toThrow();
-    } finally {
-      db.close();
-    }
+    // ...and the real owner, from their own ip, still gets a challenge and signs in with it.
+    const own = await fromIp("192.0.2.7");
+    expect(own.statusCode).toBe(200);
+    const { message, nonce } = own.json() as Challenge;
+    const signedIn = await t.app.inject({
+      method: "POST",
+      url: "/api/auth/verify",
+      remoteAddress: "192.0.2.7",
+      headers: { origin: ORIGIN, "content-type": "application/json" },
+      payload: JSON.stringify({ chain: "solana", address: victim.address, nonce, signature: signSolana(message, victim.secretKey) }),
+    });
+    expect(signedIn.statusCode).toBe(200);
   });
 
   it("CSRF: mutating requests need an allowed Origin (or Referer) and a JSON content type", async () => {

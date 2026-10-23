@@ -43,16 +43,20 @@ export type ApiError = {
 export type User = { id: string; username: string; displayName: string; createdAt: string; chain: "solana" | "ethereum" | null; walletAddress: string | null };
 export type AuthResponse = { user: User };
 export type ChallengeRequest = { chain: "solana" | "ethereum"; address: string };
-export type ChallengeResponse = { message: string };
-export type VerifyRequest = { chain: "solana" | "ethereum"; address: string; signature: string };
+/** `nonce` is the same value as the message's own `Nonce:` line -- send it back on verify. */
+export type ChallengeResponse = { message: string; nonce: string };
+export type VerifyRequest = { chain: "solana" | "ethereum"; address: string; nonce: string; signature: string };
 export type SessionInfo = { id: string; createdAt: string; lastSeenAt: string; userAgent: string | null; current: boolean };
-// POST /api/auth/challenge {chain,address} -> ChallengeResponse: a message to sign, valid 5 minutes, single-use.
-// POST /api/auth/verify {chain,address,signature} -> AuthResponse (sets cookie): verifies the signature over the
-// pending challenge for that wallet, then finds or creates the user for (chain, address).
+// POST /api/auth/challenge {chain,address} -> ChallengeResponse: a message to sign plus its nonce, valid 5 minutes,
+// single-use. Requesting another challenge for the same wallet never invalidates an earlier pending one.
+// POST /api/auth/verify {chain,address,nonce,signature} -> AuthResponse (sets cookie): verifies the signature over the
+// pending challenge that nonce names (which must have been issued for this same chain+address), consuming it either
+// way, then finds or creates the user for (chain, address).
 // POST /api/auth/logout -> 204; GET /api/auth/me -> AuthResponse | 401.
 // GET /api/auth/sessions -> SessionInfo[]; DELETE /api/auth/sessions/:id -> 204; DELETE /api/auth/account -> 204
 // (deleting the account just needs a valid session -- the wallet signature that started it already proved ownership).
-// Rate limits: challenges per ip; verify failures per (ip, chain:address), same backoff shape as the old login throttle.
+// Rate limits: challenges per ip (deliberately not per address -- that let anyone lock a wallet out); verify
+// failures per (ip, chain:address), same backoff shape as the old login throttle.
 
 // ---------- Settings ----------
 export type Preferences = {

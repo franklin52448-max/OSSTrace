@@ -16,9 +16,9 @@ async function signupEthereum(app: FastifyInstance, wallet: Wallet): Promise<Cli
   const address = wallet.address;
   const chal = await c.post("/api/auth/challenge", { chain: "ethereum", address });
   if (chal.statusCode !== 200) throw new Error(`challenge failed: ${chal.statusCode} ${chal.body}`);
-  const { message } = chal.json() as { message: string };
+  const { message, nonce } = chal.json() as { message: string; nonce: string };
   const signature = await wallet.signMessage(message);
-  const r = await c.post("/api/auth/verify", { chain: "ethereum", address, signature });
+  const r = await c.post("/api/auth/verify", { chain: "ethereum", address, nonce, signature });
   if (r.statusCode !== 200) throw new Error(`verify failed: ${r.statusCode} ${r.body}`);
   return c;
 }
@@ -124,9 +124,9 @@ describe("bounties", () => {
     try {
       const u = new Client(app);
       const chal = await u.post("/api/auth/challenge", { chain: "solana", address: payer.address });
-      const { message } = chal.json() as { message: string };
+      const { message, nonce } = chal.json() as { message: string; nonce: string };
       const signature = Buffer.from(nacl.sign.detached(new TextEncoder().encode(message), payer.secretKey)).toString("base64");
-      await u.post("/api/auth/verify", { chain: "solana", address: payer.address, signature });
+      await u.post("/api/auth/verify", { chain: "solana", address: payer.address, nonce, signature });
       const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
 
       const fakeSig = "A".repeat(64); // valid base58 charset + length, so it routes into real RPC verification (mocked above)

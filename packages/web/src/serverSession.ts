@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import type { ChallengeResponse, VerifyRequest } from "@osstrace/contract";
 
 /**
  * The browser side of the new unified server (`@osstrace/server`, ADR 0022) — a separate session
@@ -117,14 +118,16 @@ export function useServerSession(): ServerSessionState {
 
 export type WalletChain = "solana" | "ethereum";
 
-/** Step 1 of wallet sign-in: asks the server for a message to sign. */
-export async function serverChallenge(chain: WalletChain, address: string): Promise<ServerApiResult<{ message: string }>> {
-  return serverApiCall<{ message: string }>("/api/auth/challenge", { method: "POST", body: { chain, address } });
+/** Step 1 of wallet sign-in: asks the server for a message to sign, plus the nonce that names it. */
+export async function serverChallenge(chain: WalletChain, address: string): Promise<ServerApiResult<ChallengeResponse>> {
+  return serverApiCall<ChallengeResponse>("/api/auth/challenge", { method: "POST", body: { chain, address } });
 }
 
-/** Step 2: sends the wallet's signature over that message. On success, updates the session. */
-export async function serverVerify(chain: WalletChain, address: string, signature: string): Promise<string | null> {
-  const result = await serverApiCall<{ user: ServerUser }>("/api/auth/verify", { method: "POST", body: { chain, address, signature } });
+/** Step 2: sends the wallet's signature over that message, with the challenge's own nonce (the server
+ * keys pending challenges by it, so a second challenge for the same wallet -- another tab, or anyone
+ * else -- can't invalidate this one). On success, updates the session. */
+export async function serverVerify(chain: WalletChain, address: string, nonce: string, signature: string): Promise<string | null> {
+  const result = await serverApiCall<{ user: ServerUser }>("/api/auth/verify", { method: "POST", body: { chain, address, nonce, signature } satisfies VerifyRequest });
   if (!result.ok) return result.message;
   setState({ status: "signed-in", user: result.body.user });
   return null;

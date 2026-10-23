@@ -273,6 +273,7 @@ function ConnectForm({ onDone }: { onDone: () => void }) {
     setError(null);
     try {
       let address: string;
+      let nonce: string;
       let signature: string;
       if (chain === "solana") {
         const provider = getSolanaProvider();
@@ -280,6 +281,7 @@ function ConnectForm({ onDone }: { onDone: () => void }) {
         address = await connectSolana(provider);
         const challenge = await serverChallenge(chain, address);
         if (!challenge.ok) throw new Error(challenge.message);
+        nonce = challenge.body.nonce;
         signature = await signSolanaMessage(provider, challenge.body.message);
       } else {
         const provider = getMetaMaskProvider();
@@ -287,9 +289,10 @@ function ConnectForm({ onDone }: { onDone: () => void }) {
         address = await connectEthereum(provider);
         const challenge = await serverChallenge(chain, address);
         if (!challenge.ok) throw new Error(challenge.message);
+        nonce = challenge.body.nonce;
         signature = await signEthereumMessage(provider, address, challenge.body.message);
       }
-      const problem = await serverVerify(chain, address, signature);
+      const problem = await serverVerify(chain, address, nonce, signature);
       if (problem) throw new Error(problem);
       onDone();
     } catch (err) {

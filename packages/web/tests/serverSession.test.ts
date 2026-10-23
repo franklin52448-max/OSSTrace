@@ -76,12 +76,12 @@ test("a real challenge -> verify against an origin the server allows succeeds an
     body: JSON.stringify({ chain: "solana", address }),
   });
   assert.equal(chal.status, 200);
-  const { message } = (await chal.json()) as { message: string };
+  const { message, nonce } = (await chal.json()) as { message: string; nonce: string };
   const signature = Buffer.from(nacl.sign.detached(new TextEncoder().encode(message), secretKey)).toString("base64");
   const res = await fetch(`${server.url}/api/auth/verify`, {
     method: "POST",
     headers: { "content-type": "application/json", origin: "http://localhost:5301" },
-    body: JSON.stringify({ chain: "solana", address, signature }),
+    body: JSON.stringify({ chain: "solana", address, nonce, signature }),
   });
   assert.equal(res.status, 200);
   const body = (await res.json()) as { user: { chain: string; walletAddress: string } };
@@ -98,12 +98,12 @@ test("an ethereum wallet verifies with a real secp256k1 signature too", async ()
     headers: { "content-type": "application/json", origin: "http://localhost:5301" },
     body: JSON.stringify({ chain: "ethereum", address: wallet.address }),
   });
-  const { message } = (await chal.json()) as { message: string };
+  const { message, nonce } = (await chal.json()) as { message: string; nonce: string };
   const signature = await wallet.signMessage(message);
   const res = await fetch(`${server.url}/api/auth/verify`, {
     method: "POST",
     headers: { "content-type": "application/json", origin: "http://localhost:5301" },
-    body: JSON.stringify({ chain: "ethereum", address: wallet.address, signature }),
+    body: JSON.stringify({ chain: "ethereum", address: wallet.address, nonce, signature }),
   });
   assert.equal(res.status, 200);
   const body = (await res.json()) as { user: { chain: string; walletAddress: string } };
@@ -120,13 +120,14 @@ test("a wrong signature is refused with the real 401 message, same wording wheth
     headers: { "content-type": "application/json", origin: "http://localhost:5301" },
     body: JSON.stringify({ chain: "solana", address: known.address }),
   });
-  const { message: msg0 } = (await chal0.json()) as { message: string };
+  const { message: msg0, nonce: nonce0 } = (await chal0.json()) as { message: string; nonce: string };
   const sig0 = Buffer.from(nacl.sign.detached(new TextEncoder().encode(msg0), known.secretKey)).toString("base64");
-  await fetch(`${server.url}/api/auth/verify`, {
+  const created = await fetch(`${server.url}/api/auth/verify`, {
     method: "POST",
     headers: { "content-type": "application/json", origin: "http://localhost:5301" },
-    body: JSON.stringify({ chain: "solana", address: known.address, signature: sig0 }),
+    body: JSON.stringify({ chain: "solana", address: known.address, nonce: nonce0, signature: sig0 }),
   });
+  assert.equal(created.status, 200, "the known wallet really got an account first");
 
   async function wrongSigAttempt(w: { address: string; secretKey: Uint8Array }): Promise<Response> {
     const chal = await fetch(`${server.url}/api/auth/challenge`, {
@@ -134,13 +135,13 @@ test("a wrong signature is refused with the real 401 message, same wording wheth
       headers: { "content-type": "application/json", origin: "http://localhost:5301" },
       body: JSON.stringify({ chain: "solana", address: w.address }),
     });
-    const { message } = (await chal.json()) as { message: string };
+    const { message, nonce } = (await chal.json()) as { message: string; nonce: string };
     // Sign with the WRONG key.
     const badSig = Buffer.from(nacl.sign.detached(new TextEncoder().encode(message), solanaWallet("someone-else").secretKey)).toString("base64");
     return fetch(`${server.url}/api/auth/verify`, {
       method: "POST",
       headers: { "content-type": "application/json", origin: "http://localhost:5301" },
-      body: JSON.stringify({ chain: "solana", address: w.address, signature: badSig }),
+      body: JSON.stringify({ chain: "solana", address: w.address, nonce, signature: badSig }),
     });
   }
 

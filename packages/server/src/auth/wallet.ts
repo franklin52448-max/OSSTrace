@@ -22,20 +22,40 @@ export function isValidAddress(chain: WalletChain, address: string): boolean {
 }
 
 const CHALLENGE_TTL_MS = 5 * 60_000;
+/** Hard ceiling on live pending challenges, so memory stays bounded even under a challenge flood
+ * spread across many IPs (each IP is already capped at 10/hour -- see throttle.ts). Reaching it
+ * evicts the oldest; with a 5-minute TTL that takes ~50k fresh challenges inside 5 minutes, and
+ * even then it's untargeted -- nobody can single out one wallet's in-flight sign-in this way. */
+const MAX_PENDING = 50_000;
 
-type PendingChallenge = { message: string; expiresAt: number };
+type PendingChallenge = { chain: WalletChain; normalizedAddress: string; message: string; expiresAt: number };
 
-/** In-memory, single-process (one Fly machine) — losing a pending challenge on restart just means the visitor retries. */
+/**
+ * Keyed by the challenge's own random nonce (the same one already embedded in the signed message's
+ * `Nonce:` line), never by wallet address. Keying by `chain:address` meant one pending challenge per
+ * wallet, so anyone who knew an address could request a fresh challenge for it and silently
+ * invalidate whatever challenge its real owner was mid-way through signing -- repeated, that locked
+ * the owner out of signing in at all. With a nonce key, each requester only ever consumes the
+ * challenge they themselves were handed; requesting another for the same address no longer touches
+ * anyone else's.
+ *
+ * In-memory, single-process (one Fly machine) -- losing a pending challenge on restart just means
+ * the visitor retries.
+ */
 const pending = new Map<string, PendingChallenge>();
-
-function key(chain: WalletChain, normalizedAddress: string): string {
-  return `${chain}:${normalizedAddress}`;
-}
 
 function sweep(now: number) {
   if (pending.size < 1000) return;
   for (const [k, v] of pending) if (v.expiresAt <= now) pending.delete(k);
+  // Map iteration is insertion order, so the first keys are the oldest.
+  for (const k of pending.keys()) {
+    if (pending.size < MAX_PENDING) break;
+    pending.delete(k);
+  }
 }
+
+/** A nonce as createChallenge mints it: 16 random bytes, hex. */
+export const CHALLENGE_NONCE_FORMAT = /^[0-9a-f]{32}$/;
 
 /** `host` is the signing dApp's own domain (the already-CORS/CSRF-validated request Origin, with the
  * scheme stripped) -- it's EIP-4361's `domain` field, which MetaMask/other wallets' phishing and
@@ -76,10 +96,12 @@ function buildSolanaMessage(host: string, address: string, uri: string, nonce: s
   );
 }
 
-/** Creates (overwriting any prior pending one) a single-use, 5-minute challenge for this wallet.
- * `origin` is this request's already-validated Origin (e.g. "https://opensourcetrace.org") -- used
- * as EIP-4361's domain/uri for Ethereum, and the equivalent SIWS fields for Solana. */
-export function createChallenge(chain: WalletChain, address: string, origin: string): string {
+/** Creates a single-use, 5-minute challenge for this wallet, alongside (never replacing) any other
+ * pending ones for the same wallet. Returns the message to sign and its nonce, which the client
+ * sends back to /api/auth/verify to say which challenge it signed. `origin` is this request's
+ * already-validated Origin (e.g. "https://opensourcetrace.org") -- used as EIP-4361's domain/uri for
+ * Ethereum, and the equivalent SIWS fields for Solana. */
+export function createChallenge(chain: WalletChain, address: string, origin: string): { message: string; nonce: string } {
   const normalized = normalizeAddress(chain, address);
   const nonce = randomBytes(16).toString("hex");
   const issuedAt = nowIso();
@@ -87,17 +109,19 @@ export function createChallenge(chain: WalletChain, address: string, origin: str
   const message = chain === "ethereum" ? buildEthereumMessage(host, address, origin, nonce, issuedAt) : buildSolanaMessage(host, address, origin, nonce, issuedAt);
   const now = Date.now();
   sweep(now);
-  pending.set(key(chain, normalized), { message, expiresAt: now + CHALLENGE_TTL_MS });
-  return message;
+  pending.set(nonce, { chain, normalizedAddress: normalized, message, expiresAt: now + CHALLENGE_TTL_MS });
+  return { message, nonce };
 }
 
-/** Verifies `signature` over the pending challenge for this wallet, consuming it (single-use) either way. */
-export function verifyChallenge(chain: WalletChain, address: string, signature: string): boolean {
-  const normalized = normalizeAddress(chain, address);
-  const k = key(chain, normalized);
-  const entry = pending.get(k);
-  pending.delete(k);
+/** Verifies `signature` over the pending challenge `nonce` names, consuming it (single-use) either
+ * way. The challenge must also have been issued for this same chain and address -- a nonce minted
+ * for one wallet can't be spent signing in as another, even with a valid signature from that other
+ * wallet. */
+export function verifyChallenge(chain: WalletChain, address: string, nonce: string, signature: string): boolean {
+  const entry = pending.get(nonce);
+  pending.delete(nonce);
   if (!entry || entry.expiresAt <= Date.now()) return false;
+  if (entry.chain !== chain || entry.normalizedAddress !== normalizeAddress(chain, address)) return false;
   try {
     if (chain === "solana") return verifySolana(entry.message, signature, address);
     return verifyEthereum(entry.message, signature, address);

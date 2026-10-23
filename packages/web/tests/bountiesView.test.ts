@@ -69,7 +69,7 @@ async function logInAs(seed: string): Promise<void> {
   const chal = await serverChallenge("solana", address);
   if (!chal.ok) throw new Error(`challenge failed: ${chal.message}`);
   const signature = Buffer.from(nacl.sign.detached(new TextEncoder().encode(chal.body.message), secretKey)).toString("base64");
-  const err = await act(async () => serverVerify("solana", address, signature));
+  const err = await act(async () => serverVerify("solana", address, chal.body.nonce, signature));
   if (err) throw new Error(`verify failed: ${err}`);
 }
 

@@ -30,9 +30,14 @@ re-decided the login question directly, for reasons specific to this project:
 
 ### 1. A user is a `(chain, walletAddress)` pair; there is no password
 
-`POST /api/auth/challenge` issues a single-use, 5-minute nonce message; the wallet signs it
-client-side (Phantom's `signMessage`, or MetaMask's `personal_sign`). `POST /api/auth/verify`
-checks the signature (tweetnacl for Solana's ed25519, `ethers.verifyMessage` for Ethereum's
+`POST /api/auth/challenge` issues a single-use, 5-minute nonce message (and returns the nonce
+alongside it); the wallet signs it client-side (Phantom's `signMessage`, or MetaMask's
+`personal_sign`). `POST /api/auth/verify` takes that nonce back to find the pending challenge,
+which must have been issued for the same chain and address. Pending challenges are keyed by nonce,
+not by address (changed 2026-10-23): keyed by address, anyone could request a fresh challenge for
+someone else's wallet and invalidate the one its owner was signing, and the per-address challenge
+cap that was meant to limit that let anyone burn a wallet's hourly allowance instead. Challenges are
+now rate-limited per IP only. `POST /api/auth/verify` checks the signature (tweetnacl for Solana's ed25519, `ethers.verifyMessage` for Ethereum's
 secp256k1/EIP-191), then finds-or-creates the account and sets the same kind of httpOnly session
 cookie the unified server already used. The Ethereum challenge message is EIP-4361 ("Sign-In with
 Ethereum") formatted, so MetaMask and similar wallets render it as a trusted sign-in request

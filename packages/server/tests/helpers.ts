@@ -199,9 +199,9 @@ export async function signup(app: FastifyInstance, seed: string): Promise<Client
   const { address, secretKey } = testWallet(seed);
   const chal = await c.post("/api/auth/challenge", { chain: "solana", address });
   if (chal.statusCode !== 200) throw new Error(`challenge failed: ${chal.statusCode} ${chal.body}`);
-  const { message } = chal.json() as { message: string };
+  const { message, nonce } = chal.json() as { message: string; nonce: string };
   const signature = Buffer.from(nacl.sign.detached(new TextEncoder().encode(message), secretKey)).toString("base64");
-  const r = await c.post("/api/auth/verify", { chain: "solana", address, signature });
+  const r = await c.post("/api/auth/verify", { chain: "solana", address, nonce, signature });
   if (r.statusCode !== 200) throw new Error(`verify failed: ${r.statusCode} ${r.body}`);
   return c;
 }

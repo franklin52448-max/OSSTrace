@@ -7,12 +7,13 @@ import { ApiErr, conflict, notFound } from "../lib/errors.ts";
 import { nowIso } from "../lib/time.ts";
 import { parse, walletAddress, walletSignature } from "../schemas.ts";
 import { cookieOpts, createSession, SESSION_COOKIE, toUser } from "../auth/sessions.ts";
-import { createChallenge, isValidAddress, normalizeAddress, verifyChallenge, type WalletChain } from "../auth/wallet.ts";
+import { CHALLENGE_NONCE_FORMAT, createChallenge, isValidAddress, normalizeAddress, verifyChallenge, type WalletChain } from "../auth/wallet.ts";
 import { checkChallengeAllowed, checkVerifyAllowed, recordVerify } from "../auth/throttle.ts";
 
 const walletChain = z.enum(["solana", "ethereum"]);
 const challengeBody = z.object({ chain: walletChain, address: walletAddress });
-const verifyBody = z.object({ chain: walletChain, address: walletAddress, signature: walletSignature });
+/** `nonce` names which pending challenge was signed (ChallengeResponse.nonce) -- see auth/wallet.ts for why challenges are keyed by it. */
+const verifyBody = z.object({ chain: walletChain, address: walletAddress, nonce: z.string().regex(CHALLENGE_NONCE_FORMAT, "nonce must be the one /api/auth/challenge returned"), signature: walletSignature });
 
 type UserRow = { id: string; username: string; display_name: string; created_at: string; chain: string | null; wallet_address: string | null };
 
@@ -33,7 +34,7 @@ export function registerAuth(app: FastifyInstance, ctx: Ctx) {
     // Skipped under the same test-only flag the alerts test-tick route gates on (SERVER_TEST_HOOKS=1,
     // always off in production) -- without it, a test suite doing many real logins from one IP (or
     // repeatedly against the same test wallet) trips the same abuse guards real callers are meant to.
-    if (!config.testHooks) checkChallengeAllowed(db, req.ip, `${body.chain}:${normalizeAddress(body.chain, body.address)}`);
+    if (!config.testHooks) checkChallengeAllowed(db, req.ip);
     // Already validated by the CSRF check in app.ts's onRequest hook (same Origin-or-Referer logic,
     // repeated here since that hook only validates, it doesn't normalize req.headers.origin itself).
     let origin = req.headers.origin;
@@ -45,8 +46,7 @@ export function registerAuth(app: FastifyInstance, ctx: Ctx) {
       }
     }
     if (!origin) origin = `https://${req.headers.host}`;
-    const message = createChallenge(body.chain, body.address, origin);
-    const res: ChallengeResponse = { message };
+    const res: ChallengeResponse = createChallenge(body.chain, body.address, origin);
     return res;
   });
 
@@ -55,7 +55,7 @@ export function registerAuth(app: FastifyInstance, ctx: Ctx) {
     const normalized = normalizeAddress(body.chain, body.address);
     const walletKey = `${body.chain}:${normalized}`;
     if (!config.testHooks) checkVerifyAllowed(db, req.ip, walletKey);
-    const ok = isValidAddress(body.chain, body.address) && verifyChallenge(body.chain, body.address, body.signature);
+    const ok = isValidAddress(body.chain, body.address) && verifyChallenge(body.chain, body.address, body.nonce, body.signature);
     if (!ok) {
       recordVerify(db, req.ip, walletKey, false);
       throw new ApiErr("unauthorized", "Signature didn't verify, or the sign-in request expired -- try again");

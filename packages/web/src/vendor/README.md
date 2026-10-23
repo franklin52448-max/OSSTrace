@@ -35,6 +35,18 @@ copied in, not a dependency:
 
 The marks are trademarks of their projects, shown only to name chains OSSTrace doesn't support yet.
 
+## Feature marks on the home page
+
+The logos under "Add a feature" in `src/HomeFeatures.tsx` (`WANTED_FEATURES`) name services that
+features nobody has built yet would plug into (Telegram and Discord alert delivery, ENS names,
+Uniswap swap decoding):
+
+- Telegram, Discord and ENS: [Simple Icons](https://simpleicons.org) 16.35.0, **CC0-1.0**.
+- Uniswap: [Web3 Icons](https://web3icons.io) (`@web3icons/core` 4.0.58, branded exchange icon) by
+  0xa3k5, **MIT**.
+
+The marks are trademarks of their owners, shown only to name integrations OSSTrace doesn't have yet.
+
 ## Label-data marks on the home page
 
 The logos under "Add label data" in `src/HomeFeatures.tsx` (`WANTED_LABELS`) name kinds of label data

@@ -49,6 +49,7 @@ harder for the next contributor to understand, it probably isn't. See
 | BNB Smart Chain (chain id 56) in the unified server: address lookup, balances, transfer history, Tracer/Visualizer, via Alchemy's enhanced API (`packages/server/src/chain/alchemy.ts`). Same 0x addresses as Ethereum; Ethereum wallets sign in as usual | **Active** — needs `BNB_RPC_URL` set to an Alchemy URL (on any other RPC, lookups say so as the error) |
 | Robinhood Chain (chain id 4663) in the unified server: address lookup, balances, transfer history, Tracer/Visualizer, via Alchemy's enhanced API (`packages/server/src/chain/alchemy.ts`, `robinhood` chain). Gas token is ETH, kept apart from Ethereum's; Ethereum wallets sign in as usual | **Active** — needs `ROBINHOOD_RPC_URL` set to an Alchemy URL (its own Blockscout API refuses scripted requests with a Cloudflare challenge) |
 | Arbitrum One (42161), OP Mainnet (10), Zora (7777777), Lens Chain (232) and the Data Network (1514, formerly Story) in the unified server: address lookup, balances, transfer history, Tracer/Visualizer, via Alchemy's enhanced API (`packages/server/src/chain/alchemy.ts`; chains `arbitrum`, `optimism`, `zora`, `lens`, `story`). Gas is ETH on the first three (kept apart from Ethereum's), GHO on Lens Chain, DATA on the Data Network; Ethereum wallets sign in as usual | **Active** — each needs its `*_RPC_URL` (`ARBITRUM_`, `OPTIMISM_`, `ZORA_`, `LENS_`, `STORY_`) set to an Alchemy URL for lookups (on the keyless public defaults, lookups say so as the error) |
+| Gnosis Chain (100), Ronin (2020) and Rootstock (30) in the unified server: address lookup, balances, transfer history, Tracer/Visualizer, via Alchemy's enhanced API (`packages/server/src/chain/alchemy.ts`; chains `gnosis`, `ronin`, `rootstock`). None pays gas in ETH: xDAI (a dollar stablecoin) on Gnosis Chain, RON on Ronin, RBTC (BTC-pegged) on Rootstock; Ethereum wallets sign in as usual | **Active** — each needs its `*_RPC_URL` (`GNOSIS_`, `RONIN_`, `ROOTSTOCK_`) set to an Alchemy URL for lookups (on the keyless public defaults, lookups say so as the error) |
 | Explorer API (`GET /address/:chain/:address` — balance, recent txs, label, tags; cached per address + `?limit=`) | **Active** |
 | Caching + a background indexer (real Redis-backed, keeps popular addresses instant) | **Active** |
 | Minimal web UI (paste an address, see what we know) | **Active** |
@@ -94,9 +95,9 @@ non-custodial — so v1 shipped the board and its workflow without pretending to
 **Optional real backing** ([ADR 0020](docs/adr/0020-bounty-funding-via-verified-on-chain-deposits.md)):
 anyone can also back a bounty with a real on-chain payment — SOL, ETH (on Ethereum, Robinhood
 Chain, Base, Arbitrum One, OP Mainnet or Zora), BNB, GHO on Lens Chain, DATA on the Data Network,
-an SPL token, or an ERC-20/BEP-20 (USDC/USDT by default; USDC only on Base, Arbitrum One and OP
-Mainnet; USDG on Robinhood Chain, which has no USDC/USDT; native only on Zora, Lens Chain and the
-Data Network) — to a wallet this project controls, and the board shows that deposit as **verified**, a checked
+xDAI on Gnosis Chain, RON on Ronin, RBTC on Rootstock, an SPL token, or an ERC-20/BEP-20 (USDC/USDT
+by default; USDC only on Base, Arbitrum One and OP Mainnet; USDG on Robinhood Chain, which has no
+USDC/USDT; native only on Zora, Lens Chain, the Data Network, Gnosis Chain, Ronin and Rootstock) — to a wallet this project controls, and the board shows that deposit as **verified**, a checked
 fact read straight off the chain, not a claim. This genuinely is a wallet the project controls
 receiving real third-party funds, so to be precise about what that does and doesn't mean: **it is
 not escrow.** Nothing in this project's code holds funds under any release condition, proves a

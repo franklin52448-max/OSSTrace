@@ -55,6 +55,18 @@ sends no block timestamps, so the provider reads each row's block time with batc
 Chain's L2BaseToken system contract (`0x...800a`) mirrors every native GHO movement as an ERC-20
 Transfer log, which is dropped so native transfers aren't counted twice.
 
+**Gnosis Chain** (100), **Ronin** (2020) and **Rootstock** (30) are read the same way again, on
+`GNOSIS_RPC_URL`, `RONIN_RPC_URL` and `ROOTSTOCK_RPC_URL` (each also `*_RPC_URL_FILE`), defaulting to
+each chain's operator's public RPC (`https://rpc.gnosischain.com`, `https://api.roninchain.com/rpc`,
+`https://public-node.rsk.co`): enough for deposit checks; address lookups need Alchemy URLs. None pays
+gas in ETH: native currency is xDAI on Gnosis Chain (a dollar stablecoin, priced as
+`coingecko:xdai`), RON on Ronin, and RBTC on Rootstock (pegged 1:1 to BTC, priced as RBTC's own
+`coingecko:rootstock` series). DefiLlama prices their tokens under `xdai:`, `ronin:` and `rsk:`.
+Alchemy serves no internal transfers on any of the three, and on Rootstock it sends no block
+timestamps either, so the same batched `eth_getBlockByNumber` read applies there (checked live,
+2026-10-23). Rootstock's RPC also returns legacy transactions with no `chainId` field, so a deposit
+there is pinned to chain 30 by the RPC's own `eth_chainId`.
+
 **`DEV_SKIP_AUTH=1`**: local dev only, treats every request as signed in as a fixed fake user
 (no wallet, no cookie needed) so every feature can be driven without going through the real
 Phantom/MetaMask flow. Refused outright when `NODE_ENV=production`, so it can never activate on a

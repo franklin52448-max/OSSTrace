@@ -203,3 +203,24 @@ transfer: each verified, and the same hash claimed as another chain's payment wa
 - **Lens Chain caveat.** It's a ZKsync-stack chain, where native GHO moved by a contract call shows
   up only as an L2BaseToken Transfer log; a deposit counts only when the transaction itself sends GHO
   to the wallet (`tx.to`/`tx.value`), the same rule as every other EVM chain here.
+
+## Addendum (2026-10-23): Gnosis Chain, Ronin, Rootstock
+
+Three more EVM chains take deposits the same way (`verifyPinnedEvmDeposit`), against `GNOSIS_RPC_URL`,
+`RONIN_RPC_URL` and `ROOTSTOCK_RPC_URL` (each defaults to the chain's operator's public RPC), into
+`DEPOSIT_WALLET_<CHAIN>`, pinned to chain ids 100, 2020 and 30. Checked live against each default RPC
+with a real native transfer: each verified, and the same hash claimed as either other chain's payment
+was refused.
+
+- **Native currency.** xDAI on Gnosis Chain (itself a dollar stablecoin), RON on Ronin, RBTC on
+  Rootstock (pegged 1:1 to BTC). All 18 decimals.
+- **Allowlists.** Native only on all three. None is on Circle's USDC contract-address list, and the
+  dollar tokens there are bridge wrappers (Gnosis Chain's USDC.e and Omnibridge USDC/USDT, Ronin's
+  USDC bridged over the Ronin Bridge, Rootstock's USDT0 / rUSDT / DOC / USDRIF) -- adding one is an
+  operator call via `DEPOSIT_ALLOWED_TOKENS_GNOSIS` / `_RONIN` / `_ROOTSTOCK`.
+- **Chain-id pin without a `chainId` field.** Rootstock's RPC returns legacy transactions with no
+  `chainId` at all, which the pin used to skip silently. A transaction without one is now checked
+  against the RPC's own `eth_chainId` instead (no answer or another id means "not found"), on every
+  pinned chain.
+- **Sender check** against an *Ethereum* sign-in and **connect-and-send** onto the chain's own id,
+  as above.

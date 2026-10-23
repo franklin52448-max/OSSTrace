@@ -8,6 +8,7 @@ import {
   chainForAddress,
   detectChain,
   isAddressOnChain,
+  isChain,
   isEvmChain,
   normalizeAddress,
   toChecksumAddress,
@@ -69,6 +70,19 @@ describe("chain detection", () => {
     expect(chainForAddress(a, "robinhood")).toBe("robinhood");
     const t = "11111111-1111-4111-8111-111111111111";
     expect(addressNodeId(t, "robinhood", a)).not.toBe(addressNodeId(t, "ethereum", a));
+  });
+  it("Base is an EVM chain: same address shape and checksum as Ethereum, but its own chain", () => {
+    expect(isEvmChain("base")).toBe(true);
+    expect(isEvmChain("solana")).toBe(false);
+    expect(normalizeAddress("base", "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed")).toBe("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed");
+    expect(isAddressOnChain("base", "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed")).toBe(true);
+    expect(isAddressOnChain("base", "So11111111111111111111111111111111111111112")).toBe(false);
+    // A node for the same address on each chain is a different node, never merged.
+    const t = "11111111-1111-4111-8111-111111111111";
+    expect(addressNodeId(t, "base", "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed")).not.toBe(addressNodeId(t, "ethereum", "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"));
+    expect(isChain("base")).toBe(true);
+    expect(isChain("bsc")).toBe(false);
+    expect(chainForAddress("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", "base")).toBe("base");
   });
 });
 

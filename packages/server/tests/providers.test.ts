@@ -106,6 +106,85 @@ describe("Blockscout normalisation (recorded 2026-10-22)", () => {
   });
 });
 
+// Base's Blockscout speaks the exact v2 shape Ethereum's does (same software), so these reuse the
+// Ethereum recordings for the shape and hand-build the Base-specific bits: what has to change is
+// only which chain the rows are stamped with and which DefiLlama keys price them. base.blockscout.com
+// itself can't be recorded from a server (Cloudflare challenge, see config.ts's baseBlockscoutUrl).
+describe("Blockscout on Base", () => {
+  const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+  const usdcTransfer = {
+    transaction_hash: "0x" + "ab".repeat(32),
+    log_index: 7,
+    block_number: 21_000_000,
+    timestamp: "2026-10-20T12:00:00.000000Z",
+    from: { hash: VITALIK.toLowerCase() },
+    to: { hash: "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed" },
+    token: { address_hash: BASE_USDC.toLowerCase(), decimals: "6", name: "USD Coin", symbol: "USDC", type: "ERC-20" },
+    total: { decimals: "6", value: "2500000" },
+  };
+
+  it("stamps every row with chain 'base'; native ETH still prices as ether, tokens under DefiLlama's base: prefix", () => {
+    const native = normalizeEthTransactions(fixture("blockscout/transactions.vitalik.json").items, "base");
+    expect(native.length).toBeGreaterThan(0);
+    for (const t of native) expect(t).toMatchObject({ chain: "base", tokenId: "native", tokenSymbol: "ETH", priceCoin: "coingecko:ethereum" });
+    const internal = normalizeEthInternal(fixture("blockscout/internal-transactions.sample.json").items, "base");
+    expect(internal.every((t) => t.chain === "base")).toBe(true);
+    const [usdc] = normalizeEthTokenTransfers([usdcTransfer], "base");
+    expect(usdc).toMatchObject({ chain: "base", tokenId: BASE_USDC, tokenDecimals: 6, amountRaw: "2500000", priceCoin: `base:${BASE_USDC}` });
+    const balances = normalizeEthBalances({ hash: VITALIK, coin_balance: "42" }, [{ token: usdcTransfer.token, token_id: null, value: "10" }], "base");
+    expect(balances).toEqual([
+      expect.objectContaining({ tokenId: "native", amountRaw: "42", priceCoin: "coingecko:ethereum" }),
+      expect.objectContaining({ tokenId: BASE_USDC, priceCoin: `base:${BASE_USDC}` }),
+    ]);
+  });
+
+  it("PRO API: sends the key as apikey, has its own provider id, and never puts the key in an error", async () => {
+    const urls: string[] = [];
+    let status = 200;
+    const fetchImpl = (async (u: string) => {
+      urls.push(String(u));
+      if (status !== 200) return new Response("nope", { status });
+      return new Response(JSON.stringify({ items: [usdcTransfer], next_page_params: null }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const p = new BlockscoutProvider("https://api.blockscout.com/8453", fetchImpl, "base", { apiKey: "proapi_testkey" });
+    expect(p).toMatchObject({ chain: "base", id: "blockscout-base", name: "Blockscout (api.blockscout.com)" });
+    const page = await p.fetchStreamPage(VITALIK, "token-transfers", null, budgetMs(5000));
+    expect(urls[0]).toBe(`https://api.blockscout.com/8453/api/v2/addresses/${VITALIK}/token-transfers?apikey=proapi_testkey`);
+    expect(page.transfers[0]).toMatchObject({ chain: "base", priceCoin: `base:${BASE_USDC}` });
+    status = 401;
+    const err = await p.fetchStreamPage(VITALIK, "token-transfers", null, budgetMs(5000)).catch((e) => e);
+    expect(err).toBeInstanceOf(ProviderError);
+    expect(err.message).toBe("blockscout-base returned HTTP 401");
+    expect(err.message).not.toContain("proapi_testkey");
+  });
+
+  it("PRO API without a key: refuses up front with what's missing, makes no request at all", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls++;
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+    const p = new BlockscoutProvider("https://api.blockscout.com/8453", fetchImpl, "base", { apiKey: null });
+    const err = await p.fetchStreamPage(VITALIK, "transactions", null, budgetMs(5000)).catch((e) => e);
+    expect(err).toBeInstanceOf(ProviderError);
+    expect(err.message).toMatch(/Base needs a Blockscout API key on this server \(BLOCKSCOUT_API_KEY\)/);
+    expect(await p.fetchBalances(VITALIK, budgetMs(5000)).catch((e) => e)).toBeInstanceOf(ProviderError);
+    expect(await p.ping()).toEqual({ ok: false, note: err.message });
+    expect(calls).toBe(0);
+  });
+
+  it("a key is only ever sent to Blockscout's own PRO host, never to an overridden instance", async () => {
+    const urls: string[] = [];
+    const fetchImpl = (async (u: string) => {
+      urls.push(String(u));
+      return new Response(JSON.stringify({ items: [], next_page_params: null }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const p = new BlockscoutProvider("https://blockscout.base.example", fetchImpl, "base", { apiKey: "proapi_testkey" });
+    await p.fetchStreamPage(VITALIK, "transactions", null, budgetMs(5000));
+    expect(urls[0]).toBe(`https://blockscout.base.example/api/v2/addresses/${VITALIK}/transactions`);
+  });
+});
+
 describe("Solana normalisation (recorded 2026-10-22)", () => {
   const tx = (name: string) => fixture<SolTx>(`solana/tx.${name}.json`);
 

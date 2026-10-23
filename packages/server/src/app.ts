@@ -71,6 +71,8 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
     // prices) from being stored as Ethereum mainnet's.
     robinhood: o.providers?.robinhood ?? new BlockscoutProvider(config.robinhoodBlockscoutUrl, o.fetchImpl, "robinhood"),
     bnb: o.providers?.bnb ?? new EtherscanBnbProvider({ apiUrl: config.etherscanUrl, apiKey: config.etherscanApiKey, rpcUrl: config.bnbRpcUrl }, o.fetchImpl),
+    // Base too, read through Blockscout's hosted PRO API (which needs the free key -- see config.ts).
+    base: o.providers?.base ?? new BlockscoutProvider(config.baseBlockscoutUrl, o.fetchImpl, "base", { apiKey: config.blockscoutApiKey }),
     solana:
       o.providers?.solana ??
       new SolanaRpcProvider(config.solanaRpcUrl, config.solanaRpcCustom, o.fetchImpl, {

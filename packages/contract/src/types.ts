@@ -10,16 +10,19 @@
 // The same reasoning applies, with one more trap: its gas token is ETH itself, so a native transfer
 // there says "ETH" exactly like one on Ethereum mainnet -- only the chain tells them apart, so it
 // must never be folded into "ethereum". No "robinhood" login either, for the same reason as bnb.
-export type Chain = "solana" | "ethereum" | "bnb" | "robinhood";
-export const CHAINS: readonly Chain[] = ["solana", "ethereum", "bnb", "robinhood"] as const;
+//
+// "base" is Base (Coinbase's OP Stack L2, EVM chain id 8453): the same shape again, gas paid in ETH
+// too -- still its own `Chain` with its own history, and still no "base" login.
+export type Chain = "solana" | "ethereum" | "bnb" | "robinhood" | "base";
+export const CHAINS: readonly Chain[] = ["solana", "ethereum", "bnb", "robinhood", "base"] as const;
 export const isChain = (v: unknown): v is Chain => typeof v === "string" && (CHAINS as readonly string[]).includes(v);
 
 /** Display name per chain -- one place, so a new chain can't end up as "Solana" in a two-way ternary. */
-export const CHAIN_NAMES: Record<Chain, string> = { solana: "Solana", ethereum: "Ethereum", bnb: "BNB Chain", robinhood: "Robinhood Chain" };
-/** Each chain's native unit, known without a successful balance call. Robinhood Chain's really is
- *  ETH (bridged from Ethereum, as on Arbitrum or Base), not a token of its own -- so this symbol
- *  alone can't tell its transfers from Ethereum's; show the chain next to it. */
-export const NATIVE_SYMBOLS: Record<Chain, string> = { solana: "SOL", ethereum: "ETH", bnb: "BNB", robinhood: "ETH" };
+export const CHAIN_NAMES: Record<Chain, string> = { solana: "Solana", ethereum: "Ethereum", bnb: "BNB Chain", robinhood: "Robinhood Chain", base: "Base" };
+/** Each chain's native unit, known without a successful balance call. Robinhood Chain's and Base's
+ *  really are ETH (bridged from Ethereum), not a token of their own -- so this symbol alone can't
+ *  tell their transfers from Ethereum's; show the chain next to it. */
+export const NATIVE_SYMBOLS: Record<Chain, string> = { solana: "SOL", ethereum: "ETH", bnb: "BNB", robinhood: "ETH", base: "ETH" };
 
 export type XY = { x: number; y: number };
 

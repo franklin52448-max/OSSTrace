@@ -20,12 +20,14 @@ export const bucketOf = (t: number) => Math.floor(t / HOUR) * HOUR;
 // Robinhood Chain's prefix happens to be "robinhood" -- checked against the live coins API (USDG at
 // `robinhood:0x5fc5360d0400a0fd4f2af552add042d716f1d168` prices at ~$1.00), not assumed from the slug.
 // It must never be "ethereum": a contract address is only unique per chain, so that key would price a
-// Robinhood Chain token as whatever lives at the same address on mainnet.
-export const LLAMA_CHAIN_PREFIX: Record<Chain, string> = { ethereum: "ethereum", solana: "solana", bnb: "bsc", robinhood: "robinhood" };
+// Robinhood Chain token as whatever lives at the same address on mainnet. Base's is "base", checked
+// the same way (`base:0x8335...2913` prices as USDC, 6 dp).
+export const LLAMA_CHAIN_PREFIX: Record<Chain, string> = { ethereum: "ethereum", solana: "solana", bnb: "bsc", robinhood: "robinhood", base: "base" };
 /** Native coins are keyed by their CoinGecko id on DefiLlama (BNB's is "binancecoin", not "bnb").
  *  Robinhood Chain pays gas in real ETH -- CoinGecko's asset platform for it says `native_coin_id:
- *  "ethereum"`, DefiLlama's chain list `gasTokenGeckoId: "ethereum"` -- so it prices off ETH's own id. */
-export const NATIVE_COIN: Record<Chain, string> = { ethereum: "coingecko:ethereum", solana: "coingecko:solana", bnb: "coingecko:binancecoin", robinhood: "coingecko:ethereum" };
+ *  "ethereum"`, DefiLlama's chain list `gasTokenGeckoId: "ethereum"` -- so it prices off ETH's own id.
+ *  Base's gas asset is ether too (bridged 1:1, the same asset), so the same series. */
+export const NATIVE_COIN: Record<Chain, string> = { ethereum: "coingecko:ethereum", solana: "coingecko:solana", bnb: "coingecko:binancecoin", robinhood: "coingecko:ethereum", base: "coingecko:ethereum" };
 export const tokenCoin = (chain: Chain, tokenId: string) => `${LLAMA_CHAIN_PREFIX[chain]}:${tokenId}`;
 
 /**

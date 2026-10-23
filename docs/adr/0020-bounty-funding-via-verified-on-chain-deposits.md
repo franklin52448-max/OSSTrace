@@ -224,3 +224,27 @@ was refused.
   pinned chain.
 - **Sender check** against an *Ethereum* sign-in and **connect-and-send** onto the chain's own id,
   as above.
+
+## Addendum (2026-10-23): ZetaChain, Mythos, HyperEVM
+
+Three more EVM chains take deposits the same way (`verifyPinnedEvmDeposit`), against
+`ZETACHAIN_RPC_URL`, `MYTHOS_RPC_URL` and `HYPERLIQUID_RPC_URL` (each defaults to the chain's published
+keyless RPC), into `DEPOSIT_WALLET_<CHAIN>`, pinned to chain ids 7000, 42018 and 999. Checked live
+against each default RPC with a real native transfer: each verified, and the same hash claimed as either
+other chain's payment was refused, through either chain's RPC.
+
+- **Native currency.** ZETA on ZetaChain, HYPE on the HyperEVM, and ETH on Mythos -- not MYTH, its
+  ecosystem token: Mythos is an OP Stack chain with no custom gas token. All 18 decimals.
+- **Allowlists.** The HyperEVM: Circle's native USDC (`0xb88339CB7199b77E23DB6E890353E22632Ba630f`,
+  listed for HyperEVM mainnet on Circle's USDC contract-address page; `symbol()` USDC, `decimals()` 6 read
+  on-chain), checked live with a real 1700 USDC transfer. ZetaChain and Mythos: native only. Neither is on
+  Circle's list; ZetaChain's dollar tokens are ZRC-20 bridge representations ("ZetaChain ZRC20 USDC on
+  Ethereum Mainnet") and Mythos's is "Bridged USDC (Mythos)" (USDC.e) -- adding one is an operator call
+  via `DEPOSIT_ALLOWED_TOKENS_ZETACHAIN` / `_MYTHOS`.
+- **HyperCore transfers don't count.** A transfer from Hyperliquid's HyperCore into the HyperEVM lands as
+  a system transaction (gas price 0, sent from the asset's system address). The default public RPC
+  doesn't return those by hash, and their sender is never the depositor's wallet, so they fail the sender
+  check either way. A HyperEVM deposit has to be an ordinary HyperEVM transaction from the signed-in
+  wallet, which is what connect-and-send sends.
+- **Sender check** against an *Ethereum* sign-in and **connect-and-send** onto the chain's own id,
+  as above.

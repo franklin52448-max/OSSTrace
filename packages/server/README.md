@@ -67,6 +67,24 @@ timestamps either, so the same batched `eth_getBlockByNumber` read applies there
 2026-10-23). Rootstock's RPC also returns legacy transactions with no `chainId` field, so a deposit
 there is pinned to chain 30 by the RPC's own `eth_chainId`.
 
+**ZetaChain** (7000), **Mythos** (42018) and the **HyperEVM** (999, chain id `hyperliquid`) are read
+the same way again, on `ZETACHAIN_RPC_URL`, `MYTHOS_RPC_URL` and `HYPERLIQUID_RPC_URL` (each also
+`*_RPC_URL_FILE`), defaulting to each chain's published keyless RPC
+(`https://zetachain-evm.blockpi.network/v1/rpc/public`, the one ZetaChain's docs list;
+`https://mythos-mainnet.g.alchemy.com/public`, the one Mythos's explorer publishes -- Alchemy-hosted, but
+core `eth_*` only; `https://rpc.hyperliquid.xyz/evm`): enough for deposit checks; address lookups need
+keyed Alchemy URLs. Native currency is ZETA on ZetaChain (`coingecko:zetachain`), HYPE on the HyperEVM
+(`coingecko:hyperliquid`), and ETH on Mythos -- an OP Stack chain whose L1Block predeploy reports the ETH
+sentinel as its gas-paying token, so it's priced as ether, never as MYTH (its ecosystem token). DefiLlama
+prices ZetaChain and HyperEVM tokens under `zeta:` and `hyperliquid:`; it has no Mythos chain, so Mythos
+tokens stay unpriced. Alchemy serves no internal transfers on any of the three and sends no block
+timestamps on any of them, so the batched `eth_getBlockByNumber` read applies to all three (checked live,
+2026-10-23). Only the HyperEVM is read: Hyperliquid's HyperCore (its order books, spot and perp balances)
+is a separate, non-EVM system this server doesn't touch. HyperCore-to-HyperEVM transfers arrive as system
+transactions (gas price 0, sent from the asset's system address), which `rpc.hyperliquid.xyz/evm`
+doesn't return by hash -- a HyperEVM bounty deposit has to be an ordinary transaction from the
+depositor's own wallet.
+
 **`DEV_SKIP_AUTH=1`**: local dev only, treats every request as signed in as a fixed fake user
 (no wallet, no cookie needed) so every feature can be driven without going through the real
 Phantom/MetaMask flow. Refused outright when `NODE_ENV=production`, so it can never activate on a

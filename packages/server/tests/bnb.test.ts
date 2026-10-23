@@ -110,7 +110,7 @@ describe("BNB as a first-class chain through the API", () => {
 
 // Found in live QA (BNB, 2026-10-23): Alchemy had no decimals for MYX, the row was stored with
 // token_decimals NULL and its unscaled base-unit amount, and the pricing pass multiplied that by
-// MYX's price -- an ~$80 swap stored as $1.27e19, topping every counterparty table it touched.
+// MYX's price -- a ~$12.7 swap (203 MYX) stored as $1.27e19, topping every counterparty table it touched.
 describe("transfers with unknown token decimals are never priced", () => {
   let t: TestApp;
   beforeEach(async () => (t = await makeApp()));

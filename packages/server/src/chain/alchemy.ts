@@ -313,7 +313,7 @@ export class AlchemyProvider implements ChainProvider {
    * Alchemy has no decimals for some real, priced ERC-20s (`rawContract.decimal: null`, and
    * `alchemy_getTokenMetadata` answers `decimals: null` too -- seen on BNB Chain's MYX token, whose
    * contract's own `decimals()` says 18). Stored like that, the amount would be the unscaled base-unit
-   * integer, and a USD price times it is off by 10^decimals (a ~$80 swap read as $1.27e19). This reads
+   * integer, and a USD price times it is off by 10^decimals (a ~$12.7 swap read as $1.27e19). This reads
    * `decimals()` from the token contract itself, in one batched `eth_call`, for each such token on the
    * page. Best effort: a token whose call reverts or fails keeps `tokenDecimals: null` (sync then
    * leaves it unpriced rather than price an unscaled amount); a failed batch never fails the page.

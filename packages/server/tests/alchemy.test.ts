@@ -227,7 +227,7 @@ describe("AlchemyProvider transfer history", () => {
 
   // Real Alchemy answer (BNB, 2026-10-23): MYX comes back with `rawContract.decimal: null` (and
   // alchemy_getTokenMetadata says `decimals: null` too), though the contract's own decimals() is 18.
-  // Stored unscaled, that one ~$80 swap priced at $1.27e19 in the Tracer's counterparty table.
+  // Stored unscaled, that one ~$12.7 swap (203 MYX) priced at $1.27e19 in the Tracer's counterparty table.
   const MYX = "0xD82544bf0dfe8385eF8FA34D67e6e4940CC63e16";
   const NO_DECIMALS = "0x1de460f363AF910f51726DEf188F9004276Bf4bc";
   const TX3 = "0x6b0b114648b379498f19e9640605660d1fb6a4a075c84bd1efc1a9aedaa46f84";

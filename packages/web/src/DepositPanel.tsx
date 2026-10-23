@@ -36,14 +36,15 @@ const TX_REF_PLACEHOLDER: Record<DepositChain, string> = {
   bnb: "Transaction hash (0x…)",
   robinhood: "Transaction hash (0x…)",
   bitcoin: "Transaction ID (txid)",
+  base: "Transaction hash (0x…)",
 };
 /** Display/selection order everywhere in this panel. */
-const DEPOSIT_CHAINS: readonly DepositChain[] = ["solana", "ethereum", "bnb", "robinhood", "bitcoin"];
+const DEPOSIT_CHAINS: readonly DepositChain[] = ["solana", "ethereum", "bnb", "robinhood", "base", "bitcoin"];
 /** The chains a connected browser wallet can send on: every deposit chain but Bitcoin (paste-only).
  *  Derived from DepositChain, so a chain that gains deposits must also say how it's sent here. */
 type SendChain = Exclude<DepositChain, "bitcoin">;
-const SEND_CHAINS: readonly SendChain[] = ["solana", "ethereum", "bnb", "robinhood"];
-const TOKEN_STANDARD: Record<SendChain, string> = { solana: "SPL token", ethereum: "ERC-20 token", bnb: "BEP-20 token", robinhood: "ERC-20 token" };
+const SEND_CHAINS: readonly SendChain[] = ["solana", "ethereum", "bnb", "robinhood", "base"];
+const TOKEN_STANDARD: Record<SendChain, string> = { solana: "SPL token", ethereum: "ERC-20 token", bnb: "BEP-20 token", robinhood: "ERC-20 token", base: "ERC-20 token" };
 
 /** The shared icon for the two app-wide chains; a plain orange "₿" disc for Bitcoin -- an honest
  *  generic mark, not an attempt at the exact brand artwork. */

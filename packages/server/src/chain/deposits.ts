@@ -13,6 +13,10 @@
 // is looked up on that chain's own endpoint only, and EIP-155 signatures commit to the chain id, so
 // a mainnet tx hash isn't found on Robinhood Chain's RPC; deposits are deduped per (chain, tx hash).
 //
+// Base is the same again (verifyBaseDeposit), against Base's own official public RPC by default
+// (config.ts's baseRpcUrl), and additionally pinned to Base's EIP-155 chain id -- so even a mis-set
+// BASE_RPC_URL pointed at another chain can't make that chain's payment verify as a Base one.
+//
 // Ethereum has two verification paths now. When a dedicated `ETH_RPC_URL` is configured (see
 // config.ts), deposits are checked via real `eth_getTransactionByHash`/`eth_getTransactionReceipt`
 // JSON-RPC calls -- the same approach the old standalone @osstrace/bounties service originally
@@ -74,6 +78,13 @@ export const DEFAULT_ALLOWED_TOKENS_ROBINHOOD = new Set<string>([
 export const DEFAULT_ALLOWED_TOKENS_SOLANA = new Set<string>([
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
   "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
+]);
+/** Base: Circle's own native USDC (a FiatTokenProxy; on-chain name() "USD Coin", decimals() 6 --
+ *  read from Base's public RPC 2026-10-23; BaseScan tags it Circle's), NOT the older bridged "USDbC"
+ *  at a different address. No USDT default: Tether doesn't issue USDT on Base itself, and a bridged
+ *  copy is exactly the kind of look-alike this list exists to keep out unless an operator adds it. */
+export const DEFAULT_ALLOWED_TOKENS_BASE = new Set<string>([
+  "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC
 ]);
 const isAllowedEvmToken = (allowed: Set<string>, contract: string) => [...allowed].some((a) => sameAddress(a, contract));
 
@@ -264,7 +275,7 @@ async function verifyEthereumDepositViaBlockscout(http: HttpClient, blockscoutUr
   };
 }
 
-type EthRpcTx = { to: string | null; from: string; value: string; blockNumber: string | null } | null;
+type EthRpcTx = { to: string | null; from: string; value: string; blockNumber: string | null; chainId?: string | null } | null;
 type EthRpcLog = { address: string; topics: string[]; data: string };
 type EthRpcReceipt = { status: string | null; logs: EthRpcLog[] } | null;
 
@@ -299,7 +310,15 @@ async function fetchDecimals(http: HttpClient, rpcUrl: string, contract: string,
  * transaction's own `value`/`to`; a token deposit is read off the real Transfer event log in the
  * transaction's receipt, with the token's real decimals resolved via its own `decimals()`.
  */
-async function verifyEvmDepositViaRpc(http: HttpClient, rpcUrl: string, txHash: string, wallet: string, allowedTokens: Set<string>, budget: Budget): Promise<DepositVerification> {
+async function verifyEvmDepositViaRpc(
+  http: HttpClient,
+  rpcUrl: string,
+  txHash: string,
+  wallet: string,
+  allowedTokens: Set<string>,
+  budget: Budget,
+  expectChainId?: bigint,
+): Promise<DepositVerification> {
   let tx: EthRpcTx;
   let receipt: EthRpcReceipt;
   try {
@@ -311,6 +330,10 @@ async function verifyEvmDepositViaRpc(http: HttpClient, rpcUrl: string, txHash: 
     return { ok: false, reason: "not_found" };
   }
   if (!tx || !receipt) return { ok: false, reason: "not_found" };
+  // The same wallet address exists on every EVM chain, so a payment on one chain must never verify
+  // as another's: if the RPC is somehow serving a different chain than the one being claimed (a
+  // mis-set BASE_RPC_URL pointed at Ethereum mainnet, say), the tx's own EIP-155 chain id says so.
+  if (expectChainId !== undefined && tx.chainId != null && BigInt(tx.chainId) !== expectChainId) return { ok: false, reason: "not_found" };
   if (receipt.status !== "0x1") return { ok: false, reason: "not_confirmed" };
 
   if (tx.to && sameAddress(tx.to, wallet) && BigInt(tx.value) > 0n) {
@@ -353,6 +376,17 @@ export async function verifyRobinhoodDeposit(http: HttpClient, robinhoodRpcUrl: 
   if (!wallet) return { ok: false, reason: "not_configured" };
   if (!ETH_TX_HASH_FORMAT.test(txHash)) return { ok: false, reason: "malformed_reference" };
   return verifyEvmDepositViaRpc(http, robinhoodRpcUrl, txHash, wallet, allowedTokens, budget);
+}
+
+/** Base mainnet's EIP-155 chain id (0x2105). */
+export const BASE_CHAIN_ID = 8453n;
+
+/** Base: the same EVM RPC verification against `baseRpcUrl`, with Base's own token allowlist, and
+ *  pinned to Base's chain id. Native ETH on Base is 18 decimals; tokens resolve theirs via `decimals()`. */
+export async function verifyBaseDeposit(http: HttpClient, baseRpcUrl: string, txHash: string, wallet: string | undefined, allowedTokens: Set<string>, budget: Budget): Promise<DepositVerification> {
+  if (!wallet) return { ok: false, reason: "not_configured" };
+  if (!ETH_TX_HASH_FORMAT.test(txHash)) return { ok: false, reason: "malformed_reference" };
+  return verifyEvmDepositViaRpc(http, baseRpcUrl, txHash, wallet, allowedTokens, budget, BASE_CHAIN_ID);
 }
 
 const BTC_TXID_FORMAT = /^[0-9a-fA-F]{64}$/;

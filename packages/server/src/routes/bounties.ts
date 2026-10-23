@@ -5,7 +5,7 @@ import type { Bounty, BountyDeposit, BountySubmission, BountyWallets, DepositCha
 import { BOUNTY_DIFFICULTIES, BOUNTY_TAGS, type BountyDifficulty, type BountyTag } from "@osstrace/contract";
 import { requireUser, type Ctx } from "../context.ts";
 import { HttpClient, budgetMs } from "../lib/http.ts";
-import { verifyBitcoinDeposit, verifyBnbDeposit, verifyEthereumDeposit, verifyRobinhoodDeposit, verifySolanaDeposit, type DepositVerification } from "../chain/deposits.ts";
+import { verifyBaseDeposit, verifyBitcoinDeposit, verifyBnbDeposit, verifyEthereumDeposit, verifyRobinhoodDeposit, verifySolanaDeposit, type DepositVerification } from "../chain/deposits.ts";
 import { normalizeAddress, type WalletChain } from "../auth/wallet.ts";
 import { ApiErr, badRequest, conflict, forbidden, notFound } from "../lib/errors.ts";
 import { nowIso } from "../lib/time.ts";
@@ -77,10 +77,10 @@ type SubmissionRow = { id: string; bounty_id: string; submitted_by: string; pr_u
  * form), and wallet sign-in only accepts an EOA's own personal_sign signature (auth/wallet.ts), so a
  * wallet signed in as "ethereum" controls exactly the BNB account at that address. Robinhood Chain
  * is the same case: an EOA's address comes from its key alone, never the chain id, so the key that
- * signed in as 0xabc on Ethereum is the only one that can send from 0xabc on chain 4663. Bitcoin has
- * no entry: it has no sender check at all (see the deposit route).
+ * signed in as 0xabc on Ethereum is the only one that can send from 0xabc on chain 4663. Base (chain
+ * 8453) likewise. Bitcoin has no entry: it has no sender check at all (see the deposit route).
  */
-const DEPOSIT_SIGNER: Record<Exclude<DepositChain, "bitcoin">, WalletChain> = { solana: "solana", ethereum: "ethereum", bnb: "ethereum", robinhood: "ethereum" };
+const DEPOSIT_SIGNER: Record<Exclude<DepositChain, "bitcoin">, WalletChain> = { solana: "solana", ethereum: "ethereum", bnb: "ethereum", robinhood: "ethereum", base: "ethereum" };
 
 type DepositRow = { id: string; bounty_id: string; chain: DepositChain; asset_contract: string | null; amount: string; tx_ref: string; from_address: string; to_wallet: string; memo: string | null; recorded_by: string; recorded_at: string };
 
@@ -247,6 +247,7 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
       bnb: () => verifyBnbDeposit(http, config.bnbRpcUrl, txRef, wallet, config.depositAllowedTokens.bnb, budget),
       robinhood: () => verifyRobinhoodDeposit(http, config.robinhoodRpcUrl, txRef, wallet, config.depositAllowedTokens.robinhood, budget),
       bitcoin: () => verifyBitcoinDeposit(http, config.esploraUrl, txRef, wallet, budget),
+      base: () => verifyBaseDeposit(http, config.baseRpcUrl, txRef, wallet, config.depositAllowedTokens.base, budget),
     };
     const verified = await verifiers[body.chain]();
     if (!verified.ok) {
@@ -262,13 +263,16 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
         unsupported_asset:
           body.chain === "robinhood"
             ? "That transaction pays the right wallet, but not in an asset this server tracks for Robinhood Chain deposits (native ETH or USDG)"
-            : "That transaction pays the right wallet, but not in an asset this server tracks for deposits (native SOL/ETH/BNB, USDC or USDT)",
+            : body.chain === "base"
+              ? "That transaction pays the right wallet, but not in an asset this server tracks for Base deposits (native ETH or USDC)"
+              : "That transaction pays the right wallet, but not in an asset this server tracks for deposits (native SOL/ETH/BNB, USDC or USDT)",
         malformed_reference: {
           solana: "That doesn't look like a real Solana signature",
           ethereum: "That doesn't look like a real Ethereum transaction hash",
           bnb: "That doesn't look like a real BNB Chain transaction hash",
           robinhood: "That doesn't look like a real Robinhood Chain transaction hash",
           bitcoin: "That doesn't look like a real Bitcoin transaction ID (64 hex characters)",
+          base: "That doesn't look like a real Base transaction hash",
         }[body.chain],
       };
       throw badRequest(messages[verified.reason]);

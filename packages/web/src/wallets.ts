@@ -84,6 +84,15 @@ const EVM_NETWORKS = {
     rpcUrls: ["https://rpc.mainnet.chain.robinhood.com"],
     blockExplorerUrls: ["https://robinhoodchain.blockscout.com"],
   },
+  // Chain id 8453 -- the same ETH-native trap as Robinhood Chain's, with Base's own official RPC and
+  // explorer for a wallet that has to add it first.
+  base: {
+    chainId: "0x2105",
+    chainName: "Base",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: ["https://mainnet.base.org"],
+    blockExplorerUrls: ["https://basescan.org"],
+  },
 } as const;
 
 const onNetwork = async (provider: EthereumProvider, chainId: string) => BigInt((await provider.request({ method: "eth_chainId" })) as string) === BigInt(chainId);

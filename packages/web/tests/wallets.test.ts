@@ -192,6 +192,22 @@ test("switchEvmNetwork: a mainnet wallet is moved to Robinhood Chain (4663 = 0x1
   await assert.rejects(switchEvmNetwork(new NetworkWallet("0x1", ["0x1", "0x1237"], false), "robinhood"), /switch it to Robinhood Chain/);
 });
 
+test("switchEvmNetwork: a Base deposit moves a mainnet wallet onto Base (8453 = 0x2105), adding it with Base's own RPC/explorer if needed", async () => {
+  const { switchEvmNetwork } = await import("../src/wallets.ts");
+  const w = new NetworkWallet("0x1");
+  await switchEvmNetwork(w, "base");
+  assert.equal(BigInt(w.chainId), 8453n);
+  const add = w.calls.find((c) => c.method === "wallet_addEthereumChain")?.params?.[0] as { chainId: string; nativeCurrency: unknown; rpcUrls: string[]; blockExplorerUrls: string[] };
+  assert.equal(add.chainId, "0x2105");
+  // Same native currency as mainnet -- only the chain id keeps a Base deposit off Ethereum.
+  assert.deepEqual(add.nativeCurrency, { name: "Ether", symbol: "ETH", decimals: 18 });
+  assert.deepEqual(add.rpcUrls, ["https://mainnet.base.org"]);
+  assert.deepEqual(add.blockExplorerUrls, ["https://basescan.org"]);
+  await switchEvmNetwork(w, "ethereum");
+  assert.equal(w.chainId, "0x1");
+  await assert.rejects(switchEvmNetwork(new NetworkWallet("0x1", ["0x1", "0x2105"], false), "base"), /switch it to Base/);
+});
+
 test("sendEthereumNative: builds a plain value transfer with the exact wei amount, no data field", async () => {
   const { sendEthereumNative } = await import("../src/wallets.ts");
   const provider = new FakeEthereumProvider();

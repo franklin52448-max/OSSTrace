@@ -836,3 +836,143 @@ describe("bounties", () => {
     });
   });
 });
+
+describe("Base deposits (EVM JSON-RPC against Base's own RPC, sender matched to the Ethereum sign-in)", () => {
+  const BASE_RPC = "https://base-rpc.test";
+  const BASE_WALLET = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359";
+  const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+  const MAINNET_USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+  const ERC20_TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+  const topic = (addr: string) => `0x${addr.slice(2).toLowerCase().padStart(64, "0")}`;
+  const HASH = `0x${"ba5e".repeat(16)}`;
+  const BOUNTY = { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" };
+
+  /** A JSON-RPC node for Base: answers eth_getTransactionByHash / eth_getTransactionReceipt / eth_call
+   *  (decimals()) from what the test sets, and records which URL each call went to. */
+  function baseRpcFetch(opts: { tx?: Record<string, unknown> | null; receipt?: Record<string, unknown> | null; decimals?: number }, urls: string[] = []): typeof fetch {
+    return (async (input: string | URL, init?: RequestInit) => {
+      urls.push(String(input));
+      const { method } = JSON.parse(String(init?.body ?? "{}")) as { method?: string };
+      const result =
+        method === "eth_getTransactionByHash" ? (opts.tx ?? null) : method === "eth_getTransactionReceipt" ? (opts.receipt ?? null) : method === "eth_call" ? `0x${(opts.decimals ?? 18).toString(16).padStart(64, "0")}` : null;
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+  }
+  const nativeTx = (from: string, over: Record<string, unknown> = {}) => ({ from: from.toLowerCase(), to: BASE_WALLET.toLowerCase(), value: "0x16345785d8a0000", blockNumber: "0x1", chainId: "0x2105", ...over }); // 0.1 ETH
+  const ok = { status: "0x1", logs: [] };
+  const tokenReceipt = (token: string, from: string, raw: bigint) => ({
+    status: "0x1",
+    logs: [{ address: token.toLowerCase(), topics: [ERC20_TRANSFER_TOPIC, topic(from), topic(BASE_WALLET)], data: `0x${raw.toString(16).padStart(64, "0")}` }],
+  });
+
+  const app = (fetchImpl: typeof fetch, over: Partial<Config> = {}) =>
+    makeBountyApp(fetchImpl, new FakeProvider("ethereum"), new FakeProvider("solana"), { baseRpcUrl: BASE_RPC, depositWallets: { ethereum: ETH_WALLET, solana: SOL_WALLET, bitcoin: BTC_WALLET, base: BASE_WALLET }, ...over });
+
+  it("records native ETH paid on Base, verified against the Base RPC, from the caller's own Ethereum-signed-in wallet", async () => {
+    const wallet = new Wallet("0x" + "8".repeat(64));
+    const urls: string[] = [];
+    const { app: a, close } = await app(baseRpcFetch({ tx: nativeTx(wallet.address), receipt: ok }, urls));
+    try {
+      const u = await signupEthereum(a, wallet);
+      const b = (await u.post("/api/bounties", BOUNTY)).json();
+      expect((await u.get("/api/bounties/wallets")).json()).toMatchObject({ base: BASE_WALLET });
+      urls.length = 0;
+      const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "base", txRef: HASH.toUpperCase().replace("0X", "0x") });
+      expect(r.statusCode).toBe(201);
+      expect(r.json()).toMatchObject({ chain: "base", asset: "native", amount: "0.1", toWallet: BASE_WALLET, txRef: HASH });
+      expect(urls.length).toBeGreaterThan(0);
+      expect(urls.every((x) => x === BASE_RPC)).toBe(true); // never Ethereum's RPC or Blockscout
+      // Same payment again, any casing: one real payment, recorded once.
+      expect((await u.post(`/api/bounties/${b.id}/deposits`, { chain: "base", txRef: HASH })).statusCode).toBe(409);
+    } finally {
+      await close();
+    }
+  });
+
+  it("records Base's native USDC (real decimals via decimals()), and refuses Ethereum mainnet's USDC contract on Base as an untracked asset", async () => {
+    const wallet = new Wallet("0x" + "8".repeat(64));
+    const usdc = await app(baseRpcFetch({ tx: nativeTx(wallet.address, { to: BASE_USDC.toLowerCase(), value: "0x0" }), receipt: tokenReceipt(BASE_USDC, wallet.address, 2_500_000n), decimals: 6 }));
+    try {
+      const u = await signupEthereum(usdc.app, wallet);
+      const b = (await u.post("/api/bounties", BOUNTY)).json();
+      const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "base", txRef: HASH });
+      expect(r.statusCode).toBe(201);
+      expect(r.json()).toMatchObject({ chain: "base", asset: { contract: BASE_USDC.toLowerCase() }, amount: "2.5" });
+    } finally {
+      await usdc.close();
+    }
+    const wrongToken = await app(baseRpcFetch({ tx: nativeTx(wallet.address, { to: MAINNET_USDC.toLowerCase(), value: "0x0" }), receipt: tokenReceipt(MAINNET_USDC, wallet.address, 2_500_000n), decimals: 6 }));
+    try {
+      const u = await signupEthereum(wrongToken.app, wallet);
+      const b = (await u.post("/api/bounties", BOUNTY)).json();
+      const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "base", txRef: HASH });
+      expect(r.statusCode).toBe(400);
+      expect(r.json().error.message).toMatch(/not in an asset this server tracks/);
+    } finally {
+      await wrongToken.close();
+    }
+  });
+
+  it("a tx the RPC reports on another chain id is never counted as a Base payment", async () => {
+    const wallet = new Wallet("0x" + "8".repeat(64));
+    const { app: a, close } = await app(baseRpcFetch({ tx: nativeTx(wallet.address, { chainId: "0x1" }), receipt: ok }));
+    try {
+      const u = await signupEthereum(a, wallet);
+      const b = (await u.post("/api/bounties", BOUNTY)).json();
+      const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "base", txRef: HASH });
+      expect(r.statusCode).toBe(400);
+      expect(r.json().error.message).toBe("That transaction wasn't found");
+    } finally {
+      await close();
+    }
+  });
+
+  it("the sender check applies: another Ethereum wallet, or a Solana account, can't claim someone else's Base payment", async () => {
+    const payer = new Wallet("0x" + "8".repeat(64));
+    const { app: a, close } = await app(baseRpcFetch({ tx: nativeTx(payer.address), receipt: ok }));
+    try {
+      const other = await signupEthereum(a, new Wallet("0x" + "9".repeat(64)));
+      const b = (await other.post("/api/bounties", BOUNTY)).json();
+      const stolen = await other.post(`/api/bounties/${b.id}/deposits`, { chain: "base", txRef: HASH });
+      expect(stolen.statusCode).toBe(403);
+      expect(stolen.json().error.message).toMatch(/sent from your connected wallet/i);
+      const sol = await signup(a, "base-solana-account");
+      expect((await sol.post(`/api/bounties/${b.id}/deposits`, { chain: "base", txRef: HASH })).statusCode).toBe(403);
+    } finally {
+      await close();
+    }
+  });
+
+  it("malformed hash, failed tx, and no configured Base wallet each get their own clear refusal", async () => {
+    const wallet = new Wallet("0x" + "8".repeat(64));
+    const failed = await app(baseRpcFetch({ tx: nativeTx(wallet.address), receipt: { status: "0x0", logs: [] } }));
+    try {
+      const u = await signupEthereum(failed.app, wallet);
+      const b = (await u.post("/api/bounties", BOUNTY)).json();
+      const bad = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "base", txRef: "0x1234" });
+      expect(bad.json().error.message).toBe("That doesn't look like a real Base transaction hash");
+      const reverted = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "base", txRef: HASH });
+      expect(reverted.json().error.message).toBe("That transaction didn't succeed on-chain");
+    } finally {
+      await failed.close();
+    }
+    const none = await app(baseRpcFetch({}), { depositWallets: { ethereum: ETH_WALLET } });
+    try {
+      const u = await signupEthereum(none.app, wallet);
+      const b = (await u.post("/api/bounties", BOUNTY)).json();
+      expect((await u.get("/api/bounties/wallets")).json()).toEqual({ ethereum: ETH_WALLET });
+      const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "base", txRef: HASH });
+      expect(r.statusCode).toBe(400);
+      expect(r.json().error.message).toMatch(/no base deposit wallet/i);
+    } finally {
+      await none.close();
+    }
+  });
+
+  it("config: DEPOSIT_WALLET_BASE and the USDC-only default allowlist, extendable via DEPOSIT_ALLOWED_TOKENS_BASE", () => {
+    const c = loadConfig({ NODE_ENV: "test", DEPOSIT_WALLET_BASE: ` ${BASE_WALLET} `, DEPOSIT_ALLOWED_TOKENS_BASE: "0x0000000000000000000000000000000000000001" } as NodeJS.ProcessEnv);
+    expect(c.depositWallets).toEqual({ base: BASE_WALLET });
+    expect([...c.depositAllowedTokens.base]).toEqual([BASE_USDC, "0x0000000000000000000000000000000000000001"]);
+    expect([...loadConfig({ NODE_ENV: "test" } as NodeJS.ProcessEnv).depositAllowedTokens.base]).toEqual([BASE_USDC]);
+  });
+});

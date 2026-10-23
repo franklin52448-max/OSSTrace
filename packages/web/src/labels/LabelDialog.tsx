@@ -1,5 +1,5 @@
 import type { Chain, Label } from "@osstrace/contract";
-import { detectChain } from "@osstrace/contract";
+import { chainForAddress, detectChain } from "@osstrace/contract";
 import { useEffect, useState, type FormEvent } from "react";
 import { useCreateLabel, useEntities, useTags, useUpdateLabel } from "./api.ts";
 import { isApiError } from "../kit/api.ts";
@@ -71,8 +71,8 @@ export function LabelDialog({
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const onAddress = (v: string) => {
-    const detected = detectChain(v);
-    setForm((f) => ({ ...f, address: v, chain: !chainTouched && detected ? detected : f.chain }));
+    // An untouched picker follows the paste's shape, but a 0x paste keeps an EVM chain it's already on (BNB).
+    setForm((f) => ({ ...f, address: v, chain: chainTouched ? f.chain : (chainForAddress(v, f.chain) ?? f.chain) }));
   };
 
   const conflict = isApiError(mutation.error, "conflict");

@@ -1,4 +1,4 @@
-import type { AlertRule, AlertTarget, Chain, Entity } from "@osstrace/contract";
+import { NATIVE_SYMBOLS, type AlertRule, type AlertTarget, type Chain, type Entity } from "@osstrace/contract";
 import { Building2 } from "lucide-react";
 import { useAddressInfo } from "../kit/address.ts";
 import { cn } from "../kit/cn.ts";
@@ -72,7 +72,7 @@ export function ruleChipSpecs(
   const out: ChipSpec[] = [];
   for (const t of rule.targets) {
     if (t.type === "entity") out.push({ id: `e:${t.entityId}`, k: "Entity", value: entities?.find((e) => e.id === t.entityId)?.name ?? "deleted", tone: "neutral", kind: "target", target: t });
-    else out.push({ id: `a:${t.chain}:${t.address}`, k: t.chain === "ethereum" ? "ETH" : "SOL", value: shortAddress(t.address, 6, 4), tone: "neutral", kind: "target", target: t });
+    else out.push({ id: `a:${t.chain}:${t.address}`, k: NATIVE_SYMBOLS[t.chain], value: shortAddress(t.address, 6, 4), tone: "neutral", kind: "target", target: t });
   }
   if (rule.direction !== "both") out.push({ id: "dir", k: rule.direction === "in" ? "Inflow" : "Outflow", tone: rule.direction, kind: "direction" });
   const min = typeof rule.minUsd === "number" ? rule.minUsd : rule.minUsd == null || rule.minUsd.trim() === "" ? null : Number(rule.minUsd.replace(/,/g, ""));

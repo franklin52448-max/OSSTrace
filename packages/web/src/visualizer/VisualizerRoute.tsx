@@ -5,6 +5,7 @@
  *  a saved view, `#graph/public/<id>` is its read-only share link, and `#graph/<chain>/<address>`
  *  (the app's older quick-link shape, still used by "Visualize" buttons elsewhere) opens a scratch
  *  view seeded with that one address. */
+import { isChain } from "@osstrace/contract";
 import { useEffect, useState } from "react";
 import { parseScratchParams } from "./lib/urlState.ts";
 import { VisualizerHome } from "./VisualizerHome.tsx";
@@ -19,7 +20,7 @@ function parseSubRoute(): SubRoute {
   if (a === "scratch") return { kind: "scratch", search: queryPart };
   if (a === "saved" && b) return { kind: "saved", id: b, readOnly: false };
   if (a === "public" && b) return { kind: "saved", id: b, readOnly: true };
-  if ((a === "ethereum" || a === "solana") && b) return { kind: "scratch", search: `base=${encodeURIComponent(`${a}:${decodeURIComponent(b)}`)}` };
+  if (isChain(a) && b) return { kind: "scratch", search: `base=${encodeURIComponent(`${a}:${decodeURIComponent(b)}`)}` };
   return { kind: "home" };
 }
 

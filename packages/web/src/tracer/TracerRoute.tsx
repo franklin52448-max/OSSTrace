@@ -5,6 +5,7 @@
  *  snapshot, and `#trace/<chain>/<address>` (the app's older quick-link shape, still used by
  *  "Trace funds" buttons elsewhere) starts a trace seeded with that address -- a real saved trace
  *  when signed in, a scratch canvas seeded with that address otherwise. */
+import { isChain, type Chain } from "@osstrace/contract";
 import { useEffect, useState } from "react";
 import { makeAddressNode } from "./lib/ops.ts";
 import { useServerSession } from "../serverSession.ts";
@@ -18,8 +19,8 @@ type SubRoute =
   | { kind: "doc"; id: string }
   | { kind: "view"; id: string }
   | { kind: "anon"; id: string }
-  | { kind: "scratch"; chain?: "ethereum" | "solana"; address?: string }
-  | { kind: "seed"; chain: "ethereum" | "solana"; address: string };
+  | { kind: "scratch"; chain?: Chain; address?: string }
+  | { kind: "seed"; chain: Chain; address: string };
 
 function parseSubRoute(): SubRoute {
   const [, a = "", b = ""] = window.location.hash.replace(/^#/, "").split("/");
@@ -27,7 +28,7 @@ function parseSubRoute(): SubRoute {
   if (a === "view" && b) return { kind: "view", id: b };
   if (a === "anon" && b) return { kind: "anon", id: b };
   if (a === "scratch") return { kind: "scratch" };
-  if ((a === "ethereum" || a === "solana") && b) return { kind: "seed", chain: a, address: decodeURIComponent(b) };
+  if (isChain(a) && b) return { kind: "seed", chain: a, address: decodeURIComponent(b) };
   return { kind: "home" };
 }
 
@@ -51,7 +52,7 @@ export function TracerRoute() {
  *  real saved trace, then hands off to `#trace/doc/<uuid>` -- the same thing TracerHome's own
  *  search does. Anon: no server call at all, straight to a scratch canvas pre-seeded with that one
  *  address node (ADR 0025 -- anon has no saved traces to create). */
-function SeedRedirect({ chain, address }: { chain: "ethereum" | "solana"; address: string }) {
+function SeedRedirect({ chain, address }: { chain: Chain; address: string }) {
   const session = useServerSession();
   const create = useCreateTrace();
   const [error, setError] = useState<string | null>(null);

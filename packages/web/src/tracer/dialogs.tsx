@@ -1,4 +1,4 @@
-import { detectChain, type AddressInfo, type Chain, type TraceNode } from "@osstrace/contract";
+import { detectChain, EVM_CHAINS, isEvmChain, type AddressInfo, type Chain, type TraceNode } from "@osstrace/contract";
 import * as RDialog from "@radix-ui/react-dialog";
 import { Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -21,7 +21,10 @@ export type AddTarget = { type: "address"; chain: Chain; address: string; info?:
 export function SearchResults({ q, onPick, activeIndex, grouped = false }: { q: string; onPick: (t: AddTarget) => void; activeIndex?: number; grouped?: boolean }) {
   const res = useSearchHits(q);
   const term = q.trim();
-  const direct = detectChain(term);
+  const detected = detectChain(term);
+  // A 0x paste is the same account on every EVM chain: offer each one directly (Ethereum first)
+  // rather than only the shape's default, so a BNB address is one click away even before search answers.
+  const directChains: readonly Chain[] = detected ? (isEvmChain(detected) ? EVM_CHAINS : [detected]) : [];
   const hits = res.data?.hits ?? [];
   const items: { key: string; group: Group; target: AddTarget; render: ReactNode }[] = [];
   const seen = new Set<string>();
@@ -36,10 +39,11 @@ export function SearchResults({ q, onPick, activeIndex, grouped = false }: { q: 
       items.push({ key: k, group: h.type === "label" ? "label" : "address", target: { type: "address", chain: h.chain, address: h.address, info }, render: <span className="flex min-w-0 items-center gap-2"><ChainBadge chain={h.chain} /><AddressChip info={info} showActions={false} /></span> });
     }
   }
-  if (direct && !items.some((i) => i.target.type === "address" && i.target.address.toLowerCase() === term.toLowerCase())) {
-    items.unshift({ key: `direct:${term}`, group: "direct", target: { type: "address", chain: direct, address: term }, render: <span className="flex min-w-0 items-center gap-2"><ChainBadge chain={direct} /><span className="kit-mono truncate text-xs">{term}</span></span> });
+  const missing = directChains.filter((c) => !items.some((i) => i.target.type === "address" && i.target.chain === c && i.target.address.toLowerCase() === term.toLowerCase()));
+  for (const direct of [...missing].reverse()) {
+    items.unshift({ key: `direct:${direct}:${term}`, group: "direct", target: { type: "address", chain: direct, address: term }, render: <span className="flex min-w-0 items-center gap-2"><ChainBadge chain={direct} /><span className="kit-mono truncate text-xs">{term}</span></span> });
   }
-  if (!term) return <p className="px-1 py-3 text-[13px] text-muted">Paste an Ethereum or Solana address, or type the name of one of your labels or entities.</p>;
+  if (!term) return <p className="px-1 py-3 text-[13px] text-muted">Paste an Ethereum, BNB Chain or Solana address, or type the name of one of your labels or entities.</p>;
   if (res.error && items.length === 0) return <p role="alert" className="px-1 py-3 text-[13px] text-danger">{describeError(res.error).message}</p>;
   if (items.length === 0) return <p className="px-1 py-3 text-[13px] text-muted">{res.isFetching ? "Searching…" : "No address, label or entity matches."}</p>;
   const option = (it: (typeof items)[number], i: number) => (

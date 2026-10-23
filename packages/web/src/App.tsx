@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { ChainId } from "@osstrace/core";
+import { CHAIN_NAMES, chainForAddress, isChain, type Chain } from "@osstrace/contract";
 import { AlertsRoute } from "./alerts/index.ts";
 import { EXPLORERS } from "./explorers.ts";
 import { ExplorePage } from "./explorer/index.ts";
@@ -17,7 +18,7 @@ import { scrollBehavior, useReduceMotion } from "./motion.ts";
 import { LabelSubmitForm, ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
 import { useSession } from "./session.ts";
 import { Notice, SignInPrompt } from "./ui.tsx";
-import { ChainIcon, ChainSelect } from "./ChainSelect.tsx";
+import { ChainIcon, ChainSelect, LEGACY_SERVICE_CHAINS } from "./ChainSelect.tsx";
 import HomeFeatures from "./HomeFeatures.tsx";
 import SiteFooter from "./SiteFooter.tsx";
 import { Wordmark } from "./Wordmark.tsx";
@@ -99,11 +100,6 @@ type LookupState =
   | { status: "error"; message: string }
   | { status: "done"; report: AddressReport };
 
-const CHAINS: readonly { value: ChainId; label: string }[] = [
-  { value: "ethereum", label: "Ethereum" },
-  { value: "solana", label: "Solana" },
-];
-const isChain = (value: string): value is ChainId => CHAINS.some((c) => c.value === value);
 
 /* Routing ------------------------------------------------------------------------------------------
    The URL hash is the router (no router library): `#address/<chain>/<address>` is a Lookup report,
@@ -120,7 +116,7 @@ const isChain = (value: string): value is ChainId => CHAINS.some((c) => c.value 
 type View = "lookup" | "graph" | "trace" | "pathfind" | "alerts" | "labels" | "bounties";
 interface Route {
   view: View;
-  target: { chain: ChainId; address: string } | null;
+  target: { chain: Chain; address: string } | null;
 }
 
 function routeFromHash(): Route {
@@ -135,8 +131,10 @@ function routeFromHash(): Route {
   return { view: "lookup", target: null };
 }
 
-export const addressHref = (chain: ChainId, address: string): string => `#address/${chain}/${encodeURIComponent(address)}`;
+export const addressHref = (chain: Chain, address: string): string => `#address/${chain}/${encodeURIComponent(address)}`;
 const viewHref = (view: "graph" | "trace" | "pathfind", chain: ChainId, address: string): string => `#${view}/${chain}/${encodeURIComponent(address)}`;
+
+const isLegacyServiceChain = (c: Chain): c is ChainId => (LEGACY_SERVICE_CHAINS as readonly Chain[]).includes(c);
 
 // "Explorer" isn't listed here: its own route (view "lookup") is the bare "#" home page itself --
 // a separate tab for it would just be a second link to wherever the wordmark/logo already goes.
@@ -226,7 +224,8 @@ export default function App() {
           ) : route.view === "bounties" ? (
             <BountiesView />
           ) : route.view === "pathfind" ? (
-            <TracerView key={targetKey} initial={route.target} />
+            // The pathfinder is the older standalone service, which only knows Ethereum and Solana.
+            <TracerView key={targetKey} initial={route.target && isLegacyServiceChain(route.target.chain) ? { chain: route.target.chain, address: route.target.address } : null} />
           ) : route.target ? (
             <ExplorePage key={`${route.target.chain}:${route.target.address}`} chain={route.target.chain} addr={route.target.address} />
           ) : null}
@@ -255,15 +254,16 @@ function NavLink({ tab, active }: { tab: (typeof NAV)[number]; active: boolean }
 
 /** Chain + address search. Submitting navigates to the address's report. */
 function GlobalSearch({ initial, small }: { initial: Route["target"]; small?: boolean }) {
-  const [chain, setChain] = useState<ChainId>(initial?.chain ?? "ethereum");
+  const [chain, setChain] = useState<Chain>(initial?.chain ?? "ethereum");
   const [address, setAddress] = useState(initial?.address ?? "");
 
   function handleSubmit(event: React.FormEvent): void {
     event.preventDefault();
     const trimmed = address.trim();
     if (!trimmed) return;
-    // Guess the chain from the address shape so pasting "just works"; the dropdown still overrides.
-    const target: ChainId = /^0x[0-9a-fA-F]{40}$/.test(trimmed) ? "ethereum" : /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed) ? "solana" : chain;
+    // Guess the chain from the address shape so pasting "just works", but a 0x address with BNB Chain
+    // picked stays on BNB: the shape alone can't tell Ethereum from BNB, only the picker can.
+    const target: Chain = chainForAddress(trimmed, chain) ?? chain;
     setChain(target);
     window.location.hash = addressHref(target, trimmed);
   }
@@ -276,7 +276,7 @@ function GlobalSearch({ initial, small }: { initial: Route["target"]; small?: bo
         small={small}
         value={address}
         onChange={(e) => setAddress(e.target.value)}
-        placeholder={chain === "ethereum" ? "Search address (0x…)" : "Search Solana address"}
+        placeholder={chain === "solana" ? "Search Solana address" : chain === "bnb" ? "Search BNB Chain address (0x…)" : "Search address (0x…)"}
         className="hash"
         spellCheck={false}
       />
@@ -341,7 +341,7 @@ function Home() {
             On-chain intelligence, in the open.
           </Text>
           <Text tone="secondary" center className="mx-auto mt-4 max-w-xl [text-shadow:0_1px_12px_var(--color-ground),0_0_4px_var(--color-ground)]">
-            Look up any Ethereum or Solana address — real balances, real transfers, and labels that actually cite where they
+            Look up any Ethereum, BNB Chain or Solana address — real balances, real transfers, and labels that actually cite where they
             came from. Nothing guessed, nothing dressed up as certain when it isn't. More chains coming soon.
           </Text>
           <div className="mx-auto mt-8 w-full rounded-[20px] border border-line bg-panel/80 p-3 text-left shadow-card backdrop-blur-md">
@@ -450,7 +450,7 @@ function ChainGlyph({ chain }: { chain: ChainId }) {
   return (
     <span
       className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--helium-elevated-10)]"
-      title={chain === "ethereum" ? "Ethereum" : "Solana"}
+      title={CHAIN_NAMES[chain]}
     >
       <ChainIcon chain={chain} size={22} />
     </span>

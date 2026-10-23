@@ -1,5 +1,5 @@
 /** Pure filter -> query mapping and row shaping for the data panels. */
-import type { AddressInfo, Chain, Counterparty, CounterpartiesQuery, EntityRef, Transfer, TransfersQuery } from "@osstrace/contract";
+import { NATIVE_SYMBOLS, type AddressInfo, type Chain, type Counterparty, type CounterpartiesQuery, type EntityRef, type Transfer, type TransfersQuery } from "@osstrace/contract";
 
 export type TimePreset = "1d" | "7d" | "30d" | "90d" | "1y" | "all";
 export const TIME_PRESETS: { value: TimePreset; label: string }[] = [
@@ -164,6 +164,6 @@ export function transferDirection(t: Transfer, isBase: (a: AddressInfo) => boole
 /** Distinct tokens in a set of transfers, for the token filter (real values from loaded rows). */
 export function tokenOptions(rows: Transfer[]): { id: string; label: string }[] {
   const m = new Map<string, string>();
-  for (const t of rows) if (!m.has(t.tokenId)) m.set(t.tokenId, t.tokenSymbol ?? (t.tokenId === "native" ? (t.chain === "ethereum" ? "ETH" : "SOL") : t.tokenId.slice(0, 6)));
+  for (const t of rows) if (!m.has(t.tokenId)) m.set(t.tokenId, t.tokenSymbol ?? (t.tokenId === "native" ? NATIVE_SYMBOLS[t.chain] : t.tokenId.slice(0, 6)));
   return [...m].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
 }

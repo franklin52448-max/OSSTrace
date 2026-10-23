@@ -3,7 +3,7 @@ import type { ChainId } from "@osstrace/core";
 import { forceLayout, type Point } from "./layout.ts";
 import { ReviewBadge, SubmissionByline, type LabelView } from "./LabelReview.tsx";
 import { CopyButton } from "./prism/components.tsx";
-import { ChainSelect } from "./ChainSelect.tsx";
+import { ChainSelect, LEGACY_SERVICE_CHAINS } from "./ChainSelect.tsx";
 import { Loading, Notice, PageHeader } from "./ui.tsx";
 import { formatTimestamp } from "./timeDisplay.ts";
 
@@ -138,7 +138,7 @@ export default function GraphView({ initial = null }: { initial?: { chain: Chain
 
       {/* Toolbar: chain / address / transaction-count controls over the graph workspace. */}
       <form onSubmit={handleSubmit} className="card flex flex-col gap-2 p-3 sm:flex-row">
-        <ChainSelect value={chain} onChange={setChain} fullWidth className="shrink-0 sm:w-44" />
+        <ChainSelect value={chain} onChange={setChain} chains={LEGACY_SERVICE_CHAINS} fullWidth className="shrink-0 sm:w-44" />
         <input
           value={address}
           onChange={(e) => setAddress(e.target.value)}

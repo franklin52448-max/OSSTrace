@@ -1,5 +1,5 @@
 import type { AlertTarget, Chain, Entity } from "@osstrace/contract";
-import { detectChain } from "@osstrace/contract";
+import { CHAIN_NAMES, chainForAddress } from "@osstrace/contract";
 import { Plus, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { dedupeTargets, targetKey } from "./alertForm.ts";
@@ -73,7 +73,7 @@ export function TargetsEditor({
             aria-label="Address to watch"
             autoFocus={autoFocus}
             aria-invalid={addrError || error ? true : undefined}
-            placeholder={chain === "ethereum" ? "Paste an Ethereum address (0x…)" : "Paste a Solana address"}
+            placeholder={chain === "solana" ? "Paste a Solana address" : `Paste ${chain === "ethereum" ? "an" : "a"} ${CHAIN_NAMES[chain]} address (0x…)`}
             spellCheck={false}
             autoComplete="off"
             value={address}
@@ -82,7 +82,8 @@ export function TargetsEditor({
               const v = e.target.value;
               setAddress(v);
               setAddrError(null);
-              const detected = detectChain(v.trim());
+              // Keeps BNB when a 0x address is pasted with BNB picked; only a shape mismatch switches.
+              const detected = chainForAddress(v.trim(), chain);
               if (detected) setChain(detected);
             }}
             onKeyDown={(e) => {

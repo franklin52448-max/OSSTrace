@@ -104,7 +104,7 @@ export function NodeHeading({ node }: { node: TraceNode }) {
   return (
     <>
       <span aria-hidden className={cn("kit-node-tile flex size-7 shrink-0 items-center justify-center rounded-[5px]", node.kind === "entity" && "text-[12px] font-semibold text-text")}>
-        {node.kind === "entity" ? (node.displayEntity?.name ?? "E").slice(0, 1).toUpperCase() : <ChainIcon chain={node.chain === "solana" ? "solana" : "ethereum"} size={15} />}
+        {node.kind === "entity" ? (node.displayEntity?.name ?? "E").slice(0, 1).toUpperCase() : <ChainIcon chain={node.chain ?? "ethereum"} size={15} />}
       </span>
       <span className="flex min-w-0 flex-col">
         <span className={cn("truncate leading-tight", mono && "kit-mono text-[12.5px] font-medium")}>{mono ? shortAddress(title, 8, 6) : title}</span>

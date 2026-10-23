@@ -129,7 +129,7 @@ export function AlertModal({
           </div>
         ) : null}
 
-        <Step n={1} title="Watch" hint="Ethereum and Solana addresses. The chain is picked up from what you paste.">
+        <Step n={1} title="Watch" hint="Ethereum, BNB Chain and Solana addresses. The chain is picked up from what you paste; pick BNB Chain for a 0x address on BNB.">
           {entities.isError ? <ErrorText error={entities.error} /> : null}
           <TargetsEditor
             targets={form.targets}

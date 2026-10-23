@@ -1,4 +1,4 @@
-import type { Chain } from "@osstrace/contract";
+import { CHAIN_NAMES, NATIVE_SYMBOLS, type Chain } from "@osstrace/contract";
 import { Coins } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useBalances } from "../kit/address.ts";
@@ -68,7 +68,7 @@ export function BalancesTable({ chain, address }: { chain: Chain; address: strin
           <tbody>
             <Tr>
               <Td>
-                <span className="font-medium">{chain === "ethereum" ? "Ethereum" : "Solana"}</span>
+                <span className="font-medium">{CHAIN_NAMES[chain]}</span>
               </Td>
               <Td num>{all.length - unpriced}</Td>
               <Td num className="text-muted">
@@ -114,7 +114,7 @@ export function BalancesTable({ chain, address }: { chain: Chain; address: strin
                   <Td>
                     <span className="flex items-center gap-2.5">
                       <TokenLogo chain={chain} tokenId={b.tokenId} symbol={b.symbol} logoUrl={b.logoUrl} />
-                      <span className="kit-mono font-medium">{b.symbol ?? (b.tokenId === "native" ? (chain === "ethereum" ? "ETH" : "SOL") : "Unknown token")}</span>
+                      <span className="kit-mono font-medium">{b.symbol ?? (b.tokenId === "native" ? NATIVE_SYMBOLS[chain] : "Unknown token")}</span>
                       <span className="text-xs text-faint">{b.name ?? (b.tokenId === "native" ? "" : shortAddress(b.tokenId, 6, 4))}</span>
                     </span>
                   </Td>

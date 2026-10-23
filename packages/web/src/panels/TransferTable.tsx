@@ -1,4 +1,4 @@
-import type { AddressInfo, Transfer } from "@osstrace/contract";
+import { NATIVE_SYMBOLS, type AddressInfo, type Transfer } from "@osstrace/contract";
 import { ArrowRight, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { explorerName, explorerTxUrl } from "../explorers.ts";
@@ -120,7 +120,7 @@ export function TransferTable({
               </td>
               <td className="h-9 max-w-0 px-2"><AddressChip info={t.to.ownerAddress ?? t.to} showHash={false} /></td>
               <td className={cn("kit-num h-9 truncate whitespace-nowrap px-2 text-right", dir === "in" && "text-in", dir === "out" && "text-out")}>
-                <TokenAmount amount={t.amount} symbol={t.tokenSymbol ?? (t.tokenId === "native" ? (t.chain === "ethereum" ? "ETH" : "SOL") : null)} />
+                <TokenAmount amount={t.amount} symbol={t.tokenSymbol ?? (t.tokenId === "native" ? NATIVE_SYMBOLS[t.chain] : null)} />
               </td>
               <td className="kit-num h-9 whitespace-nowrap px-2 pr-3 text-right"><UsdValue value={t.usd} /></td>
             </tr>

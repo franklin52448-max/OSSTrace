@@ -1,5 +1,5 @@
 import type { AlertLimits, AlertRule, AlertTarget, Chain, CreateAlertRule, Entity, NotificationMethod } from "@osstrace/contract";
-import { normalizeAddress } from "@osstrace/contract";
+import { CHAIN_NAMES, normalizeAddress } from "@osstrace/contract";
 import { formatUsd } from "../kit/format.ts";
 import { validateAddress } from "../kit/validation.ts";
 
@@ -110,7 +110,7 @@ export function describeRule(rule: RuleLike, entities: Pick<Entity, "id" | "name
   if (targets.length === 0) subject = "a watched target";
   else if (targets.length === 1) {
     const t = targets[0]!;
-    subject = t.type === "entity" ? `${entities.find((x) => x.id === t.entityId)?.name ?? "the selected entity"} (any of its addresses)` : `${shortAddr(t.address)} on ${t.chain === "ethereum" ? "Ethereum" : "Solana"}`;
+    subject = t.type === "entity" ? `${entities.find((x) => x.id === t.entityId)?.name ?? "the selected entity"} (any of its addresses)` : `${shortAddr(t.address)} on ${CHAIN_NAMES[t.chain]}`;
   } else subject = `any of ${targets.length} targets`;
 
   const min = typeof rule.minUsd === "number" ? rule.minUsd : rule.minUsd == null ? null : parseMinUsd(rule.minUsd);

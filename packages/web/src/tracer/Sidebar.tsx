@@ -1,4 +1,4 @@
-import type { TraceDoc, TraceNode } from "@osstrace/contract";
+import { CHAIN_NAMES, type TraceDoc, type TraceNode } from "@osstrace/contract";
 import { ChevronDown, ChevronLeft, PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { Button, IconButton } from "../kit/Button.tsx";
@@ -135,14 +135,14 @@ export const Sidebar = memo(function Sidebar(props: {
                     const { title: t, mono } = nodeTitle(n);
                     const sel = selectedIds.has(n.id);
                     const addr = n.address ?? n.displayAddress?.address;
-                    const sub = n.kind === "entity" ? `Entity${n.displayEntity?.type ? ` · ${n.displayEntity.type}` : ""}` : addr && !mono ? shortAddress(addr, addr.startsWith("0x") ? 6 : 4, 4) : n.chain === "solana" ? "Solana" : "Ethereum";
+                    const sub = n.kind === "entity" ? `Entity${n.displayEntity?.type ? ` · ${n.displayEntity.type}` : ""}` : addr && !mono ? shortAddress(addr, addr.startsWith("0x") ? 6 : 4, 4) : CHAIN_NAMES[n.chain ?? "ethereum"];
                     return (
                       <li key={n.id} data-row-id={n.id} className="[content-visibility:auto] [contain-intrinsic-size:auto_48px]">
                         <button type="button" aria-pressed={sel} onClick={(e) => props.onSelectNode(n, e.shiftKey)} title={addr ?? t}
                           className={cn("kit-fade flex h-12 w-full items-center gap-2.5 px-3 text-left hover:bg-surface-2", sel && "bg-accent-soft hover:bg-accent-soft")}>
                           <span aria-hidden className={cn("kit-node-tile flex size-7 shrink-0 items-center justify-center rounded-[5px]", n.kind === "entity" && "text-[12px] font-semibold text-text")}
                             style={n.color ? { color: `var(--trace-node-${n.color})`, borderColor: `color-mix(in srgb, var(--trace-node-${n.color}) 50%, transparent)`, background: `color-mix(in srgb, var(--trace-node-${n.color}) 16%, var(--trace-surface))` } : undefined}>
-                            {n.kind === "entity" ? (n.displayEntity?.name ?? "E").slice(0, 1).toUpperCase() : <ChainIcon chain={n.chain === "solana" ? "solana" : "ethereum"} size={15} />}
+                            {n.kind === "entity" ? (n.displayEntity?.name ?? "E").slice(0, 1).toUpperCase() : <ChainIcon chain={n.chain ?? "ethereum"} size={15} />}
                           </span>
                           <span className="flex min-w-0 flex-1 flex-col">
                             <span className={cn("truncate text-[13px] leading-snug", mono ? "kit-mono text-[12px]" : "font-medium")}>{mono ? shortAddress(t, 8, 6) : t}</span>

@@ -1,6 +1,7 @@
 import { forceX, forceY } from "d3-force";
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import ForceGraph2D, { type ForceGraphMethods } from "react-force-graph-2d";
+import { NATIVE_SYMBOLS } from "@osstrace/contract";
 import { formatUsd } from "../kit/format.ts";
 import { linkSide, linkWidth, type GraphLink, type GraphNode } from "./lib/graph.ts";
 import { pictureFor, type Palette } from "./picture.ts";
@@ -183,7 +184,7 @@ export const VisualizerGraph = memo(
           onNodeHover={(n) => setHoverId(n ? n.id : null)}
           nodeLabel={(n) =>
             `<div style="font:12px/1.4 ${pal.sans};padding:6px 8px;background:${pal.surface};color:${pal.text};border:1px solid ${pal.border};border-radius:6px"><div style="font-weight:600">${esc(n.label)}</div><div style="font:11px ${pal.mono};color:${pal.muted}">${esc(
-              n.kind === "entity" ? `${n.addresses.size} address${n.addresses.size === 1 ? "" : "es"}` : n.address ? `${n.chain === "solana" ? "SOL" : "ETH"} · ${n.address.slice(0, 8)}…${n.address.slice(-6)}` : "",
+              n.kind === "entity" ? `${n.addresses.size} address${n.addresses.size === 1 ? "" : "es"}` : n.address ? `${NATIVE_SYMBOLS[n.chain ?? "ethereum"]} · ${n.address.slice(0, 8)}…${n.address.slice(-6)}` : "",
             )}</div></div>`
           }
           nodeVisibility={(n) => n.isBase || !p.isHidden[n.group]}

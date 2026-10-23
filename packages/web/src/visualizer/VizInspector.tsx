@@ -1,6 +1,7 @@
-import type { AddressInfo, Transfer } from "@osstrace/contract";
+import { NATIVE_SYMBOLS, type AddressInfo, type Transfer } from "@osstrace/contract";
 import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { explorerTxUrl } from "../explorers.ts";
 import { AddressChip } from "../kit/AddressChip.tsx";
 import { IconButton } from "../kit/Button.tsx";
 import { ChainBadge } from "../kit/ChainBadge.tsx";
@@ -51,7 +52,8 @@ export function VizInspector({ rows, isBase, selected, onSelect, onClose }: { ro
 
 function Details({ t, isBase, onClose }: { t: Transfer; isBase: (a: AddressInfo) => boolean; onClose: () => void }) {
   const dir = transferDirection(t, isBase);
-  const explorer = t.chain === "ethereum" ? `https://eth.blockscout.com/tx/${t.txHash}` : `https://explorer.solana.com/tx/${t.txHash}`;
+  // Ethereum/Solana keep the explorers this view has always linked; BNB uses BscScan (explorers.ts).
+  const explorer = t.chain === "ethereum" ? `https://eth.blockscout.com/tx/${t.txHash}` : t.chain === "bnb" ? explorerTxUrl("bnb", t.txHash) : `https://explorer.solana.com/tx/${t.txHash}`;
   return (
     <section aria-label="Transfer details" className="kit-overlay flex-[2_1_0] overflow-auto">
       <header className="flex h-10 items-center gap-2 border-b border-border bg-surface-2 px-3">
@@ -67,7 +69,7 @@ function Details({ t, isBase, onClose }: { t: Transfer; isBase: (a: AddressInfo)
         <dt className="text-xs text-muted">To</dt>
         <dd className="min-w-0"><AddressChip info={t.to.ownerAddress ?? t.to} /></dd>
         <dt className="text-xs text-muted">Amount</dt>
-        <dd className={cn("kit-num", dir === "in" && "text-in", dir === "out" && "text-out")}><TokenAmount amount={t.amount} symbol={t.tokenSymbol ?? (t.tokenId === "native" ? (t.chain === "ethereum" ? "ETH" : "SOL") : null)} /></dd>
+        <dd className={cn("kit-num", dir === "in" && "text-in", dir === "out" && "text-out")}><TokenAmount amount={t.amount} symbol={t.tokenSymbol ?? (t.tokenId === "native" ? NATIVE_SYMBOLS[t.chain] : null)} /></dd>
         <dt className="text-xs text-muted">USD</dt>
         <dd className="kit-num"><UsdValue value={t.usd} />{t.priceSource ? <span className="ml-2 text-xs text-faint">{t.priceSource}</span> : null}</dd>
         <dt className="text-xs text-muted">Transaction</dt>

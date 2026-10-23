@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ChainId } from "@osstrace/core";
 import { Checkbox } from "./prism/components.tsx";
-import { ChainSelect } from "./ChainSelect.tsx";
+import { ChainSelect, LEGACY_SERVICE_CHAINS } from "./ChainSelect.tsx";
 import { Loading, Notice, PageHeader } from "./ui.tsx";
 import { formatTimestamp } from "./timeDisplay.ts";
 
@@ -216,7 +216,7 @@ export default function TracerView({ initial = null }: { initial?: { chain: Chai
       <form onSubmit={handleSubmit} className="card overflow-hidden">
         <div className="grid gap-3 p-4 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]">
           <Field label="Chain" control="picker">
-            <ChainSelect value={chain} onChange={setChain} fullWidth className="sm:min-w-[10.5rem]" />
+            <ChainSelect value={chain} onChange={setChain} chains={LEGACY_SERVICE_CHAINS} fullWidth className="sm:min-w-[10.5rem]" />
           </Field>
           <Field label="From">
             <input
@@ -270,7 +270,7 @@ export default function TracerView({ initial = null }: { initial?: { chain: Chai
           </Field>
           {followBridges && pathMode ? (
             <Field label="To chain" control="picker">
-              <ChainSelect value={toChain} onChange={setToChain} label="To chain" fullWidth />
+              <ChainSelect value={toChain} onChange={setToChain} chains={LEGACY_SERVICE_CHAINS} label="To chain" fullWidth />
             </Field>
           ) : (
             <div />

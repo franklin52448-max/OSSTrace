@@ -1,5 +1,5 @@
 import type { Chain } from "@osstrace/contract";
-import { normalizeAddress } from "@osstrace/contract";
+import { CHAINS, isChain, normalizeAddress } from "@osstrace/contract";
 import { validateAddress } from "../kit/validation.ts";
 
 export type ImportFormat = "csv" | "json";
@@ -87,8 +87,8 @@ function validateRows(rows: Omit<ImportRow, "errors">[]): ImportRow[] {
   return rows.map((r) => {
     const errors: string[] = [];
     const chain = r.chain.toLowerCase();
-    if (chain !== "ethereum" && chain !== "solana") {
-      errors.push(r.chain ? `Unknown chain "${r.chain}" (use ethereum or solana).` : "Chain is missing.");
+    if (!isChain(chain)) {
+      errors.push(r.chain ? `Unknown chain "${r.chain}" (use ${CHAINS.join(", ")}).` : "Chain is missing.");
     } else {
       const addrErr = validateAddress(chain as Chain, r.address);
       if (addrErr) errors.push(addrErr);

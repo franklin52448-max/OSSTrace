@@ -3,7 +3,7 @@
  *  (used by "Alert me on this address"-style links elsewhere), `#alerts/inbox` and `#alerts/manage`
  *  are their own pages, `#alerts/<id>` is a rule's detail page, and `#alerts/<id>/edit` opens the
  *  edit dialog over it. */
-import type { Chain } from "@osstrace/contract";
+import { isChain, type Chain } from "@osstrace/contract";
 import { useEffect, useState } from "react";
 import { AlertsHome } from "./AlertsHome.tsx";
 import { AlertsLayout, type AlertsActive } from "./AlertsLayout.tsx";
@@ -26,7 +26,7 @@ function parseSubRoute(): SubRoute {
     return {
       kind: "home",
       creating: true,
-      prefill: { chain: chainParam === "ethereum" || chainParam === "solana" ? chainParam : null, address: sp.get("address"), entityId: sp.get("entity") },
+      prefill: { chain: isChain(chainParam) ? chainParam : null, address: sp.get("address"), entityId: sp.get("entity") },
     };
   }
   if (a === "inbox") return { kind: "inbox" };

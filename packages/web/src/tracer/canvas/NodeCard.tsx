@@ -1,4 +1,4 @@
-import type { NodeColor, TraceNode } from "@osstrace/contract";
+import { CHAIN_NAMES, type NodeColor, type TraceNode } from "@osstrace/contract";
 import { memo, type CSSProperties, type PointerEvent as RPointerEvent, type MouseEvent as RMouseEvent } from "react";
 import { cn } from "../../kit/cn.ts";
 import { formatUsd, shortAddress } from "../../kit/format.ts";
@@ -34,7 +34,7 @@ function Avatar({ node }: { node: TraceNode }) {
   const entity = node.kind === "entity";
   return (
     <span aria-hidden className={cn("kit-node-tile flex size-10 shrink-0 items-center justify-center rounded-[7px]", entity && "text-[16px] font-semibold")}>
-      {entity ? (node.displayEntity?.name ?? "E").slice(0, 1).toUpperCase() : <ChainIcon chain={node.chain === "solana" ? "solana" : "ethereum"} size={20} />}
+      {entity ? (node.displayEntity?.name ?? "E").slice(0, 1).toUpperCase() : <ChainIcon chain={node.chain ?? "ethereum"} size={20} />}
     </span>
   );
 }
@@ -74,7 +74,7 @@ export const NodeCard = memo(function NodeCard({ node, viewport, selected, edita
   const sx = viewport.x + node.currentPosition.x * viewport.scale;
   const sy = viewport.y + node.currentPosition.y * viewport.scale;
   const { title, mono } = nodeTitle(node);
-  const chainLabel = node.kind === "address" ? (node.chain === "solana" ? "Solana" : "Ethereum") : "Entity";
+  const chainLabel = node.kind === "address" ? CHAIN_NAMES[node.chain ?? "ethereum"] : "Entity";
   const hash = !mono && node.kind === "address" && node.address ? shortAddress(node.address, node.address.startsWith("0x") ? 6 : 4, 4) : null;
   return (
     <div

@@ -3,6 +3,7 @@ import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import type { Chain } from "@osstrace/contract";
 import { BlockscoutProvider } from "./chain/ethereum.ts";
 import { PriceService } from "./chain/prices.ts";
+import { TokenLogoService } from "./chain/tokenLogos.ts";
 import { SolanaRpcProvider } from "./chain/solana.ts";
 import { TransferStore } from "./chain/store.ts";
 import { SyncService } from "./chain/sync.ts";
@@ -95,6 +96,7 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
       }),
   };
   const prices = o.prices ?? new PriceService(db, config.defillamaUrl, o.fetchImpl);
+  const tokenLogos = new TokenLogoService(config.jupiterTokensUrl, o.fetchImpl);
   const store = new TransferStore(db);
   const resolver = o.resolver ?? systemResolver;
 
@@ -126,6 +128,7 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
     db,
     providers,
     prices,
+    tokenLogos,
     store,
     sync,
     resolver,

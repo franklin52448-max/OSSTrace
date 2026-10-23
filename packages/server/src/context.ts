@@ -2,6 +2,7 @@ import type { Chain } from "@osstrace/contract";
 import type { FastifyRequest } from "fastify";
 import type { ChainProvider } from "./chain/types.ts";
 import type { PriceService } from "./chain/prices.ts";
+import type { TokenLogoService } from "./chain/tokenLogos.ts";
 import type { TransferStore } from "./chain/store.ts";
 import type { SyncService } from "./chain/sync.ts";
 import type { Config } from "./config.ts";
@@ -17,6 +18,7 @@ export type Ctx = {
   db: Db;
   providers: Record<Chain, ChainProvider>;
   prices: PriceService;
+  tokenLogos: TokenLogoService;
   store: TransferStore;
   sync: SyncService;
   resolver: Resolver;

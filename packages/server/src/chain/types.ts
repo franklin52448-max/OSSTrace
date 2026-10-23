@@ -41,6 +41,8 @@ export type RawBalance = {
   decimals: number | null;
   amountRaw: string;
   priceCoin: string | null;
+  /** https logo URL when the provider supplies one. */
+  logoUrl?: string | null;
 };
 
 export interface ChainProvider {

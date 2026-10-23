@@ -71,6 +71,8 @@ export type TokenBalance = {
   usd: number | null;
   price: number | null;
   priceSource: string | null;
+  /** https URL of the token's logo from the balance or token-list provider; null when none is known (and for native). */
+  logoUrl: string | null;
 };
 
 export type BalancesResponse = {

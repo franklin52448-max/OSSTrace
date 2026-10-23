@@ -4,6 +4,7 @@ import { CHAINS, detectChain, normalizeAddress, type BalancesResponse, type Chai
 import { requireUser, type Ctx } from "../context.ts";
 import { budgetMs } from "../lib/http.ts";
 import { formatUnits } from "../chain/amount.ts";
+import type { RawBalance } from "../chain/types.ts";
 import { parse } from "../schemas.ts";
 import { LabelIndex } from "../services/labelIndex.ts";
 import { counterpartiesFor, parseAddress, queryTransfers, syncAll, windowOf } from "../services/transfers.ts";
@@ -121,6 +122,15 @@ export function registerChainRoutes(app: FastifyInstance, ctx: Ctx) {
     } catch {
       priceNote = true; // balances are still real; USD is unknown
     }
+    // Solana's RPC balances carry no logos: look up the priced tokens first (the ones shown by default),
+    // at most 200. A failure only loses the logos.
+    let logos = new Map<string, string | null>();
+    if (a.chain === "solana") {
+      const tokens = raw.filter((b) => b.tokenId !== "native");
+      const priced = (b: RawBalance) => (b.priceCoin && prices.get(b.priceCoin)?.usd != null ? 0 : 1);
+      const mints = [...tokens].sort((x, y) => priced(x) - priced(y)).slice(0, 200).map((b) => b.tokenId);
+      logos = await ctx.tokenLogos.solana(mints, budget).catch(() => logos);
+    }
     const balances: TokenBalance[] = raw.map((b) => {
       const p = b.priceCoin ? prices.get(b.priceCoin) : undefined;
       const decimals = b.decimals ?? p?.decimals ?? null;
@@ -136,6 +146,7 @@ export function registerChainRoutes(app: FastifyInstance, ctx: Ctx) {
         usd: usd !== null && Number.isFinite(usd) ? usd : null,
         price: p?.usd ?? null,
         priceSource: p?.usd != null ? "defillama" : null,
+        logoUrl: b.logoUrl ?? logos.get(b.tokenId) ?? null,
       };
     });
     balances.sort((x, y) => (y.usd ?? -1) - (x.usd ?? -1) || (x.tokenId === "native" ? -1 : y.tokenId === "native" ? 1 : 0));

@@ -3,6 +3,7 @@ import { ProviderError } from "../lib/errors.ts";
 import { HttpClient, type Budget } from "../lib/http.ts";
 import { isPositiveIntString } from "./amount.ts";
 import { combinedFetch, type ChainProvider, type RawBalance, type RawTransfer, type StreamPage } from "./types.ts";
+import { httpsUrl } from "./tokenLogos.ts";
 
 // Blockscout v2 response shapes (only the fields the server reads). Recorded samples: tests/fixtures/blockscout/.
 type BsAddr = { hash: string } | null;
@@ -29,7 +30,7 @@ type BsInternal = {
   error?: string | null;
   type?: string;
 };
-type BsToken = { address_hash: string; decimals: string | null; name: string | null; symbol: string | null; type: string; exchange_rate?: string | null };
+type BsToken = { address_hash: string; decimals: string | null; name: string | null; symbol: string | null; type: string; exchange_rate?: string | null; icon_url?: string | null };
 type BsTokenTransfer = {
   transaction_hash: string;
   log_index: number;
@@ -171,6 +172,7 @@ export function normalizeEthBalances(addr: BsAddress | null, tokens: BsTokenBala
       decimals: d != null && /^\d+$/.test(d) ? Number(d) : null,
       amountRaw: t.value,
       priceCoin: `ethereum:${contract}`,
+      logoUrl: httpsUrl(t.token.icon_url),
     });
   }
   return out;

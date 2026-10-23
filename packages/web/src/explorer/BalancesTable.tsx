@@ -7,6 +7,7 @@ import { formatTime, formatUsd, shortAddress } from "../kit/format.ts";
 import { EmptyState, ErrorNotice, SkeletonRows } from "../kit/QueryState.tsx";
 import { Table, Td, Th, THead, Tr } from "../kit/Table.tsx";
 import { TokenAmount } from "../kit/TokenAmount.tsx";
+import { TokenLogo } from "../kit/TokenLogo.tsx";
 import { UsdValue } from "../kit/UsdValue.tsx";
 
 export function BalancesTable({ chain, address }: { chain: Chain; address: string }) {
@@ -90,8 +91,11 @@ export function BalancesTable({ chain, address }: { chain: Chain; address: strin
               {rows.map((b) => (
                 <Tr key={b.tokenId}>
                   <Td>
-                    <span className="kit-mono font-medium">{b.symbol ?? (b.tokenId === "native" ? (chain === "ethereum" ? "ETH" : "SOL") : "Unknown token")}</span>
-                    <span className="ml-2 text-xs text-faint">{b.name ?? (b.tokenId === "native" ? "" : shortAddress(b.tokenId, 6, 4))}</span>
+                    <span className="flex items-center gap-2.5">
+                      <TokenLogo chain={chain} tokenId={b.tokenId} symbol={b.symbol} logoUrl={b.logoUrl} />
+                      <span className="kit-mono font-medium">{b.symbol ?? (b.tokenId === "native" ? (chain === "ethereum" ? "ETH" : "SOL") : "Unknown token")}</span>
+                      <span className="text-xs text-faint">{b.name ?? (b.tokenId === "native" ? "" : shortAddress(b.tokenId, 6, 4))}</span>
+                    </span>
                   </Td>
                   <Td num>
                     <TokenAmount amount={b.amount} />

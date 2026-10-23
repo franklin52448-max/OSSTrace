@@ -3,6 +3,7 @@ import { formatUnits } from "../src/chain/amount.ts";
 import { BlockscoutProvider, normalizeEthBalances, normalizeEthInternal, normalizeEthTokenTransfers, normalizeEthTransactions } from "../src/chain/ethereum.ts";
 import { normalizeSolanaBalances, normalizeSolanaTx, SolanaRpcProvider, touches, type SolTx } from "../src/chain/solana.ts";
 import { PriceService } from "../src/chain/prices.ts";
+import { httpsUrl, TokenLogoService } from "../src/chain/tokenLogos.ts";
 import { openDb } from "../src/db/index.ts";
 import { budgetMs } from "../src/lib/http.ts";
 import { ProviderError } from "../src/lib/errors.ts";
@@ -70,6 +71,15 @@ describe("Blockscout normalisation (recorded 2026-10-22)", () => {
     const out = normalizeEthBalances(fixture("blockscout/address.vitalik.json"), fixture("blockscout/token-balances.vitalik.json"));
     expect(out[0]).toMatchObject({ tokenId: "native", symbol: "ETH", decimals: 18, amountRaw: "5773252986299759339" });
     expect(out.slice(1).every((b) => b.priceCoin?.startsWith("ethereum:0x"))).toBe(true);
+  });
+
+  it("balances: token logos come from Blockscout's icon_url, https only", () => {
+    const tokens = fixture("blockscout/token-balances.vitalik.json");
+    const out = normalizeEthBalances(fixture("blockscout/address.vitalik.json"), tokens);
+    const withIcon = out.filter((b) => b.logoUrl);
+    expect(withIcon.length).toBeGreaterThan(0);
+    expect(withIcon.every((b) => b.logoUrl!.startsWith("https://"))).toBe(true);
+    expect(out[0]!.logoUrl).toBeUndefined();
   });
 
   it("fetchStreamPage passes next_page_params back as query params and maps 429 to provider_error", async () => {
@@ -228,5 +238,37 @@ describe("DefiLlama prices (recorded 2026-10-22)", () => {
     expect(m.get("coingecko:ethereum")!.usd).toBeGreaterThan(0);
     expect(m.get("solana:NotARealMint1111111111111111111111111111111")!.usd).toBeNull();
     db.close();
+  });
+});
+
+describe("token logos", () => {
+  it("httpsUrl keeps only plain https URLs", () => {
+    expect(httpsUrl("https://ipfs.io/ipfs/abc")).toBe("https://ipfs.io/ipfs/abc");
+    for (const bad of ["http://x.test/a.png", "data:image/png;base64,AAAA", "javascript:alert(1)", "/logo.png", "", null, 42, "https://" + "a".repeat(2100)]) {
+      expect(httpsUrl(bad)).toBeNull();
+    }
+  });
+
+  it("Solana logos from Jupiter: batched, unsafe icons dropped, misses cached", async () => {
+    const urls: string[] = [];
+    const fetchImpl = (async (u: string) => {
+      urls.push(String(u));
+      const ids = new URL(String(u)).searchParams.get("query")!.split(",");
+      const body = ids
+        .filter((id) => id !== "MISSING")
+        .map((id) => ({ id, icon: id === "UNSAFE" ? "javascript:alert(1)" : `https://img.test/${id}.png` }));
+      return new Response(JSON.stringify(body));
+    }) as unknown as typeof fetch;
+    const svc = new TokenLogoService("https://jup.test/tokens/v2", fetchImpl);
+    const mints = ["A", "UNSAFE", "MISSING", ...Array.from({ length: 120 }, (_, i) => `M${i}`)];
+    const out = await svc.solana(mints, budgetMs(5000));
+    expect(urls).toHaveLength(2);
+    expect(urls[0]).toMatch(/^https:\/\/jup\.test\/tokens\/v2\/search\?query=/);
+    expect(out.get("A")).toBe("https://img.test/A.png");
+    expect(out.get("UNSAFE")).toBeNull();
+    expect(out.get("MISSING")).toBeNull();
+    expect(out.size).toBe(mints.length);
+    await svc.solana(["A", "MISSING"], budgetMs(5000));
+    expect(urls).toHaveLength(2);
   });
 });

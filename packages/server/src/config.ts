@@ -22,6 +22,7 @@ export type Config = {
   ethRpcUrl: string | null;
   ethBlockscoutUrl: string;
   defillamaUrl: string;
+  jupiterTokensUrl: string;
   /** Public wallet addresses bounty depositors pay into -- never a key this server holds (ADR 0020). */
   depositWallets: { ethereum?: string; solana?: string };
   /** Enables POST /api/_test/alerts/tick (off unless SERVER_TEST_HOOKS=1). */
@@ -90,6 +91,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ethRpcUrl,
     ethBlockscoutUrl: (env.ETH_BLOCKSCOUT_URL ?? "https://eth.blockscout.com").replace(/\/$/, ""),
     defillamaUrl: (env.DEFILLAMA_URL ?? "https://coins.llama.fi").replace(/\/$/, ""),
+    jupiterTokensUrl: (env.JUPITER_TOKENS_URL ?? "https://lite-api.jup.ag/tokens/v2").replace(/\/$/, ""),
     depositWallets: {
       ...(env.DEPOSIT_WALLET_ETHEREUM ? { ethereum: env.DEPOSIT_WALLET_ETHEREUM.trim() } : {}),
       ...(env.DEPOSIT_WALLET_SOLANA ? { solana: env.DEPOSIT_WALLET_SOLANA.trim() } : {}),

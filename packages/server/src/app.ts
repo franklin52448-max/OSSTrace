@@ -93,6 +93,7 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
           }
           return out;
         },
+        ...(config.solscanApiKey ? { solscanApiKey: config.solscanApiKey } : {}),
       }),
   };
   const prices = o.prices ?? new PriceService(db, config.defillamaUrl, o.fetchImpl);

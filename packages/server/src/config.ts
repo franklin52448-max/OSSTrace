@@ -20,6 +20,9 @@ export type Config = {
    *  free public Ethereum mainnet RPC to default to, so Ethereum falls back to ethBlockscoutUrl
    *  (which needs no key) when this is unset, the same shape as solanaRpcUrl's custom/default split. */
   ethRpcUrl: string | null;
+  /** Never logged. Optional -- used only for a signed-in caller's deep Solana history (ADR: anon
+   *  mode's Budget.preferIndexed); unset means that path just stays on the free RPC merge-cursor. */
+  solscanApiKey: string | null;
   ethBlockscoutUrl: string;
   defillamaUrl: string;
   jupiterTokensUrl: string;
@@ -69,6 +72,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ethRpcUrl = env.ETH_RPC_URL.trim();
   }
 
+  const solscanApiKey = env.SOLSCAN_API_KEY?.trim() || null;
+
   const origins = (env.ALLOWED_ORIGINS ?? "http://127.0.0.1:5301,http://localhost:5301")
     .split(",")
     .map((s) => s.trim().replace(/\/$/, ""))
@@ -89,6 +94,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     solanaRpcUrl,
     solanaRpcCustom,
     ethRpcUrl,
+    solscanApiKey,
     ethBlockscoutUrl: (env.ETH_BLOCKSCOUT_URL ?? "https://eth.blockscout.com").replace(/\/$/, ""),
     defillamaUrl: (env.DEFILLAMA_URL ?? "https://coins.llama.fi").replace(/\/$/, ""),
     jupiterTokensUrl: (env.JUPITER_TOKENS_URL ?? "https://lite-api.jup.ag/tokens/v2").replace(/\/$/, ""),

@@ -20,7 +20,14 @@ export class Limiter {
   }
 }
 
-export type Budget = { deadline: number };
+export type Budget = {
+  deadline: number;
+  /** Set by a signed-in caller's sync request (ADR 0024's `anon` flag, inverted) -- lets a provider
+   * prefer a paid indexed API (e.g. Solscan) over its own free-but-expensive-at-depth path when one
+   * is configured. Anonymous callers never set this, so a paid key's budget is spent only on the
+   * users it was bought to serve. */
+  preferIndexed?: boolean;
+};
 export const budgetMs = (ms: number): Budget => ({ deadline: Date.now() + ms });
 
 export type HttpOptions = {
@@ -31,6 +38,8 @@ export type HttpOptions = {
   maxRetries?: number;
   /** Key used for cooldowns in addition to the host (e.g. an RPC method name). */
   cooldownKey?: string;
+  /** Extra headers (e.g. an indexer's API-key header) merged in on top of the defaults. */
+  headers?: Record<string, string>;
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -88,6 +97,7 @@ export class HttpClient {
               accept: "application/json",
               ...(opts.body !== undefined ? { "content-type": "application/json" } : {}),
               "user-agent": "osstrace/0.1 (+self-hosted)",
+              ...opts.headers,
             },
             ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
             signal: AbortSignal.timeout(timeoutMs),

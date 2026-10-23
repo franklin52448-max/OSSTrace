@@ -63,6 +63,9 @@ export async function syncAll(
   const uniq = [...new Map(addrs.map((a) => [`${a.chain}:${a.address}`, a])).values()].slice(0, 25);
   if (uniq.length === 0) return { state: "ready", coveredFrom: null, provider: "none" };
   const budget = budgetMs(opts.budgetMs ?? 12_000);
+  // A signed-in caller (opts.anon falsy) may use a configured paid indexer for deep history, e.g.
+  // Solscan on the Solana provider -- see Budget.preferIndexed's own doc comment for why.
+  budget.preferIndexed = !opts.anon;
   let anonCapped = false;
   const toSync = opts.anon
     ? uniq.filter((a) => {

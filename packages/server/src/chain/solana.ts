@@ -1,6 +1,7 @@
 import { ProviderError } from "../lib/errors.ts";
 import { HttpClient, type Budget } from "../lib/http.ts";
 import { isPositiveIntString } from "./amount.ts";
+import { fetchSolscanPage } from "./solscan.ts";
 import { combinedFetch, type ChainProvider, type RawBalance, type RawTransfer, type StreamPage } from "./types.ts";
 
 // Shapes of Solana JSON-RPC jsonParsed responses (only what the server reads). Recorded: tests/fixtures/solana/.
@@ -39,6 +40,11 @@ export type SolanaProviderOptions = {
   recentTokenAccounts?: (wallet: string) => string[];
   /** USD prices already cached locally, by mint (no network). */
   cachedUsdPrices?: (mints: string[]) => Map<string, number>;
+  /** When set, a fresh sync for a `Budget.preferIndexed` caller (signed-in, see syncAll) uses
+   * Solscan's indexed history instead of the RPC merge-cursor below -- see solscan.ts's module
+   * comment for why. A sync already in progress on the RPC cursor (an older `v:2` state) keeps
+   * going on RPC rather than switching sources mid-stream. */
+  solscanApiKey?: string;
 };
 const formatUnitsLossy = (raw: string, decimals: number) => (decimals > 0 ? Number(raw) / 10 ** decimals : Number(raw));
 
@@ -253,6 +259,16 @@ export class SolanaRpcProvider implements ChainProvider {
    * holds each source's buffer and `before` signature.
    */
   async fetchStreamPage(wallet: string, _stream: string, cursor: string | null, budget: Budget): Promise<StreamPage> {
+    // A fresh sync (no cursor yet) from a signed-in caller with Solscan configured starts there
+    // instead of the RPC merge-cursor below -- see solscan.ts's module comment. A sync already
+    // committed to the "solscan:<page>" cursor keeps paging through Solscan even if preferIndexed
+    // wasn't re-set on this particular call; one already on the RPC `{"v":2...}` cursor keeps going
+    // on RPC rather than switching sources mid-stream.
+    const solscanCursor = cursor?.startsWith("solscan:") ? cursor.slice("solscan:".length) : null;
+    if (this.opts.solscanApiKey && (solscanCursor !== null || (cursor === null && budget.preferIndexed))) {
+      const pg = await fetchSolscanPage(this.http, this.opts.solscanApiKey, wallet, solscanCursor, budget);
+      return { ...pg, transfers: pg.transfers.filter((t) => touches(t, wallet)), nextCursor: pg.nextCursor ? `solscan:${pg.nextCursor}` : null };
+    }
     let state: MergeState;
     const notes: string[] = [];
     if (cursor && cursor.startsWith("{")) state = JSON.parse(cursor) as MergeState;

@@ -64,7 +64,14 @@ const fail = (m: string): never => {
  * .min(1).optional()` then rejected the empty string on every retry even though omitting the key
  * entirely would have passed. Wrap every optional tool argument in this so the model's "no value"
  * shape -- however it chooses to spell that -- is treated the same as actually omitted. */
-const opt = <T extends z.ZodTypeAny>(schema: T) => z.preprocess((v) => (v === "" || v === null ? undefined : v), schema.optional());
+const blank = (v: unknown) => (v === "" || v === null ? undefined : v);
+const opt = <T extends z.ZodTypeAny>(schema: T) => z.preprocess(blank, schema.optional());
+/** The same "no value" shapes for an optional argument that has a default (flow, sortBy, sortDir,
+ *  limit, mode): `flow: ""` or `limit: null` means "use the default", exactly like leaving it out. */
+const withDefault = <T extends z.ZodTypeAny>(schema: z.ZodDefault<T>) => z.preprocess(blank, schema);
+/** A required text argument where clearing is the point (rename_node's label, annotate_node's note):
+ *  the description says "empty string clears it", and a model asked to clear one often sends null. */
+const clearable = (max: number) => z.preprocess((v) => (v === null ? "" : v), z.string().max(max));
 
 // ---------- limits (ADR 0008's caps where a tool reuses its idea of "how far") ----------
 /** expand_node's hop cap: ADR 0008 §4's `maxHops` max. */
@@ -241,7 +248,7 @@ const findConnections = defineTool({
     },
     additionalProperties: false,
   },
-  args: z.object({ addresses: opt(z.array(nodeRef).max(MAX_CONNECT_NODES)), mode: z.enum(["direct", "indirect"]).default("direct") }).strict(),
+  args: z.object({ addresses: opt(z.array(nodeRef).max(MAX_CONNECT_NODES)), mode: withDefault(z.enum(["direct", "indirect"]).default("direct")) }).strict(),
   async run(env, { addresses, mode }) {
     if (mode === "indirect" && !env.userId) fail("Indirect mode needs a connected wallet (it's signed-in only). Direct mode works without one.");
     const taken = occupied(env.doc.read());
@@ -481,9 +488,9 @@ const listTransfers = defineTool({
     .object({
       chain: chainSchema,
       address: z.string().min(1).max(128),
-      flow: z.enum(["all", "in", "out", "self"]).default("all"),
-      sortBy: z.enum(["time", "value", "usd"]).default("time"),
-      sortDir: z.enum(["asc", "desc"]).default("desc"),
+      flow: withDefault(z.enum(["all", "in", "out", "self"]).default("all")),
+      sortBy: withDefault(z.enum(["time", "value", "usd"]).default("time")),
+      sortDir: withDefault(z.enum(["asc", "desc"]).default("desc")),
       asset: opt(z.string().min(1).max(128)),
       counterparty: opt(z.string().min(1).max(128)),
       timeGte: opt(iso),
@@ -491,7 +498,7 @@ const listTransfers = defineTool({
       timeLast: opt(z.enum(["1h", "12h", "1d", "7d", "30d", "90d", "1y", "all"])),
       usdGte: opt(z.number().finite().min(0).max(1e15)),
       usdLte: opt(z.number().finite().min(0).max(1e15)),
-      limit: z.number().int().min(1).max(MAX_LIST).default(20),
+      limit: withDefault(z.number().int().min(1).max(MAX_LIST).default(20)),
     })
     .strict(),
   async run(env, q) {
@@ -574,7 +581,7 @@ const renameNode = defineTool({
   name: "rename_node",
   description: `Give a node a display name on this trace (max ${NODE_LABEL_MAX} chars; empty string clears it). Only affects this trace.`,
   parameters: { type: "object", properties: { nodeId: { type: "string" }, label: { type: "string", maxLength: NODE_LABEL_MAX } }, required: ["nodeId", "label"], additionalProperties: false },
-  args: z.object({ nodeId: nodeRef, label: z.string().max(NODE_LABEL_MAX) }).strict(),
+  args: z.object({ nodeId: nodeRef, label: clearable(NODE_LABEL_MAX) }).strict(),
   async run(env, { nodeId, label }) {
     const n = nodeOrFail(env.doc, nodeId);
     const clean = safeText(label, NODE_LABEL_MAX) || null;
@@ -587,7 +594,7 @@ const annotateNode = defineTool({
   name: "annotate_node",
   description: `Set a node's investigator note on this trace (max ${NODE_NOTE_MAX} chars; empty string clears it).`,
   parameters: { type: "object", properties: { nodeId: { type: "string" }, note: { type: "string", maxLength: NODE_NOTE_MAX } }, required: ["nodeId", "note"], additionalProperties: false },
-  args: z.object({ nodeId: nodeRef, note: z.string().max(NODE_NOTE_MAX) }).strict(),
+  args: z.object({ nodeId: nodeRef, note: clearable(NODE_NOTE_MAX) }).strict(),
   async run(env, { nodeId, note }) {
     const n = nodeOrFail(env.doc, nodeId);
     // eslint-disable-next-line no-control-regex

@@ -403,6 +403,33 @@ describe("tracer agent", () => {
     expect(transfers).toHaveLength(1);
   });
 
+  it("an optional arg with a default (flow, sortBy, sortDir, limit, mode) sent as \"\" or null gets its default, and a null label/note clears it", async () => {
+    await setup([
+      {
+        tools: [
+          { name: "list_transfers", args: { chain: "ethereum", address: ETH_A, flow: "", sortBy: null, sortDir: "", limit: null } },
+          { name: "find_connections", args: { addresses: [`ethereum:${ETH_A}`, `ethereum:${ETH_B}`], mode: null } },
+          { name: "rename_node", args: { nodeId: `ethereum:${ETH_A}`, label: "Hot wallet" } },
+          { name: "annotate_node", args: { nodeId: `ethereum:${ETH_A}`, note: "seen twice" } },
+          { name: "rename_node", args: { nodeId: `ethereum:${ETH_A}`, label: null } },
+          { name: "annotate_node", args: { nodeId: `ethereum:${ETH_A}`, note: null } },
+        ],
+      },
+      { content: "ok" },
+    ]);
+    t.eth.add([ethTransfer(ETH_B, ETH_A, base + 10)]);
+    const c = await signup(t.app, "agent_user");
+    const id = await savedTrace(c);
+    const res = (await c.post("/api/tracer-agent/chat", { docId: id, message: "list A's transfers, connect A and B, then name and clear A" })).json() as TracerAgentChatResponse;
+    expect(res.toolCalls.map((x) => (x.result as { error?: string }).error ?? "ok")).toEqual(["ok", "ok", "ok", "ok", "ok", "ok"]);
+    expect(res.toolCalls[0]!.result).toMatchObject({ sortedBy: "time desc" });
+    expect((res.toolCalls[0]!.result as { transfers: unknown[] }).transfers).toHaveLength(1);
+    expect(res.toolCalls[1]!.result).toMatchObject({ mode: "direct", edgesAdded: 1 });
+    const node = ((await c.get(`/api/traces/${id}`)).json() as Trace).nodes.find((n) => n.id === addressNodeId(id, "ethereum", ETH_A))!;
+    expect(node.label ?? null).toBeNull();
+    expect(node.note ?? null).toBeNull();
+  });
+
   it("rename / annotate / remove act on this doc's real node ids only", async () => {
     await setup([
       { tools: [{ name: "get_doc_state", args: {} }] },

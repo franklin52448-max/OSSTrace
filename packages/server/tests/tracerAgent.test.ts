@@ -1,6 +1,19 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
-import { addressNodeId, aggregateEdgeId, applyTraceOps, normalizeAddress, transferEdgeId, type Trace, type TraceDoc, type TraceEdge, type TraceNode, type TracerAgentChatResponse } from "@osstrace/contract";
+import {
+  addressNodeId,
+  aggregateEdgeId,
+  applyTraceOps,
+  CHAIN_NAMES,
+  CHAINS,
+  normalizeAddress,
+  transferEdgeId,
+  type Trace,
+  type TraceDoc,
+  type TraceEdge,
+  type TraceNode,
+  type TracerAgentChatResponse,
+} from "@osstrace/contract";
 import { loadConfig } from "../src/config.ts";
 import { OPENROUTER_CHAT_URL } from "../src/services/tracerAgent/openrouter.ts";
 import { TOOL_SPECS } from "../src/services/tracerAgent/tools.ts";
@@ -1044,8 +1057,11 @@ describe("tracer agent", () => {
     const anon = new Browser(t.app);
     await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "hi", doc: emptyScratch() });
     const system = seen[0]!.body.messages.find((m) => m.role === "system")!.content!;
-    // Scope: what the tools can determine, on which chains, and nothing beyond it.
-    expect(system).toMatch(/What your tools can determine: .*on Solana, Ethereum, BNB Chain, Robinhood Chain, Base .*Nothing beyond that\./);
+    // Scope: what the tools can determine, on every real chain this project supports (derived
+    // the same way the prompt itself is built, so this doesn't go stale as chains are added), and
+    // nothing beyond it.
+    const chainList = CHAINS.map((c) => CHAIN_NAMES[c]).join(", ");
+    expect(system).toMatch(new RegExp(`What your tools can determine: .*on ${chainList.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} .*Nothing beyond that\\.`));
     // Identity/ownership: no labels exist for it to read; the canvas's names are the user's own.
     expect(system).toMatch(/Who owns or controls an address.*say you have no sourced label for it/);
     expect(system).toMatch(/Don't infer identity from activity/);

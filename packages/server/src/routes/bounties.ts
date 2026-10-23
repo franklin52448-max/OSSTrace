@@ -78,8 +78,9 @@ type SubmissionRow = { id: string; bounty_id: string; submitted_by: string; pr_u
  * wallet signed in as "ethereum" controls exactly the BNB account at that address. Robinhood Chain
  * is the same case: an EOA's address comes from its key alone, never the chain id, so the key that
  * signed in as 0xabc on Ethereum is the only one that can send from 0xabc on chain 4663. Base (chain
- * 8453) likewise, and Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network too. Bitcoin has
- * no entry: it has no sender check at all (see the deposit route).
+ * 8453) likewise, and Arbitrum One, OP Mainnet, Zora, Lens Chain, the Data Network, Gnosis Chain,
+ * Ronin and Rootstock too (each derives an account's address from its key exactly as Ethereum does).
+ * Bitcoin has no entry: it has no sender check at all (see the deposit route).
  */
 const DEPOSIT_SIGNER: Record<Exclude<DepositChain, "bitcoin">, WalletChain> = {
   solana: "solana",
@@ -92,6 +93,9 @@ const DEPOSIT_SIGNER: Record<Exclude<DepositChain, "bitcoin">, WalletChain> = {
   zora: "ethereum",
   lens: "ethereum",
   story: "ethereum",
+  gnosis: "ethereum",
+  ronin: "ethereum",
+  rootstock: "ethereum",
 };
 
 /** What a payment in an untracked asset is told, per chain: each chain's own default list, so a
@@ -108,6 +112,9 @@ const TRACKED_ASSETS: Record<DepositChain, string> = {
   zora: "for Zora deposits (native ETH)",
   lens: "for Lens Chain deposits (native GHO)",
   story: "for Data Network deposits (native DATA)",
+  gnosis: "for Gnosis Chain deposits (native xDAI)",
+  ronin: "for Ronin deposits (native RON)",
+  rootstock: "for Rootstock deposits (native RBTC)",
 };
 
 type DepositRow = { id: string; bounty_id: string; chain: DepositChain; asset_contract: string | null; amount: string; tx_ref: string; from_address: string; to_wallet: string; memo: string | null; recorded_by: string; recorded_at: string };
@@ -281,6 +288,9 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
       zora: () => verifyPinnedEvmDeposit(http, "zora", config.zoraRpcUrl, txRef, wallet, config.depositAllowedTokens.zora, budget),
       lens: () => verifyPinnedEvmDeposit(http, "lens", config.lensRpcUrl, txRef, wallet, config.depositAllowedTokens.lens, budget),
       story: () => verifyPinnedEvmDeposit(http, "story", config.storyRpcUrl, txRef, wallet, config.depositAllowedTokens.story, budget),
+      gnosis: () => verifyPinnedEvmDeposit(http, "gnosis", config.gnosisRpcUrl, txRef, wallet, config.depositAllowedTokens.gnosis, budget),
+      ronin: () => verifyPinnedEvmDeposit(http, "ronin", config.roninRpcUrl, txRef, wallet, config.depositAllowedTokens.ronin, budget),
+      rootstock: () => verifyPinnedEvmDeposit(http, "rootstock", config.rootstockRpcUrl, txRef, wallet, config.depositAllowedTokens.rootstock, budget),
     };
     const verified = await verifiers[body.chain]();
     if (!verified.ok) {
@@ -292,7 +302,8 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
         not_confirmed:
           body.chain === "bitcoin" ? "That transaction isn't confirmed in a block yet -- try again once it has at least one confirmation" : "That transaction didn't succeed on-chain",
         wrong_wallet: "That transaction doesn't pay the configured deposit wallet",
-        // Per chain (TRACKED_ASSETS): Robinhood Chain has no USDC/USDT, Zora/Lens/Data Network take native only.
+        // Per chain (TRACKED_ASSETS): Robinhood Chain has no USDC/USDT; Zora, Lens, Data Network, Gnosis
+        // Chain, Ronin and Rootstock take native only.
         unsupported_asset: `That transaction pays the right wallet, but not in an asset this server tracks ${TRACKED_ASSETS[body.chain]}`,
         malformed_reference: {
           solana: "That doesn't look like a real Solana signature",
@@ -306,6 +317,9 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
           zora: "That doesn't look like a real Zora transaction hash",
           lens: "That doesn't look like a real Lens Chain transaction hash",
           story: "That doesn't look like a real Data Network transaction hash",
+          gnosis: "That doesn't look like a real Gnosis Chain transaction hash",
+          ronin: "That doesn't look like a real Ronin transaction hash",
+          rootstock: "That doesn't look like a real Rootstock transaction hash",
         }[body.chain],
       };
       throw badRequest(messages[verified.reason]);

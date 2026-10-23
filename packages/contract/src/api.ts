@@ -252,7 +252,7 @@ export type BountyAsset = "native" | { contract: string };
  *  trace Bitcoin addresses, so it must never leak into `Chain`. A Bitcoin deposit has no
  *  sender-ownership check (no BTC wallet-connect standard to sign in with, no single clean
  *  "sender" per tx) -- its `fromAddress` is display-only, see server chain/deposits.ts. */
-export type DepositChain = Exclude<Chain, "gnosis" | "ronin" | "rootstock"> | "bitcoin";
+export type DepositChain = Chain | "bitcoin";
 export type BountyDeposit = {
   id: string;
   chain: DepositChain;
@@ -308,7 +308,8 @@ export type BountyWallets = Partial<Record<DepositChain, string>>;
 // POST /api/bounties/:id/deposits {chain: DepositChain, txRef} -> BountyDeposit (any signed-in user; the
 //   real on-chain payment is independently verified server-side, not trusted from the request. For
 //   every chain but bitcoin the caller's own signed-in wallet must be the tx's sender -- for every EVM
-//   chain but ethereum itself (bnb, robinhood, base, arbitrum, optimism, zora, lens, story) that's an
+//   chain but ethereum itself (bnb, robinhood, base, arbitrum, optimism, zora, lens, story, gnosis, ronin,
+//   rootstock) that's an
 //   "ethereum"-signed-in wallet, the same key and address; for bitcoin (paste-a-txid only) there is no
 //   sender check -- any signed-in user can record a verified payment to the wallet)
 

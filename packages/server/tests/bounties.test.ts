@@ -980,16 +980,21 @@ describe("Base deposits (EVM JSON-RPC against Base's own RPC, sender matched to 
   });
 });
 
-// Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network ("story"): the same EVM JSON-RPC
-// verification as Base, each against its own RPC, pinned to its own chain id, with its own allowlist
-// (Circle's native USDC on Arbitrum One / OP Mainnet; native only on Zora, Lens Chain, Data Network).
-type DepositCase = { chain: "arbitrum" | "optimism" | "zora" | "lens" | "story"; name: string; chainIdHex: string; rpcKey: "arbitrumRpcUrl" | "optimismRpcUrl" | "zoraRpcUrl" | "lensRpcUrl" | "storyRpcUrl"; env: string; usdc: string | null; tracked: string };
+// Arbitrum One, OP Mainnet, Zora, Lens Chain, the Data Network ("story"), Gnosis Chain, Ronin and
+// Rootstock: the same EVM JSON-RPC verification as Base, each against its own RPC, pinned to its own
+// chain id, with its own allowlist (Circle's native USDC on Arbitrum One / OP Mainnet; native only on
+// the other six).
+type PinnedChain = "arbitrum" | "optimism" | "zora" | "lens" | "story" | "gnosis" | "ronin" | "rootstock";
+type DepositCase = { chain: PinnedChain; name: string; chainIdHex: string; rpcKey: `${PinnedChain}RpcUrl`; env: string; usdc: string | null; tracked: string };
 const DEPOSIT_CASES: DepositCase[] = [
   { chain: "arbitrum", name: "Arbitrum One", chainIdHex: "0xa4b1", rpcKey: "arbitrumRpcUrl", env: "ARBITRUM", usdc: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", tracked: "native ETH or USDC" },
   { chain: "optimism", name: "OP Mainnet", chainIdHex: "0xa", rpcKey: "optimismRpcUrl", env: "OPTIMISM", usdc: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", tracked: "native ETH or USDC" },
   { chain: "zora", name: "Zora", chainIdHex: "0x76adf1", rpcKey: "zoraRpcUrl", env: "ZORA", usdc: null, tracked: "native ETH" },
   { chain: "lens", name: "Lens Chain", chainIdHex: "0xe8", rpcKey: "lensRpcUrl", env: "LENS", usdc: null, tracked: "native GHO" },
   { chain: "story", name: "Data Network", chainIdHex: "0x5ea", rpcKey: "storyRpcUrl", env: "STORY", usdc: null, tracked: "native DATA" },
+  { chain: "gnosis", name: "Gnosis Chain", chainIdHex: "0x64", rpcKey: "gnosisRpcUrl", env: "GNOSIS", usdc: null, tracked: "native xDAI" },
+  { chain: "ronin", name: "Ronin", chainIdHex: "0x7e4", rpcKey: "roninRpcUrl", env: "RONIN", usdc: null, tracked: "native RON" },
+  { chain: "rootstock", name: "Rootstock", chainIdHex: "0x1e", rpcKey: "rootstockRpcUrl", env: "ROOTSTOCK", usdc: null, tracked: "native RBTC" },
 ];
 
 describe.each(DEPOSIT_CASES)("$name deposits (EVM JSON-RPC against its own RPC, pinned chain id, Ethereum sign-in owns the sender)", (k) => {
@@ -1153,6 +1158,86 @@ describe("migration 016 (bounty_deposits.chain CHECK widened to the five new EVM
       // The case-insensitive (chain, tx_ref) dedupe index came back with the table.
       expect(() => insert("d-dup", "arbitrum", "0xBB")).toThrow(/UNIQUE constraint failed/);
       expect(() => insert("d-bad", "data", "0xdd")).toThrow(/CHECK constraint failed/);
+    } finally {
+      await close();
+    }
+  });
+});
+
+// Rootstock's RPC returns legacy transactions with no `chainId` field (checked live against
+// public-node.rsk.co 2026-10-23), so the pin falls back to the RPC's own eth_chainId.
+describe("Rootstock deposits: a tx without a chainId field is pinned by the RPC's own eth_chainId", () => {
+  const RPC = "https://rootstock-rpc.test";
+  const WALLET = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359";
+  const HASH = `0x${"c0de".repeat(16)}`;
+  const BOUNTY = { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" };
+  const PAYER = new Wallet("0x" + "8".repeat(64));
+  const rskFetch = (rpcChainId: string | null, methods: string[] = []): typeof fetch =>
+    (async (_input: string | URL, init?: RequestInit) => {
+      const { method } = JSON.parse(String(init?.body ?? "{}")) as { method?: string };
+      methods.push(String(method));
+      const tx = { from: PAYER.address.toLowerCase(), to: WALLET.toLowerCase(), value: "0x38d7ea4c68000", blockNumber: "0x8ea5cb", v: "0x60" }; // 0.001 RBTC, no chainId field
+      const result = method === "eth_getTransactionByHash" ? tx : method === "eth_getTransactionReceipt" ? { status: "0x1", logs: [] } : method === "eth_chainId" ? rpcChainId : null;
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+  const app = (fetchImpl: typeof fetch) =>
+    makeBountyApp(fetchImpl, new FakeProvider("ethereum"), new FakeProvider("solana"), { rootstockRpcUrl: RPC, depositWallets: { ethereum: ETH_WALLET, solana: SOL_WALLET, rootstock: WALLET } });
+
+  it("records it when the RPC answers chain id 30", async () => {
+    const methods: string[] = [];
+    const { app: a, close } = await app(rskFetch("0x1e", methods));
+    try {
+      const u = await signupEthereum(a, PAYER);
+      const b = (await u.post("/api/bounties", BOUNTY)).json();
+      const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "rootstock", txRef: HASH });
+      expect(r.statusCode).toBe(201);
+      expect(r.json()).toMatchObject({ chain: "rootstock", asset: "native", amount: "0.001", toWallet: WALLET });
+      expect(methods).toContain("eth_chainId");
+    } finally {
+      await close();
+    }
+  });
+
+  it("never counts it when the RPC answers another chain id, or none", async () => {
+    for (const rpcChainId of ["0x1", null]) {
+      const { app: a, close } = await app(rskFetch(rpcChainId));
+      try {
+        const u = await signupEthereum(a, PAYER);
+        const b = (await u.post("/api/bounties", BOUNTY)).json();
+        const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "rootstock", txRef: HASH });
+        expect(r.statusCode).toBe(400);
+        expect(r.json().error.message).toBe("That transaction wasn't found");
+      } finally {
+        await close();
+      }
+    }
+  });
+});
+
+describe("migration 018 (bounty_deposits.chain CHECK widened to Gnosis Chain, Ronin and Rootstock)", () => {
+  it("keeps every recorded deposit -- including 016's chains' -- and its dedupe index across the rebuild, and accepts each new chain", async () => {
+    const { app, db, close } = await makeBountyApp(depositFetch({}), new FakeProvider("ethereum"), new FakeProvider("solana"));
+    try {
+      const u = await signup(app, "migrator-018");
+      const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R", tags: ["backend"], difficulty: "small" })).json();
+      const user = db.get<{ id: string }>("SELECT id FROM users LIMIT 1")!;
+      const insert = (id: string, chain: string, txRef: string) =>
+        db.run(
+          "INSERT INTO bounty_deposits (id, bounty_id, chain, asset_contract, amount, tx_ref, from_address, to_wallet, memo, recorded_by, recorded_at) VALUES (?, ?, ?, NULL, '1', ?, '0xfrom', '0xto', NULL, ?, '2026-10-23T00:00:00.000Z')",
+          id, b.id, chain, txRef, user.id,
+        );
+      insert("d-story", "story", "0xaa");
+      insert("d-gnosis", "gnosis", "0xbb");
+      db.tx(() => db.exec(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/db/migrations/018_bounty_deposits_gnosis_ronin_rootstock.sql"), "utf8")));
+      expect(db.all("SELECT id, chain FROM bounty_deposits ORDER BY id")).toEqual([
+        { id: "d-gnosis", chain: "gnosis" },
+        { id: "d-story", chain: "story" },
+      ]);
+      for (const chain of ["ronin", "rootstock"]) insert(`d-${chain}`, chain, "0xcc");
+      // The case-insensitive (chain, tx_ref) dedupe index came back with the table.
+      expect(() => insert("d-dup", "gnosis", "0xBB")).toThrow(/UNIQUE constraint failed/);
+      expect(() => insert("d-bad", "rsk", "0xdd")).toThrow(/CHECK constraint failed/);
+      expect(() => insert("d-bad2", "xdai", "0xdd")).toThrow(/CHECK constraint failed/);
     } finally {
       await close();
     }

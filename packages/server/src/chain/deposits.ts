@@ -20,7 +20,9 @@
 // Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network are the same again
 // (verifyPinnedEvmDeposit), each against its own RPC (config.ts's *RpcUrl, the chain's own public one
 // by default) and pinned to its own chain id the way Base is. Native value is 18 decimals on all five
-// (ETH, ETH, ETH, GHO and DATA respectively).
+// (ETH, ETH, ETH, GHO and DATA respectively). Gnosis Chain, Ronin and Rootstock too -- 18-decimal
+// xDAI, RON and RBTC. Rootstock's RPC returns legacy transactions with no `chainId` field at all, so
+// for any tx that doesn't carry one the pin is checked against the RPC's own `eth_chainId` instead.
 //
 // Ethereum has two verification paths now. When a dedicated `ETH_RPC_URL` is configured (see
 // config.ts), deposits are checked via real `eth_getTransactionByHash`/`eth_getTransactionReceipt`
@@ -109,6 +111,15 @@ export const DEFAULT_ALLOWED_TOKENS_OPTIMISM = new Set<string>([
 export const DEFAULT_ALLOWED_TOKENS_ZORA = new Set<string>();
 export const DEFAULT_ALLOWED_TOKENS_LENS = new Set<string>();
 export const DEFAULT_ALLOWED_TOKENS_STORY = new Set<string>();
+/** Gnosis Chain, Ronin and Rootstock: native only by default, the same call. None of the three is on
+ *  Circle's USDC contract-address list (checked 2026-10-23), and the dollar tokens that circulate on
+ *  them are bridge wrappers: Gnosis Chain's USDC.e / Omnibridge USDC and USDT, Ronin's USDC (bridged
+ *  from Ethereum over the Ronin Bridge), Rootstock's USDT0 / rUSDT / DOC / USDRIF. An operator who
+ *  wants one adds it deliberately via DEPOSIT_ALLOWED_TOKENS_GNOSIS/_RONIN/_ROOTSTOCK. (Gnosis Chain's
+ *  native xDAI is already a dollar stablecoin.) */
+export const DEFAULT_ALLOWED_TOKENS_GNOSIS = new Set<string>();
+export const DEFAULT_ALLOWED_TOKENS_RONIN = new Set<string>();
+export const DEFAULT_ALLOWED_TOKENS_ROOTSTOCK = new Set<string>();
 const isAllowedEvmToken = (allowed: Set<string>, contract: string) => [...allowed].some((a) => sameAddress(a, contract));
 
 /** The real, public SPL Memo program -- not this project's own invention. */
@@ -356,7 +367,20 @@ async function verifyEvmDepositViaRpc(
   // The same wallet address exists on every EVM chain, so a payment on one chain must never verify
   // as another's: if the RPC is somehow serving a different chain than the one being claimed (a
   // mis-set BASE_RPC_URL pointed at Ethereum mainnet, say), the tx's own EIP-155 chain id says so.
-  if (expectChainId !== undefined && tx.chainId != null && BigInt(tx.chainId) !== expectChainId) return { ok: false, reason: "not_found" };
+  // A tx that doesn't carry its chain id (Rootstock's RPC leaves the field out of legacy txs) is
+  // checked against the RPC's own eth_chainId instead -- never waved through unpinned.
+  if (expectChainId !== undefined) {
+    let chainId: bigint | null = tx.chainId != null ? BigInt(tx.chainId) : null;
+    if (chainId === null) {
+      try {
+        const rpcChain = await ethRpc<string | null>(http, rpcUrl, "eth_chainId", [], budget);
+        chainId = typeof rpcChain === "string" && /^0x[0-9a-fA-F]+$/.test(rpcChain) ? BigInt(rpcChain) : null;
+      } catch {
+        chainId = null;
+      }
+    }
+    if (chainId !== expectChainId) return { ok: false, reason: "not_found" };
+  }
   if (receipt.status !== "0x1") return { ok: false, reason: "not_confirmed" };
 
   if (tx.to && sameAddress(tx.to, wallet) && BigInt(tx.value) > 0n) {
@@ -413,12 +437,12 @@ export async function verifyBaseDeposit(http: HttpClient, baseRpcUrl: string, tx
 }
 
 /** EIP-155 chain ids of the EVM chains verified through verifyPinnedEvmDeposit. */
-export const PINNED_EVM_CHAIN_IDS = { arbitrum: 42161n, optimism: 10n, zora: 7777777n, lens: 232n, story: 1514n } as const;
+export const PINNED_EVM_CHAIN_IDS = { arbitrum: 42161n, optimism: 10n, zora: 7777777n, lens: 232n, story: 1514n, gnosis: 100n, ronin: 2020n, rootstock: 30n } as const;
 export type PinnedEvmChain = keyof typeof PINNED_EVM_CHAIN_IDS;
 
-/** Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data Network: the same EVM RPC verification as
- *  Base's, against that chain's own `rpcUrl`, with that chain's own token allowlist, pinned to that
- *  chain's id -- so a payment on any other chain (the same wallet address exists on all of them)
+/** Arbitrum One, OP Mainnet, Zora, Lens Chain, the Data Network, Gnosis Chain, Ronin and Rootstock:
+ *  the same EVM RPC verification as Base's, against that chain's own `rpcUrl`, with that chain's own
+ *  token allowlist, pinned to that chain's id -- so a payment on any other chain (the same wallet address exists on all of them)
  *  never verifies as one on this chain, even through a mis-set RPC URL. */
 export async function verifyPinnedEvmDeposit(
   http: HttpClient,

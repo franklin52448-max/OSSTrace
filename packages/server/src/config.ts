@@ -7,9 +7,12 @@ import {
   DEFAULT_ALLOWED_TOKENS_BASE,
   DEFAULT_ALLOWED_TOKENS_BNB,
   DEFAULT_ALLOWED_TOKENS_ETHEREUM,
+  DEFAULT_ALLOWED_TOKENS_GNOSIS,
   DEFAULT_ALLOWED_TOKENS_LENS,
   DEFAULT_ALLOWED_TOKENS_OPTIMISM,
   DEFAULT_ALLOWED_TOKENS_ROBINHOOD,
+  DEFAULT_ALLOWED_TOKENS_RONIN,
+  DEFAULT_ALLOWED_TOKENS_ROOTSTOCK,
   DEFAULT_ALLOWED_TOKENS_SOLANA,
   DEFAULT_ALLOWED_TOKENS_STORY,
   DEFAULT_ALLOWED_TOKENS_ZORA,
@@ -85,9 +88,10 @@ export type Config = {
   depositWallets: Partial<Record<DepositChain, string>>;
   /** Assets a bounty deposit may be verified in, beyond each chain's own native currency (always
    *  allowed) -- defaults to real USDC/USDT (Base, Arbitrum One, OP Mainnet: USDC only; Robinhood
-   *  Chain: USDG; Zora, Lens Chain, Data Network: none, native only), extendable per-deployment via
-   *  DEPOSIT_ALLOWED_TOKENS_<CHAIN> (ETHEREUM, SOLANA, BNB, ROBINHOOD, BASE, ARBITRUM, OPTIMISM, ZORA,
-   *  LENS, STORY; comma-separated, added to the defaults, never replacing them). Without this, any
+   *  Chain: USDG; Zora, Lens Chain, Data Network, Gnosis Chain, Ronin, Rootstock: none, native only),
+   *  extendable per-deployment via DEPOSIT_ALLOWED_TOKENS_<CHAIN> (ETHEREUM, SOLANA, BNB, ROBINHOOD,
+   *  BASE, ARBITRUM, OPTIMISM, ZORA, LENS, STORY, GNOSIS, RONIN, ROOTSTOCK; comma-separated, added to
+   *  the defaults, never replacing them). Without this, any
    *  worthless token a depositor mints themselves would verify as a real "deposit" (see
    *  chain/deposits.ts). */
   depositAllowedTokens: Record<Exclude<DepositChain, "bitcoin">, Set<string>>;
@@ -259,6 +263,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       ...(env.DEPOSIT_WALLET_ZORA ? { zora: env.DEPOSIT_WALLET_ZORA.trim() } : {}),
       ...(env.DEPOSIT_WALLET_LENS ? { lens: env.DEPOSIT_WALLET_LENS.trim() } : {}),
       ...(env.DEPOSIT_WALLET_STORY ? { story: env.DEPOSIT_WALLET_STORY.trim() } : {}),
+      ...(env.DEPOSIT_WALLET_GNOSIS ? { gnosis: env.DEPOSIT_WALLET_GNOSIS.trim() } : {}),
+      ...(env.DEPOSIT_WALLET_RONIN ? { ronin: env.DEPOSIT_WALLET_RONIN.trim() } : {}),
+      ...(env.DEPOSIT_WALLET_ROOTSTOCK ? { rootstock: env.DEPOSIT_WALLET_ROOTSTOCK.trim() } : {}),
     },
     depositAllowedTokens: {
       ethereum: new Set([
@@ -290,6 +297,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       zora: new Set([...DEFAULT_ALLOWED_TOKENS_ZORA, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_ZORA)]),
       lens: new Set([...DEFAULT_ALLOWED_TOKENS_LENS, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_LENS)]),
       story: new Set([...DEFAULT_ALLOWED_TOKENS_STORY, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_STORY)]),
+      // Gnosis Chain, Ronin, Rootstock: none by default either (see deposits.ts).
+      gnosis: new Set([...DEFAULT_ALLOWED_TOKENS_GNOSIS, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_GNOSIS)]),
+      ronin: new Set([...DEFAULT_ALLOWED_TOKENS_RONIN, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_RONIN)]),
+      rootstock: new Set([...DEFAULT_ALLOWED_TOKENS_ROOTSTOCK, ...extraTokens(env.DEPOSIT_ALLOWED_TOKENS_ROOTSTOCK)]),
     },
     testHooks: bool(env.SERVER_TEST_HOOKS, false),
     // The `&& !production` is load-bearing: this must never activate on a deployed instance,

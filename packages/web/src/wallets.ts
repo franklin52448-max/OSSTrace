@@ -131,6 +131,30 @@ const EVM_NETWORKS = {
     rpcUrls: ["https://mainnet.datarpc.io"],
     blockExplorerUrls: ["https://www.datanetscan.io"],
   },
+  // Gnosis Chain (100) pays gas in xDAI, Ronin (2020) in RON and Rootstock (30) in RBTC. The
+  // nativeCurrency names/symbols are each chain's own chainid.network entry (Gnosis lists "XDAI"),
+  // so a wallet adding the network sees what it expects; RPCs are each chain's operator's public one.
+  gnosis: {
+    chainId: "0x64",
+    chainName: "Gnosis",
+    nativeCurrency: { name: "xDAI", symbol: "XDAI", decimals: 18 },
+    rpcUrls: ["https://rpc.gnosischain.com"],
+    blockExplorerUrls: ["https://gnosisscan.io"],
+  },
+  ronin: {
+    chainId: "0x7e4",
+    chainName: "Ronin",
+    nativeCurrency: { name: "RON", symbol: "RON", decimals: 18 },
+    rpcUrls: ["https://api.roninchain.com/rpc"],
+    blockExplorerUrls: ["https://explorer.roninchain.com"],
+  },
+  rootstock: {
+    chainId: "0x1e",
+    chainName: "Rootstock",
+    nativeCurrency: { name: "Smart Bitcoin", symbol: "RBTC", decimals: 18 },
+    rpcUrls: ["https://public-node.rsk.co"],
+    blockExplorerUrls: ["https://explorer.rootstock.io"],
+  },
 } as const;
 
 /** The EIP-155 chain id a deposit on `chain` is sent on (decimal), for telling the user which

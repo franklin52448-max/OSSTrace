@@ -83,6 +83,16 @@ test("assetLabel: Arbitrum One / OP Mainnet ETH says which ETH, their Circle USD
   assert.equal(assetLabel("zora", { contract: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" }), "0xaf88…5831");
 });
 
+test("assetLabel: Gnosis Chain's xDAI, Ronin's RON and Rootstock's RBTC are each their own symbol, never ETH", () => {
+  assert.equal(assetLabel("gnosis", "native"), "xDAI");
+  assert.equal(assetLabel("ronin", "native"), "RON");
+  assert.equal(assetLabel("rootstock", "native"), "RBTC");
+  assert.equal(assetDescription("gnosis", "native"), "xDAI on Gnosis Chain");
+  assert.equal(assetDescription("rootstock", "native"), "RBTC on Rootstock");
+  // No default stablecoin on any of the three: a token there is shown as its address, never a guessed name.
+  assert.equal(assetLabel("gnosis", { contract: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" }), "0xaf88…5831");
+});
+
 test("compareDecimalAmounts: exact, across differing fractional digits", () => {
   assert.equal(compareDecimalAmounts("0.1", "0.10"), 0);
   assert.equal(compareDecimalAmounts("2", "10"), -1);

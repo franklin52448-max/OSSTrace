@@ -43,13 +43,16 @@ const TX_REF_PLACEHOLDER: Record<DepositChain, string> = {
   zora: "Transaction hash (0x…)",
   lens: "Transaction hash (0x…)",
   story: "Transaction hash (0x…)",
+  gnosis: "Transaction hash (0x…)",
+  ronin: "Transaction hash (0x…)",
+  rootstock: "Transaction hash (0x…)",
 };
 /** Display/selection order everywhere in this panel. */
-const DEPOSIT_CHAINS: readonly DepositChain[] = ["solana", "ethereum", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story", "bitcoin"];
+const DEPOSIT_CHAINS: readonly DepositChain[] = ["solana", "ethereum", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story", "gnosis", "ronin", "rootstock", "bitcoin"];
 /** The chains a connected browser wallet can send on: every deposit chain but Bitcoin (paste-only).
  *  Derived from DepositChain, so a chain that gains deposits must also say how it's sent here. */
 type SendChain = Exclude<DepositChain, "bitcoin">;
-const SEND_CHAINS: readonly SendChain[] = ["solana", "ethereum", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story"];
+const SEND_CHAINS: readonly SendChain[] = ["solana", "ethereum", "bnb", "robinhood", "base", "arbitrum", "optimism", "zora", "lens", "story", "gnosis", "ronin", "rootstock"];
 const TOKEN_STANDARD: Record<SendChain, string> = {
   solana: "SPL token",
   ethereum: "ERC-20 token",
@@ -61,6 +64,9 @@ const TOKEN_STANDARD: Record<SendChain, string> = {
   zora: "ERC-20 token",
   lens: "ERC-20 token",
   story: "ERC-20 token",
+  gnosis: "ERC-20 token",
+  ronin: "ERC-20 token",
+  rootstock: "ERC-20 token",
 };
 
 /** The shared icon for the two app-wide chains; a plain orange "₿" disc for Bitcoin -- an honest

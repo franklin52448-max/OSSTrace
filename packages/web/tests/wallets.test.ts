@@ -233,6 +233,28 @@ test("switchEvmNetwork: Arbitrum One, OP Mainnet, Zora, Lens Chain and the Data 
   }
 });
 
+test("switchEvmNetwork: Gnosis Chain, Ronin and Rootstock each move a mainnet wallet onto that chain's own id, adding it with the chain's real RPC/explorer and its own (non-ETH) native currency", async () => {
+  const { switchEvmNetwork, evmNetworkChainId } = await import("../src/wallets.ts");
+  const cases = [
+    ["gnosis", 100n, "Gnosis", { name: "xDAI", symbol: "XDAI", decimals: 18 }, "https://rpc.gnosischain.com", "https://gnosisscan.io"],
+    ["ronin", 2020n, "Ronin", { name: "RON", symbol: "RON", decimals: 18 }, "https://api.roninchain.com/rpc", "https://explorer.roninchain.com"],
+    ["rootstock", 30n, "Rootstock", { name: "Smart Bitcoin", symbol: "RBTC", decimals: 18 }, "https://public-node.rsk.co", "https://explorer.rootstock.io"],
+  ] as const;
+  for (const [chain, id, name, nativeCurrency, rpc, explorer] of cases) {
+    const w = new NetworkWallet("0x1");
+    await switchEvmNetwork(w, chain);
+    assert.equal(BigInt(w.chainId), id, chain);
+    assert.equal(evmNetworkChainId(chain), Number(id));
+    const add = w.calls.find((c) => c.method === "wallet_addEthereumChain")?.params?.[0] as { chainId: string; chainName: string; nativeCurrency: unknown; rpcUrls: string[]; blockExplorerUrls: string[] };
+    assert.equal(BigInt(add.chainId), id);
+    assert.equal(add.chainName, name);
+    assert.deepEqual(add.nativeCurrency, nativeCurrency);
+    assert.deepEqual(add.rpcUrls, [rpc]);
+    assert.deepEqual(add.blockExplorerUrls, [explorer]);
+    await assert.rejects(switchEvmNetwork(new NetworkWallet("0x1", ["0x1", add.chainId], false), chain), new RegExp(`switch it to ${name}`));
+  }
+});
+
 test("sendEthereumNative: builds a plain value transfer with the exact wei amount, no data field", async () => {
   const { sendEthereumNative } = await import("../src/wallets.ts");
   const provider = new FakeEthereumProvider();

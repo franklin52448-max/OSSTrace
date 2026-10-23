@@ -88,8 +88,8 @@ system would be custody, which conflicts with this project's own non-goal of sta
 non-custodial — so v1 shipped the board and its workflow without pretending to be a bank it isn't.
 
 **Optional real backing** ([ADR 0020](docs/adr/0020-bounty-funding-via-verified-on-chain-deposits.md)):
-anyone can also back a bounty with a real on-chain payment — SOL, ETH, an SPL token, or an ERC-20
-— to a wallet this project controls, and the board shows that deposit as **verified**, a checked
+anyone can also back a bounty with a real on-chain payment — SOL, ETH, BNB, an SPL token, or an
+ERC-20/BEP-20 (USDC/USDT by default) — to a wallet this project controls, and the board shows that deposit as **verified**, a checked
 fact read straight off the chain, not a claim. This genuinely is a wallet the project controls
 receiving real third-party funds, so to be precise about what that does and doesn't mean: **it is
 not escrow.** Nothing in this project's code holds funds under any release condition, proves a

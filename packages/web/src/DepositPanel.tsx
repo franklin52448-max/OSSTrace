@@ -5,11 +5,10 @@
 // Bitcoin is deposit-only and paste-a-txid-only (ADR 0020 addendum): there's no browser
 // wallet-connect standard for it, so it appears in the paste form, the wallet list and the
 // deposit list, never in "connect a wallet and send". It's handled with local types/icons here
-// rather than by widening the shared ChainId/ChainSelect/ChainIcon, which drive the app-wide
+// rather than by widening the shared Chain/ChainSelect/ChainIcon, which drive the app-wide
 // address/chain picker where Bitcoin isn't a supported chain at all.
 import { useCallback, useEffect, useState } from "react";
-import type { ChainId } from "@osstrace/core";
-import type { BountyDeposit, BountyWallets, DepositChain } from "@osstrace/contract";
+import { CHAIN_NAMES, NATIVE_SYMBOLS, type BountyDeposit, type BountyWallets, type Chain, type DepositChain } from "@osstrace/contract";
 import { serverApiCall } from "./serverSession.ts";
 import { Loading, Notice } from "./ui.tsx";
 import { ChainIcon, ChainSelect } from "./ChainSelect.tsx";
@@ -23,17 +22,21 @@ import {
   sendSolanaNative,
   sendSolanaToken,
   sumDecimalAmounts,
+  switchEvmNetwork,
 } from "./wallets.ts";
 
 type DepositAsset = BountyDeposit["asset"];
 type Deposit = BountyDeposit;
 type Wallets = BountyWallets;
 
-const NATIVE_SYMBOL: Record<DepositChain, string> = { ethereum: "ETH", solana: "SOL", bitcoin: "BTC" };
-const CHAIN_NAME: Record<DepositChain, string> = { solana: "Solana", ethereum: "Ethereum", bitcoin: "Bitcoin" };
-const TX_REF_PLACEHOLDER: Record<DepositChain, string> = { solana: "Transaction signature", ethereum: "Transaction hash (0x…)", bitcoin: "Transaction ID (txid)" };
+const NATIVE_SYMBOL: Record<DepositChain, string> = { ...NATIVE_SYMBOLS, bitcoin: "BTC" };
+const CHAIN_NAME: Record<DepositChain, string> = { ...CHAIN_NAMES, bitcoin: "Bitcoin" };
+const TX_REF_PLACEHOLDER: Record<DepositChain, string> = { solana: "Transaction signature", ethereum: "Transaction hash (0x…)", bnb: "Transaction hash (0x…)", bitcoin: "Transaction ID (txid)" };
 /** Display/selection order everywhere in this panel. */
-const DEPOSIT_CHAINS: readonly DepositChain[] = ["solana", "ethereum", "bitcoin"];
+const DEPOSIT_CHAINS: readonly DepositChain[] = ["solana", "ethereum", "bnb", "bitcoin"];
+/** The chains a connected browser wallet can send on (Bitcoin is paste-only). */
+const SEND_CHAINS: readonly Chain[] = ["solana", "ethereum", "bnb"];
+const TOKEN_STANDARD: Record<Chain, string> = { solana: "SPL token", ethereum: "ERC-20 token", bnb: "BEP-20 token" };
 
 /** The shared icon for the two app-wide chains; a plain orange "₿" disc for Bitcoin -- an honest
  *  generic mark, not an attempt at the exact brand artwork. */
@@ -158,10 +161,11 @@ export default function DepositPanel({ bountyId, signedIn }: { bountyId: string;
 type AssetMode = "native" | "token";
 
 function FundForm({ bountyId, wallets, onRecorded }: { bountyId: string; wallets: Wallets; onRecorded: () => void }) {
-  // Only Solana/Ethereum can be sent from a connected browser wallet; Bitcoin is paste-only.
-  const configured = (["solana", "ethereum"] as const).filter((c) => wallets[c]);
+  // Bitcoin is paste-only; the rest can be sent from a connected browser wallet. BNB goes through
+  // the same injected Ethereum wallet, moved onto BNB Smart Chain first (switchEvmNetwork).
+  const configured = SEND_CHAINS.filter((c) => wallets[c]);
   const pasteConfigured = DEPOSIT_CHAINS.filter((c) => wallets[c]);
-  const [chain, setChain] = useState<ChainId>(configured[0] ?? "solana");
+  const [chain, setChain] = useState<Chain>(configured[0] ?? "solana");
   const [assetMode, setAssetMode] = useState<AssetMode>("native");
   const [contract, setContract] = useState("");
   const [amount, setAmount] = useState("");
@@ -174,7 +178,7 @@ function FundForm({ bountyId, wallets, onRecorded }: { bountyId: string; wallets
   const [pasteBusy, setPasteBusy] = useState(false);
   const [pasteError, setPasteError] = useState<string | null>(null);
 
-  async function record(forChain: ChainId, txRef: string): Promise<boolean> {
+  async function record(forChain: Chain, txRef: string): Promise<boolean> {
     setBusy("recording");
     const res = await serverApiCall(`/api/bounties/${bountyId}/deposits`, { method: "POST", body: { chain: forChain, txRef } });
     setBusy("idle");
@@ -212,14 +216,16 @@ function FundForm({ bountyId, wallets, onRecorded }: { bountyId: string; wallets
       } else {
         const provider = getEthereumProvider();
         if (!provider) {
-          setError("no Ethereum wallet extension found in this browser");
+          setError("no Ethereum-compatible wallet extension (MetaMask etc.) found in this browser");
           return;
         }
         setBusy("connecting");
         const from = await connectEthereum(provider);
+        // Before reading decimals or sending: both happen on whatever network the wallet is on.
+        await switchEvmNetwork(provider, chain);
         setBusy("sending");
         const result = assetMode === "native" ? await sendEthereumNative(provider, from, wallet, amount) : await sendEthereumToken(provider, from, contract, wallet, amount);
-        await record("ethereum", result.txRef);
+        await record(chain, result.txRef);
       }
     } catch (cause) {
       setBusy("idle");
@@ -251,6 +257,7 @@ function FundForm({ bountyId, wallets, onRecorded }: { bountyId: string; wallets
           <div className="flex flex-wrap items-center gap-2">
             <ChainSelect
               value={chain}
+              chains={configured}
               onChange={(c) => {
                 setChain(c);
                 setAssetMode("native");
@@ -260,7 +267,7 @@ function FundForm({ bountyId, wallets, onRecorded }: { bountyId: string; wallets
             />
             <select value={assetMode} onChange={(e) => setAssetMode(e.target.value as AssetMode)} className="ctl h-9 text-sm">
               <option value="native">{NATIVE_SYMBOL[chain]} (native)</option>
-              <option value="token">{chain === "solana" ? "SPL token" : "ERC-20 token"}</option>
+              <option value="token">{TOKEN_STANDARD[chain]}</option>
             </select>
           </div>
           {assetMode === "token" && (
@@ -309,7 +316,7 @@ function FundForm({ bountyId, wallets, onRecorded }: { bountyId: string; wallets
         </div>
         {pasteChain === "bitcoin" && (
           <p className="text-xs text-ink-faint">
-            Bitcoin can't be sent from this page — send from any wallet or exchange, then paste the txid here once it has at least one confirmation. Unlike SOL/ETH, a Bitcoin payment isn't matched to your signed-in wallet.
+            Bitcoin can't be sent from this page — send from any wallet or exchange, then paste the txid here once it has at least one confirmation. Unlike SOL/ETH/BNB, a Bitcoin payment isn't matched to your signed-in wallet.
           </p>
         )}
         {pasteError && <Notice tone="danger">{pasteError}</Notice>}

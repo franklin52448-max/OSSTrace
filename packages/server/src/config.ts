@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { DEFAULT_ALLOWED_TOKENS_ETHEREUM, DEFAULT_ALLOWED_TOKENS_SOLANA } from "./chain/deposits.ts";
+import { DEFAULT_ALLOWED_TOKENS_BNB, DEFAULT_ALLOWED_TOKENS_ETHEREUM, DEFAULT_ALLOWED_TOKENS_SOLANA } from "./chain/deposits.ts";
 
 export type Config = {
   port: number;
@@ -43,13 +43,13 @@ export type Config = {
   defillamaUrl: string;
   jupiterTokensUrl: string;
   /** Public wallet addresses bounty depositors pay into -- never a key this server holds (ADR 0020). */
-  depositWallets: { ethereum?: string; solana?: string; bitcoin?: string };
+  depositWallets: { ethereum?: string; solana?: string; bnb?: string; bitcoin?: string };
   /** Assets a bounty deposit may be verified in, beyond each chain's own native currency (always
    *  allowed) -- defaults to real USDC/USDT, extendable per-deployment via
-   *  DEPOSIT_ALLOWED_TOKENS_ETHEREUM/_SOLANA (comma-separated, added to the defaults, never replacing
+   *  DEPOSIT_ALLOWED_TOKENS_ETHEREUM/_SOLANA/_BNB (comma-separated, added to the defaults, never replacing
    *  them). Without this, any worthless token a depositor mints themselves would verify as a real
    *  "deposit" (see chain/deposits.ts). */
-  depositAllowedTokens: { ethereum: Set<string>; solana: Set<string> };
+  depositAllowedTokens: { ethereum: Set<string>; solana: Set<string>; bnb: Set<string> };
   /** Enables POST /api/_test/alerts/tick (off unless SERVER_TEST_HOOKS=1). */
   testHooks: boolean;
   /** Local-dev-only: every request is treated as signed in as a fixed fake user, no cookie needed.
@@ -139,6 +139,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     depositWallets: {
       ...(env.DEPOSIT_WALLET_ETHEREUM ? { ethereum: env.DEPOSIT_WALLET_ETHEREUM.trim() } : {}),
       ...(env.DEPOSIT_WALLET_SOLANA ? { solana: env.DEPOSIT_WALLET_SOLANA.trim() } : {}),
+      ...(env.DEPOSIT_WALLET_BNB ? { bnb: env.DEPOSIT_WALLET_BNB.trim() } : {}),
       ...(env.DEPOSIT_WALLET_BITCOIN ? { bitcoin: env.DEPOSIT_WALLET_BITCOIN.trim() } : {}),
     },
     depositAllowedTokens: {
@@ -149,6 +150,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       solana: new Set([
         ...DEFAULT_ALLOWED_TOKENS_SOLANA,
         ...(env.DEPOSIT_ALLOWED_TOKENS_SOLANA?.split(",").map((s) => s.trim()).filter(Boolean) ?? []),
+      ]),
+      bnb: new Set([
+        ...DEFAULT_ALLOWED_TOKENS_BNB,
+        ...(env.DEPOSIT_ALLOWED_TOKENS_BNB?.split(",").map((s) => s.trim()).filter(Boolean) ?? []),
       ]),
     },
     testHooks: bool(env.SERVER_TEST_HOOKS, false),

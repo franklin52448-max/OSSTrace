@@ -4,8 +4,8 @@ import { z } from "zod";
 import type { Bounty, BountyDeposit, BountySubmission, BountyWallets, DepositChain } from "@osstrace/contract";
 import { requireUser, type Ctx } from "../context.ts";
 import { HttpClient, budgetMs } from "../lib/http.ts";
-import { verifyBitcoinDeposit, verifyEthereumDeposit, verifySolanaDeposit, type DepositVerification } from "../chain/deposits.ts";
-import { normalizeAddress } from "../auth/wallet.ts";
+import { verifyBitcoinDeposit, verifyBnbDeposit, verifyEthereumDeposit, verifySolanaDeposit, type DepositVerification } from "../chain/deposits.ts";
+import { normalizeAddress, type WalletChain } from "../auth/wallet.ts";
 import { ApiErr, badRequest, conflict, forbidden, notFound } from "../lib/errors.ts";
 import { nowIso } from "../lib/time.ts";
 import { depositChain, parse } from "../schemas.ts";
@@ -33,6 +33,15 @@ type BountyRow = {
   cancellation_reason: string | null;
 };
 type SubmissionRow = { id: string; bounty_id: string; submitted_by: string; pr_url: string; note: string; submitted_at: string; outcome: "pending" | "accepted" | "rejected" };
+/**
+ * The sign-in that proves ownership of a deposit's sender, per deposit chain. BNB has no login of its
+ * own and doesn't need one: a BNB address *is* an Ethereum address (same secp256k1 key, same 0x
+ * form), and wallet sign-in only accepts an EOA's own personal_sign signature (auth/wallet.ts), so a
+ * wallet signed in as "ethereum" controls exactly the BNB account at that address. Bitcoin has no
+ * entry: it has no sender check at all (see the deposit route).
+ */
+const DEPOSIT_SIGNER: Record<Exclude<DepositChain, "bitcoin">, WalletChain> = { solana: "solana", ethereum: "ethereum", bnb: "ethereum" };
+
 type DepositRow = { id: string; bounty_id: string; chain: DepositChain; asset_contract: string | null; amount: string; tx_ref: string; from_address: string; to_wallet: string; memo: string | null; recorded_by: string; recorded_at: string };
 
 const toSubmission = (r: SubmissionRow): BountySubmission => ({ id: r.id, bountyId: r.bounty_id, submittedBy: r.submitted_by, prUrl: r.pr_url, note: r.note, submittedAt: r.submitted_at, outcome: r.outcome });
@@ -170,8 +179,8 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
     if (bounty.status !== "open") throw conflict("This bounty is no longer open; deposits can't be recorded against it");
     const wallet = config.depositWallets[body.chain];
     if (!wallet) throw badRequest(`No ${body.chain} deposit wallet is configured on this server`);
-    // An Ethereum tx hash is hex and case-insensitive on-chain (0xABC... and 0xabc... are the same
-    // real transaction) -- lowercase it before every lookup/insert so the real sender can't get one
+    // An Ethereum (or BNB) tx hash is hex and case-insensitive on-chain (0xABC... and 0xabc... are the
+    // same real transaction) -- lowercase it before every lookup/insert so the real sender can't get one
     // real payment counted multiple times by resubmitting it with different letter-casing. Solana
     // signatures are base58, already case-sensitive with one canonical form, so left as-is. A Bitcoin
     // txid is hex with the same case-insensitivity, so it's lowercased too (also the form Esplora
@@ -183,6 +192,7 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
     const verifiers: Record<DepositChain, () => Promise<DepositVerification>> = {
       solana: () => verifySolanaDeposit(http, config.solanaRpcUrl, txRef, wallet, config.depositAllowedTokens.solana, budget),
       ethereum: () => verifyEthereumDeposit(http, config.ethBlockscoutUrl, config.ethRpcUrl, txRef, wallet, config.depositAllowedTokens.ethereum, budget),
+      bnb: () => verifyBnbDeposit(http, config.bnbRpcUrl, txRef, wallet, config.depositAllowedTokens.bnb, budget),
       bitcoin: () => verifyBitcoinDeposit(http, config.esploraUrl, txRef, wallet, budget),
     };
     const verified = await verifiers[body.chain]();
@@ -195,10 +205,11 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
         not_confirmed:
           body.chain === "bitcoin" ? "That transaction isn't confirmed in a block yet -- try again once it has at least one confirmation" : "That transaction didn't succeed on-chain",
         wrong_wallet: "That transaction doesn't pay the configured deposit wallet",
-        unsupported_asset: "That transaction pays the right wallet, but not in an asset this server tracks for deposits (native SOL/ETH, USDC or USDT)",
+        unsupported_asset: "That transaction pays the right wallet, but not in an asset this server tracks for deposits (native SOL/ETH/BNB, USDC or USDT)",
         malformed_reference: {
           solana: "That doesn't look like a real Solana signature",
           ethereum: "That doesn't look like a real Ethereum transaction hash",
+          bnb: "That doesn't look like a real BNB Chain transaction hash",
           bitcoin: "That doesn't look like a real Bitcoin transaction ID (64 hex characters)",
         }[body.chain],
       };
@@ -215,8 +226,12 @@ export function registerBounties(app: FastifyInstance, ctx: Ctx) {
     // display-only there. Any signed-in user (on any chain's account) can record a verified BTC
     // payment; the trade-off is that a watcher could attach someone else's BTC payment to a bounty,
     // which is the accepted cost of supporting Bitcoin at all without custody (ADR 0020).
+    //
+    // BNB is checked against an "ethereum" sign-in (DEPOSIT_SIGNER): same key, same address. A user
+    // signed in with Solana can't record a BNB deposit, same as they can't record an Ethereum one.
     if (body.chain !== "bitcoin") {
-      if (u.chain !== body.chain || !u.walletAddress || normalizeAddress(body.chain, u.walletAddress) !== normalizeAddress(body.chain, d.fromAddress)) {
+      const signer = DEPOSIT_SIGNER[body.chain];
+      if (u.chain !== signer || !u.walletAddress || normalizeAddress(signer, u.walletAddress) !== normalizeAddress(signer, d.fromAddress)) {
         throw forbidden("That transaction wasn't sent from your connected wallet");
       }
     }

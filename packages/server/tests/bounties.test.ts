@@ -27,12 +27,33 @@ const SOL_WALLET = "11111111111111111111111111111111";
 const ETH_WALLET = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
 const BTC_WALLET = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
 
-/** Mocks the three deposit-verification upstreams: Solana's getParsedTransaction RPC, Blockscout's
- *  tx/token-transfer REST endpoints, and an Esplora explorer's `/api/tx/:txid` (404 when `btcTx` is
- *  unset, the same as Blockstream.info answers for a txid it doesn't know). */
-function depositFetch(opts: { solTx?: unknown; bsTx?: unknown; bsTransfers?: unknown; btcTx?: unknown }): typeof fetch {
+const BNB_WALLET = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359";
+const BNB_RPC = "https://bsc-rpc.test";
+const USDT_BSC = "0x55d398326f99059fF775485246999027B3197955";
+
+/** An EVM JSON-RPC stand-in (the BNB one is reached at BNB_RPC): answers the three calls
+ *  verifyEvmDepositViaRpc makes, plus eth_chainId (0x38 = 56, BNB Smart Chain) so a test can tell
+ *  which chain's endpoint it is. Every call is logged for asserting where verification went. */
+type EvmRpcMock = { tx: unknown; receipt: unknown; decimals?: number; chainId?: string; calls?: string[] };
+
+/** Mocks the deposit-verification upstreams: Solana's getParsedTransaction RPC, Blockscout's
+ *  tx/token-transfer REST endpoints, an Esplora explorer's `/api/tx/:txid` (404 when `btcTx` is
+ *  unset, the same as Blockstream.info answers for a txid it doesn't know), and BNB's EVM RPC. */
+function depositFetch(opts: { solTx?: unknown; bsTx?: unknown; bsTransfers?: unknown; btcTx?: unknown; bnbRpc?: EvmRpcMock }): typeof fetch {
   return (async (input: string | URL, init?: RequestInit) => {
     const url = String(input);
+    if (url.startsWith(BNB_RPC)) {
+      const { method, params } = JSON.parse(String(init!.body)) as { method: string; params: unknown[] };
+      const m = opts.bnbRpc;
+      m?.calls?.push(method);
+      const result =
+        method === "eth_chainId" ? (m?.chainId ?? "0x38")
+        : method === "eth_getTransactionByHash" ? (m?.tx ?? null)
+        : method === "eth_getTransactionReceipt" ? (m?.receipt ?? null)
+        : method === "eth_call" && (params[0] as { data: string }).data === "0x313ce567" ? `0x${(m?.decimals ?? 18).toString(16).padStart(64, "0")}`
+        : null;
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), { status: 200, headers: { "content-type": "application/json" } });
+    }
     if (init?.method === "POST") {
       return new Response(JSON.stringify({ result: opts.solTx ?? null }), { status: 200, headers: { "content-type": "application/json" } });
     }
@@ -46,11 +67,11 @@ function depositFetch(opts: { solTx?: unknown; bsTx?: unknown; bsTransfers?: unk
 }
 
 async function makeBountyApp(fetchImpl: typeof fetch, eth: FakeProvider, sol: FakeProvider, over: Partial<Config> = {}) {
-  const config = { ...loadConfig({ NODE_ENV: "test" } as NodeJS.ProcessEnv), dbPath: ":memory:", depositWallets: { solana: SOL_WALLET, ethereum: ETH_WALLET, bitcoin: BTC_WALLET }, ...over };
+  const config = { ...loadConfig({ NODE_ENV: "test" } as NodeJS.ProcessEnv), dbPath: ":memory:", bnbRpcUrl: BNB_RPC, depositWallets: { solana: SOL_WALLET, ethereum: ETH_WALLET, bnb: BNB_WALLET, bitcoin: BTC_WALLET }, ...over };
   const db = openDb(":memory:");
   const { app } = await buildApp(config, {
     db,
-    providers: { ethereum: eth, solana: sol },
+    providers: { ethereum: eth, solana: sol, bnb: new FakeProvider("bnb") },
     prices: new PriceService(db, "https://prices.test", llamaFetch()),
     resolver: async () => [{ address: "10.0.0.5", family: 4 }],
     fetchImpl,
@@ -498,6 +519,109 @@ describe("bounties", () => {
       } finally {
         await close();
       }
+    });
+  });
+  describe("BNB Chain deposits (EVM RPC verification, Ethereum sign-in owns the sender)", () => {
+    const HASH = `0x${"d".repeat(64)}`;
+    const wallet = new Wallet("0x" + "8".repeat(64));
+    const sender = wallet.address;
+    const topic = (addr: string) => `0x${"0".repeat(24)}${addr.slice(2).toLowerCase()}`;
+    const TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+    const nativeTx = { to: BNB_WALLET.toLowerCase(), from: sender.toLowerCase(), value: "0x1bc16d674ec80000", blockNumber: "0x7b5928e" }; // 2 BNB
+    const tokenTx = (contract: string) => ({
+      tx: { to: contract.toLowerCase(), from: sender.toLowerCase(), value: "0x0", blockNumber: "0x7b5928e" },
+      receipt: { status: "0x1", logs: [{ address: contract.toLowerCase(), topics: [TRANSFER, topic(sender), topic(BNB_WALLET)], data: `0x${(55n * 10n ** 17n).toString(16).padStart(64, "0")}` }] }, // 5.5 at 18 decimals
+    });
+
+    it("native BNB: verified against BNB's own RPC only, recorded on chain bnb by the Ethereum-signed-in sender", async () => {
+      const calls: string[] = [];
+      const { app, close } = await makeBountyApp(depositFetch({ bnbRpc: { tx: nativeTx, receipt: { status: "0x1", logs: [] }, calls } }), new FakeProvider("ethereum"), new FakeProvider("solana"));
+      try {
+        const u = await signupEthereum(app, wallet);
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: HASH });
+        expect(r.statusCode).toBe(201);
+        expect(r.json()).toMatchObject({ chain: "bnb", asset: "native", amount: "2", toWallet: BNB_WALLET, txRef: HASH });
+        expect(calls.sort()).toEqual(["eth_getTransactionByHash", "eth_getTransactionReceipt"]);
+        // Same hash, other letter-casing: still the same real transaction.
+        expect((await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: HASH.toUpperCase().replace("0X", "0x") })).statusCode).toBe(409);
+        expect((await new Client(app).get("/api/bounties/wallets")).json()).toMatchObject({ bnb: BNB_WALLET });
+      } finally {
+        await close();
+      }
+    });
+
+    it("BEP-20 USDT: read off the receipt's Transfer log with the token's real decimals()", async () => {
+      const { app, close } = await makeBountyApp(depositFetch({ bnbRpc: { ...tokenTx(USDT_BSC), decimals: 18 } }), new FakeProvider("ethereum"), new FakeProvider("solana"));
+      try {
+        const u = await signupEthereum(app, wallet);
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: HASH });
+        expect(r.statusCode).toBe(201);
+        expect(r.json()).toMatchObject({ chain: "bnb", asset: { contract: USDT_BSC.toLowerCase() }, amount: "5.5", fromAddress: sender.toLowerCase() });
+      } finally {
+        await close();
+      }
+    });
+
+    it("the allowlists are per chain: Ethereum's USDC contract address counts for nothing on BNB", async () => {
+      const ETH_USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+      const { app, close } = await makeBountyApp(depositFetch({ bnbRpc: tokenTx(ETH_USDC) }), new FakeProvider("ethereum"), new FakeProvider("solana"));
+      try {
+        const u = await signupEthereum(app, wallet);
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: HASH });
+        expect(r.statusCode).toBe(400);
+        expect(r.json().error.message).toMatch(/not in an asset this server tracks/);
+      } finally {
+        await close();
+      }
+    });
+
+    it("sender check: a Solana sign-in, or a different Ethereum wallet, can't record someone's BNB payment", async () => {
+      const { app, close } = await makeBountyApp(depositFetch({ bnbRpc: { tx: nativeTx, receipt: { status: "0x1", logs: [] } } }), new FakeProvider("ethereum"), new FakeProvider("solana"));
+      try {
+        const sol = await signup(app, "bnb-sol-user");
+        const b = (await sol.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const r1 = await sol.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: HASH });
+        expect(r1.statusCode).toBe(403);
+        const other = await signupEthereum(app, new Wallet("0x" + "9".repeat(64)));
+        const r2 = await other.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: HASH });
+        expect(r2.statusCode).toBe(403);
+        expect(r2.json().error.message).toMatch(/wasn't sent from your connected wallet/);
+      } finally {
+        await close();
+      }
+    });
+
+    it("a failed receipt, a malformed hash and a missing BNB wallet are each refused clearly", async () => {
+      const { app, close } = await makeBountyApp(depositFetch({ bnbRpc: { tx: nativeTx, receipt: { status: "0x0", logs: [] } } }), new FakeProvider("ethereum"), new FakeProvider("solana"));
+      try {
+        const u = await signupEthereum(app, wallet);
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        expect((await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: HASH })).json().error.message).toMatch(/didn't succeed on-chain/);
+        expect((await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: "0x1234" })).json().error.message).toMatch(/real BNB Chain transaction hash/);
+      } finally {
+        await close();
+      }
+      const none = await makeBountyApp(depositFetch({}), new FakeProvider("ethereum"), new FakeProvider("solana"), { depositWallets: { ethereum: ETH_WALLET } });
+      try {
+        expect((await new Client(none.app).get("/api/bounties/wallets")).json()).toEqual({ ethereum: ETH_WALLET });
+        const u = await signupEthereum(none.app, wallet);
+        const b = (await u.post("/api/bounties", { title: "T", description: "D", reward: "R" })).json();
+        const r = await u.post(`/api/bounties/${b.id}/deposits`, { chain: "bnb", txRef: HASH });
+        expect(r.statusCode).toBe(400);
+        expect(r.json().error.message).toMatch(/no bnb deposit wallet/i);
+      } finally {
+        await none.close();
+      }
+    });
+
+    it("config: DEPOSIT_WALLET_BNB and BNB's own allowlist (BEP-20 USDC/USDT by default, extendable)", () => {
+      const c = loadConfig({ NODE_ENV: "test", DEPOSIT_WALLET_BNB: ` ${BNB_WALLET} `, DEPOSIT_ALLOWED_TOKENS_BNB: "0x1111111111111111111111111111111111111111" } as NodeJS.ProcessEnv);
+      expect(c.depositWallets.bnb).toBe(BNB_WALLET);
+      expect([...c.depositAllowedTokens.bnb].sort()).toEqual(["0x1111111111111111111111111111111111111111", USDT_BSC, "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d"].sort());
+      expect(c.depositAllowedTokens.ethereum.has(USDT_BSC)).toBe(false);
     });
   });
 });

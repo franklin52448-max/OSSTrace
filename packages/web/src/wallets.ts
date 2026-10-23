@@ -70,6 +70,40 @@ async function fetchErc20Decimals(provider: EthereumProvider, contract: string):
   return Number(BigInt(result));
 }
 
+/**
+ * EIP-3326/EIP-3085 parameters for each EVM chain a deposit can be sent on. One injected wallet
+ * (MetaMask etc.) serves both, but it sends on whichever network it's currently set to -- a "BNB"
+ * deposit sent while it's on Ethereum would land on Ethereum and never verify against BNB, and the
+ * reverse. So the wallet is moved to the right network before anything is sent.
+ */
+const EVM_NETWORKS = {
+  ethereum: { chainId: "0x1", chainName: "Ethereum" },
+  bnb: {
+    chainId: "0x38",
+    chainName: "BNB Smart Chain",
+    nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
+    rpcUrls: ["https://bsc-dataseed.bnbchain.org"],
+    blockExplorerUrls: ["https://bscscan.com"],
+  },
+} as const;
+
+const onNetwork = async (provider: EthereumProvider, chainId: string) => BigInt((await provider.request({ method: "eth_chainId" })) as string) === BigInt(chainId);
+
+/** Puts the wallet on `chain`'s network (asking it to add BNB Smart Chain first if it doesn't know
+ *  it -- error 4902), and refuses to continue unless it really is there afterwards. */
+export async function switchEvmNetwork(provider: EthereumProvider, chain: keyof typeof EVM_NETWORKS): Promise<void> {
+  const net = EVM_NETWORKS[chain];
+  if (await onNetwork(provider, net.chainId)) return;
+  try {
+    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: net.chainId }] });
+  } catch (cause) {
+    const code = (cause as { code?: unknown } | null)?.code;
+    if (code !== 4902 || !("rpcUrls" in net)) throw cause;
+    await provider.request({ method: "wallet_addEthereumChain", params: [net] });
+  }
+  if (!(await onNetwork(provider, net.chainId))) throw new Error(`your wallet is on a different network -- switch it to ${net.chainName} and try again`);
+}
+
 export async function sendEthereumNative(provider: EthereumProvider, from: string, to: string, amountEth: string): Promise<WalletSendResult> {
   const value = `0x${parseDecimalAmount(amountEth, 18).toString(16)}`;
   const txRef = (await provider.request({ method: "eth_sendTransaction", params: [{ from, to, value }] })) as string;

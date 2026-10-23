@@ -2,6 +2,11 @@
 // never holds or moves a payout -- a `Deposit` is only ever independently-checked evidence that a
 // specific, real transaction paid the configured public wallet, re-checkable by anyone.
 //
+// BNB Smart Chain is verified exactly like Ethereum's RPC path (verifyEvmDepositViaRpc below): same
+// transaction/receipt JSON-RPC shapes, same ERC-20 Transfer event topic, same 18-decimal native coin.
+// Unlike Ethereum it always has an RPC -- BNB Chain's own public endpoint is the zero-config default
+// (config.ts's bnbRpcUrl) -- so there is no REST fallback to need.
+//
 // Ethereum has two verification paths now. When a dedicated `ETH_RPC_URL` is configured (see
 // config.ts), deposits are checked via real `eth_getTransactionByHash`/`eth_getTransactionReceipt`
 // JSON-RPC calls -- the same approach the old standalone @osstrace/bounties service originally
@@ -33,7 +38,7 @@ const ETH_TX_HASH_FORMAT = /^0x[0-9a-fA-F]{64}$/;
 const sameAddress = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 /** The real USDC/USDT mint (Solana) and contract (Ethereum) addresses -- not this project's own
- * invention. `verifySolanaDeposit`/`verifyEthereumDeposit` only count a token deposit toward a
+ * invention. `verifySolanaDeposit`/`verifyEthereumDeposit` (and `verifyBnbDeposit`, with its own BEP-20 list) only count a token deposit toward a
  * bounty when its asset is on this list (native SOL/ETH is always allowed): without it, anyone can
  * deploy a worthless token, send a huge raw amount of it to the deposit wallet for a fraction of a
  * cent, and have it show as a "verified" deposit chip indistinguishable from a real one -- "verified"
@@ -43,11 +48,17 @@ export const DEFAULT_ALLOWED_TOKENS_ETHEREUM = new Set<string>([
   "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC
   "0xdAC17F958D2ee523a2206206994597C13D831ec7", // USDT
 ]);
+/** BEP-20 USDC/USDT on BNB Smart Chain: different contracts from their Ethereum namesakes (and 18
+ *  decimals there, not 6 -- the RPC path reads each token's real `decimals()`, so nothing assumes). */
+export const DEFAULT_ALLOWED_TOKENS_BNB = new Set<string>([
+  "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // USDC (Binance-Peg)
+  "0x55d398326f99059fF775485246999027B3197955", // USDT (Binance-Peg BSC-USD)
+]);
 export const DEFAULT_ALLOWED_TOKENS_SOLANA = new Set<string>([
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
   "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
 ]);
-const isAllowedEthToken = (allowed: Set<string>, contract: string) => [...allowed].some((a) => sameAddress(a, contract));
+const isAllowedEvmToken = (allowed: Set<string>, contract: string) => [...allowed].some((a) => sameAddress(a, contract));
 
 /** The real, public SPL Memo program -- not this project's own invention. */
 const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
@@ -223,7 +234,7 @@ async function verifyEthereumDepositViaBlockscout(http: HttpClient, blockscoutUr
   }
   const candidates = transfers.items.filter((t) => t.to && sameAddress(t.to.hash, wallet) && t.total?.value);
   if (candidates.length === 0) return { ok: false, reason: "wrong_wallet" };
-  const match = candidates.find((t) => isAllowedEthToken(allowedTokens, t.token.address_hash));
+  const match = candidates.find((t) => isAllowedEvmToken(allowedTokens, t.token.address_hash));
   if (!match) return { ok: false, reason: "unsupported_asset" };
   return {
     ok: true,
@@ -263,13 +274,15 @@ async function fetchDecimals(http: HttpClient, rpcUrl: string, contract: string,
 }
 
 /**
- * Ethereum, via a dedicated RPC (`eth_getTransactionByHash`/`eth_getTransactionReceipt`/`eth_call`)
- * when `ETH_RPC_URL` is configured -- faster and more reliable than the public Blockscout fallback
- * under load. A native transfer is read off the transaction's own `value`/`to`; an ERC-20 deposit
- * is read off the real Transfer event log in the transaction's receipt, with the token's real
- * decimals resolved via its own `decimals()`.
+ * Any EVM chain, via its JSON-RPC (`eth_getTransactionByHash`/`eth_getTransactionReceipt`/`eth_call`):
+ * Ethereum when `ETH_RPC_URL` is configured (faster and more reliable than the public Blockscout
+ * fallback under load), and always BNB Smart Chain. Nothing in here is chain-specific -- the tx and
+ * receipt shapes, the Transfer topic and an 18-decimal native coin are the same on both -- so the
+ * chain is decided entirely by which `rpcUrl` the caller passes. A native transfer is read off the
+ * transaction's own `value`/`to`; a token deposit is read off the real Transfer event log in the
+ * transaction's receipt, with the token's real decimals resolved via its own `decimals()`.
  */
-async function verifyEthereumDepositViaRpc(http: HttpClient, rpcUrl: string, txHash: string, wallet: string, allowedTokens: Set<string>, budget: Budget): Promise<DepositVerification> {
+async function verifyEvmDepositViaRpc(http: HttpClient, rpcUrl: string, txHash: string, wallet: string, allowedTokens: Set<string>, budget: Budget): Promise<DepositVerification> {
   let tx: EthRpcTx;
   let receipt: EthRpcReceipt;
   try {
@@ -289,7 +302,7 @@ async function verifyEthereumDepositViaRpc(http: HttpClient, rpcUrl: string, txH
 
   const candidates = receipt.logs.filter((l) => l.topics[0] === ERC20_TRANSFER_TOPIC && l.topics.length === 3 && sameAddress(topicToAddress(l.topics[2]!), wallet));
   if (candidates.length === 0) return { ok: false, reason: "wrong_wallet" };
-  const match = candidates.find((l) => isAllowedEthToken(allowedTokens, l.address));
+  const match = candidates.find((l) => isAllowedEvmToken(allowedTokens, l.address));
   if (!match) return { ok: false, reason: "unsupported_asset" };
   const decimals = await fetchDecimals(http, rpcUrl, match.address, budget);
   return {
@@ -304,8 +317,16 @@ export async function verifyEthereumDeposit(http: HttpClient, blockscoutUrl: str
   if (!wallet) return { ok: false, reason: "not_configured" };
   if (!ETH_TX_HASH_FORMAT.test(txHash)) return { ok: false, reason: "malformed_reference" };
   return ethRpcUrl
-    ? verifyEthereumDepositViaRpc(http, ethRpcUrl, txHash, wallet, allowedTokens, budget)
+    ? verifyEvmDepositViaRpc(http, ethRpcUrl, txHash, wallet, allowedTokens, budget)
     : verifyEthereumDepositViaBlockscout(http, blockscoutUrl, txHash, wallet, allowedTokens, budget);
+}
+
+/** BNB Smart Chain: the same EVM RPC verification as Ethereum's, against `bnbRpcUrl`, with BNB's own
+ *  token allowlist (Ethereum's USDC/USDT contract addresses mean nothing on chain 56). */
+export async function verifyBnbDeposit(http: HttpClient, bnbRpcUrl: string, txHash: string, wallet: string | undefined, allowedTokens: Set<string>, budget: Budget): Promise<DepositVerification> {
+  if (!wallet) return { ok: false, reason: "not_configured" };
+  if (!ETH_TX_HASH_FORMAT.test(txHash)) return { ok: false, reason: "malformed_reference" };
+  return verifyEvmDepositViaRpc(http, bnbRpcUrl, txHash, wallet, allowedTokens, budget);
 }
 
 const BTC_TXID_FORMAT = /^[0-9a-fA-F]{64}$/;

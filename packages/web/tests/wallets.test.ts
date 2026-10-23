@@ -111,6 +111,71 @@ test("sumDecimalAmounts: adds already-formatted decimal strings exactly, inferri
   assert.equal(sumDecimalAmounts([]), "0");
 });
 
+/** An EIP-1193 stand-in whose network actually changes when asked to switch (or add) one. */
+class NetworkWallet {
+  readonly calls: { method: string; params?: unknown[] }[] = [];
+  chainId: string;
+  private readonly knows: string[];
+  private readonly obeys: boolean;
+  // Fields assigned in the body, not as parameter properties: strip-only TypeScript rejects those (LESSONS.md).
+  constructor(chainId: string, knows: string[] = ["0x1"], obeys = true) {
+    this.chainId = chainId;
+    this.knows = knows;
+    this.obeys = obeys;
+  }
+  async request(args: { method: string; params?: unknown[] }): Promise<unknown> {
+    this.calls.push(args);
+    const target = (args.params?.[0] as { chainId?: string } | undefined)?.chainId;
+    if (args.method === "eth_chainId") return this.chainId;
+    if (args.method === "wallet_switchEthereumChain") {
+      if (!this.knows.includes(target!)) throw Object.assign(new Error("Unrecognized chain ID"), { code: 4902 });
+      if (this.obeys) this.chainId = target!;
+      return null;
+    }
+    if (args.method === "wallet_addEthereumChain") {
+      this.knows.push(target!);
+      if (this.obeys) this.chainId = target!;
+      return null;
+    }
+    throw new Error(`NetworkWallet: unexpected ${args.method}`);
+  }
+}
+
+test("switchEvmNetwork: leaves a wallet already on BNB Smart Chain alone", async () => {
+  const { switchEvmNetwork } = await import("../src/wallets.ts");
+  const w = new NetworkWallet("0x38", ["0x1", "0x38"]);
+  await switchEvmNetwork(w, "bnb");
+  assert.deepEqual(w.calls.map((c) => c.method), ["eth_chainId"]);
+});
+
+test("switchEvmNetwork: moves a wallet from Ethereum to BNB (0x38) and back, so a deposit is sent on the chain it's recorded on", async () => {
+  const { switchEvmNetwork } = await import("../src/wallets.ts");
+  const w = new NetworkWallet("0x1", ["0x1", "0x38"]);
+  await switchEvmNetwork(w, "bnb");
+  assert.equal(w.chainId, "0x38");
+  assert.deepEqual(w.calls.find((c) => c.method === "wallet_switchEthereumChain")?.params, [{ chainId: "0x38" }]);
+  await switchEvmNetwork(w, "ethereum");
+  assert.equal(w.chainId, "0x1");
+});
+
+test("switchEvmNetwork: a wallet that has never heard of BNB Smart Chain is asked to add it (EIP-3085), with BNB Chain's real RPC/explorer", async () => {
+  const { switchEvmNetwork } = await import("../src/wallets.ts");
+  const w = new NetworkWallet("0x1");
+  await switchEvmNetwork(w, "bnb");
+  assert.equal(w.chainId, "0x38");
+  const add = w.calls.find((c) => c.method === "wallet_addEthereumChain")?.params?.[0] as { chainId: string; nativeCurrency: { symbol: string; decimals: number }; rpcUrls: string[]; blockExplorerUrls: string[] };
+  assert.equal(add.chainId, "0x38");
+  assert.deepEqual(add.nativeCurrency, { name: "BNB", symbol: "BNB", decimals: 18 });
+  assert.deepEqual(add.rpcUrls, ["https://bsc-dataseed.bnbchain.org"]);
+  assert.deepEqual(add.blockExplorerUrls, ["https://bscscan.com"]);
+});
+
+test("switchEvmNetwork: refuses to go on when the wallet says yes but stays on the wrong network", async () => {
+  const { switchEvmNetwork } = await import("../src/wallets.ts");
+  const w = new NetworkWallet("0x1", ["0x1", "0x38"], false);
+  await assert.rejects(switchEvmNetwork(w, "bnb"), /switch it to BNB Smart Chain/);
+});
+
 test("sendEthereumNative: builds a plain value transfer with the exact wei amount, no data field", async () => {
   const { sendEthereumNative } = await import("../src/wallets.ts");
   const provider = new FakeEthereumProvider();

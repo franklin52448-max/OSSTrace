@@ -6,7 +6,10 @@
 // five chains after it are drawn the same honest way, never a from-memory copy of brand artwork:
 // Arbitrum One a navy disc with a blue ring, OP Mainnet a disc in OP's red, Zora a black disc with a
 // white ring, Lens Chain a disc in Lens's dark green, and the Data Network (formerly Story), whose
-// new branding isn't one to guess at, a neutral grey disc with a "D".
+// new branding isn't one to guess at, a neutral grey disc with a "D". Gnosis Chain, Ronin and
+// Rootstock likewise, each a disc in its brand's general colour family with a ring so none reads as
+// a neighbour's plain disc (Lens's green, Base's blue, the deposit panel's orange Bitcoin "₿"): Gnosis
+// Chain dark green with a cream ring, Ronin blue with a white ring, Rootstock orange with a black ring.
 import { useEffect, useId, useRef, useState } from "react";
 import { CHAIN_NAMES, type Chain } from "@osstrace/contract";
 import { cx } from "./prism/components.tsx";
@@ -23,6 +26,9 @@ export const CHAIN_OPTIONS: readonly { value: Chain; label: string }[] = [
   { value: "zora", label: CHAIN_NAMES.zora },
   { value: "lens", label: CHAIN_NAMES.lens },
   { value: "story", label: CHAIN_NAMES.story },
+  { value: "gnosis", label: CHAIN_NAMES.gnosis },
+  { value: "ronin", label: CHAIN_NAMES.ronin },
+  { value: "rootstock", label: CHAIN_NAMES.rootstock },
 ];
 
 /** Base's brand blue (base.org's "Base Blue"). */
@@ -36,6 +42,12 @@ const OP_RED = "#FF0420";
 const LENS_GREEN = "#00501E";
 /** A neutral grey: no brand colour is claimed for the Data Network. */
 const NEUTRAL_GREY = "#6B7280";
+/** General colour families, not claimed as exact brand values: Gnosis's dark green and cream, Ronin's
+ *  blue, Rootstock's orange. */
+const GNOSIS_GREEN = "#133629";
+const GNOSIS_CREAM = "#F0EBDE";
+const RONIN_BLUE = "#1273EA";
+const ROOTSTOCK_ORANGE = "#FF9100";
 
 /** A plain disc, optionally with an inner ring -- the honest generic mark for a chain whose exact
  *  brand artwork isn't copied here. */
@@ -61,6 +73,9 @@ export function ChainIcon({ chain, size = 18, className }: { chain: Chain; size?
   if (chain === "zora") return <DiscMark fill="#000000" ring="#ffffff" size={size} className={className} />;
   if (chain === "lens") return <DiscMark fill={LENS_GREEN} size={size} className={className} />;
   if (chain === "story") return <DiscMark fill={NEUTRAL_GREY} letter="D" size={size} className={className} />;
+  if (chain === "gnosis") return <DiscMark fill={GNOSIS_GREEN} ring={GNOSIS_CREAM} size={size} className={className} />;
+  if (chain === "ronin") return <DiscMark fill={RONIN_BLUE} ring="#ffffff" size={size} className={className} />;
+  if (chain === "rootstock") return <DiscMark fill={ROOTSTOCK_ORANGE} ring="#000000" size={size} className={className} />;
   if (chain === "base") {
     return (
       <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" className={cx("shrink-0", className)}>

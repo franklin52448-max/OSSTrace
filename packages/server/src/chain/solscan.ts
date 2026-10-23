@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { ProviderError } from "../lib/errors.ts";
 import { HttpClient, type Budget } from "../lib/http.ts";
 import type { RawTransfer, StreamPage } from "./types.ts";
@@ -37,19 +38,22 @@ type SolscanTransferResponse = {
   errors?: { message?: string } | string;
 };
 
-/** One Solscan transfer record -> this project's own RawTransfer shape. `id`'s suffix is derived
- * from the row's own fields (token/amount/from/to), not a call-specific position -- Solscan
+/** One Solscan transfer record -> this project's own RawTransfer shape. `id`'s suffix is a short
+ * hash of the row's own fields (token/amount/from/to), not a call-specific position -- Solscan
  * returns one row per transfer, not per transaction (a tx moving two tokens already appears as
  * two rows, so a plain trans_id isn't unique on its own), and this same row can legitimately be
  * discovered by more than one caller (a page of general history, or a targeted from=/to= fetch for
  * a specific counterparty) that must agree on the same id so the DB's own ON CONFLICT DO NOTHING
- * dedupes it -- a position-based counter that varies by which call found it first does not. */
+ * dedupes it -- a position-based counter that varies by which call found it first does not. A
+ * hash rather than the raw fields themselves: a real signature plus four raw addresses/amount
+ * concatenated runs past 200 characters, this project's own cap on a transfer id elsewhere (the
+ * Tracer's edge-transfer schema) -- confirmed live, a real "add transfers" op was rejected by it. */
 export function normalizeSolscanTransfer(t: SolscanTransfer): RawTransfer | null {
   if (!t.trans_id || !t.from_address || !t.to_address || t.block_time == null) return null;
   const amountRaw = typeof t.amount === "number" ? Math.trunc(t.amount).toString() : t.amount;
   if (!/^\d+$/.test(amountRaw)) return null;
   const native = t.token_address === SOLSCAN_NATIVE_SOL_PLACEHOLDER;
-  const suffix = `${t.token_address}_${amountRaw}_${t.from_address}_${t.to_address}`;
+  const suffix = createHash("sha256").update(`${t.token_address}_${amountRaw}_${t.from_address}_${t.to_address}`).digest("hex").slice(0, 16);
   return {
     chain: "solana",
     id: `${t.trans_id}_${suffix}`,

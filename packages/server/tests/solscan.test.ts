@@ -65,13 +65,33 @@ describe("normalizeSolscanTransfer (real shape, confirmed against the live API)"
   it("the id is derived from the row's own fields, not call position -- two different legs of the same tx get different, stable ids", () => {
     const leg1 = { trans_id: "same-sig", block_id: 1, block_time: 1, activity_type: "ACTIVITY_SPL_TRANSFER", from_address: "a", to_address: "b", token_address: "m", token_decimals: 6, amount: 1, flow: "in" as const };
     const leg2 = { ...leg1, token_address: "n" };
-    expect(normalizeSolscanTransfer(leg1)!.id).toBe("same-sig_m_1_a_b");
-    expect(normalizeSolscanTransfer(leg2)!.id).toBe("same-sig_n_1_a_b");
+    const id1 = normalizeSolscanTransfer(leg1)!.id;
+    const id2 = normalizeSolscanTransfer(leg2)!.id;
+    expect(id1.startsWith("same-sig_")).toBe(true);
+    expect(id1).not.toBe(id2);
   });
 
   it("the same row normalized twice (e.g. discovered by two different callers) gets the identical id, so the DB's own dedupe catches it", () => {
     const row = { trans_id: "same-sig", block_id: 1, block_time: 1, activity_type: "ACTIVITY_SPL_TRANSFER", from_address: "a", to_address: "b", token_address: "m", token_decimals: 6, amount: 1, flow: "in" as const };
     expect(normalizeSolscanTransfer(row)!.id).toBe(normalizeSolscanTransfer({ ...row })!.id);
+  });
+
+  it("the id stays well under this project's 200-char transfer-id cap even at real Solana signature/address lengths (a real combination once exceeded it)", () => {
+    // Lengths match real Solana values (88-char signature, 44-char base58 addresses) without
+    // using real-looking values themselves, since those can look like leaked credentials.
+    const realLength = {
+      trans_id: "s".repeat(88),
+      block_id: 1,
+      block_time: 1,
+      activity_type: "ACTIVITY_SPL_TRANSFER",
+      from_address: "f".repeat(44),
+      to_address: "t".repeat(44),
+      token_address: "m".repeat(44),
+      token_decimals: 6,
+      amount: 121628501000000,
+      flow: "in" as const,
+    };
+    expect(normalizeSolscanTransfer(realLength)!.id.length).toBeLessThanOrEqual(200);
   });
 });
 

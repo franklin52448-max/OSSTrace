@@ -32,8 +32,13 @@ key behind either one. A chain with no wallet configured simply can't take depos
 
 The primary link between a deposit and a bounty is: a logged-in user, on a specific bounty's page,
 submits the signature/hash of a transaction they just sent. The server then independently verifies
-*that exact transaction* — real RPC, no API key needed (same `ETH_RPC_URL`/`SOLANA_RPC_URL` every
-other feature already uses) — paid the configured wallet a real amount of a real asset.
+*that exact transaction* paid the configured wallet a real amount of a real asset. Solana goes
+through real RPC (`SOLANA_RPC_URL`), no API key needed. Ethereum originally did too, but this
+server was never configured with a dedicated Ethereum RPC URL at the time this ADR was written, so
+verification went through Blockscout's REST API instead — a real, later addition of `ETH_RPC_URL`
+(a dedicated Alchemy endpoint) changed this: Ethereum deposits are now verified via real RPC too
+when that's configured, falling back to Blockscout automatically when it isn't (zero-config
+self-hosting stays intact either way). See `packages/server/src/chain/deposits.ts`.
 
 A memo is included when the chain makes that clean (Solana's Memo program), and recorded if
 present, but it is **not** load-bearing for correlation. Reasons:

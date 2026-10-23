@@ -7,6 +7,7 @@ import { formatUsd, shortAddress } from "../kit/format.ts";
 import { formatRelative } from "../panels/parts.tsx";
 import { nodeTitle } from "./canvas/NodeCard.tsx";
 import type { EdgeSummary } from "./lib/edges.ts";
+import { ChainIcon } from "../ChainSelect.tsx";
 
 const NOTES_DEBOUNCE_MS = 1500;
 
@@ -139,9 +140,9 @@ export const Sidebar = memo(function Sidebar(props: {
                       <li key={n.id} data-row-id={n.id} className="[content-visibility:auto] [contain-intrinsic-size:auto_48px]">
                         <button type="button" aria-pressed={sel} onClick={(e) => props.onSelectNode(n, e.shiftKey)} title={addr ?? t}
                           className={cn("kit-fade flex h-12 w-full items-center gap-2.5 px-3 text-left hover:bg-surface-2", sel && "bg-accent-soft hover:bg-accent-soft")}>
-                          <span aria-hidden className={cn("kit-node-tile flex size-7 shrink-0 items-center justify-center rounded-[5px]", n.kind === "entity" ? "text-[12px] font-semibold text-text" : "kit-mono text-[11px] font-semibold tracking-[0.02em]")}
+                          <span aria-hidden className={cn("kit-node-tile flex size-7 shrink-0 items-center justify-center rounded-[5px]", n.kind === "entity" && "text-[12px] font-semibold text-text")}
                             style={n.color ? { color: `var(--trace-node-${n.color})`, borderColor: `color-mix(in srgb, var(--trace-node-${n.color}) 50%, transparent)`, background: `color-mix(in srgb, var(--trace-node-${n.color}) 16%, var(--trace-surface))` } : undefined}>
-                            {n.kind === "entity" ? (n.displayEntity?.name ?? "E").slice(0, 1).toUpperCase() : n.chain === "solana" ? "SOL" : "ETH"}
+                            {n.kind === "entity" ? (n.displayEntity?.name ?? "E").slice(0, 1).toUpperCase() : <ChainIcon chain={n.chain === "solana" ? "solana" : "ethereum"} size={15} />}
                           </span>
                           <span className="flex min-w-0 flex-1 flex-col">
                             <span className={cn("truncate text-[13px] leading-snug", mono ? "kit-mono text-[12px]" : "font-medium")}>{mono ? shortAddress(t, 8, 6) : t}</span>

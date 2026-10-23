@@ -4,6 +4,7 @@ import { cn } from "../../kit/cn.ts";
 import { formatUsd, shortAddress } from "../../kit/format.ts";
 import { useBalances } from "../api.ts";
 import { NODE_WIDTH, nodeSize, type Viewport } from "../lib/viewport.ts";
+import { ChainIcon } from "../../ChainSelect.tsx";
 
 export const NODE_COLORS: { value: NodeColor; label: string }[] = [
   { value: "blue", label: "Blue" },
@@ -31,10 +32,9 @@ export function nodeTitle(n: TraceNode): { title: string; mono: boolean } {
 
 function Avatar({ node }: { node: TraceNode }) {
   const entity = node.kind === "entity";
-  const text = entity ? (node.displayEntity?.name ?? "E").slice(0, 1).toUpperCase() : node.chain === "solana" ? "SOL" : "ETH";
   return (
-    <span aria-hidden className={cn("kit-node-tile flex size-10 shrink-0 items-center justify-center rounded-[7px]", entity ? "text-[16px] font-semibold" : "kit-mono text-[11px] font-semibold tracking-[0.04em]")}>
-      {text}
+    <span aria-hidden className={cn("kit-node-tile flex size-10 shrink-0 items-center justify-center rounded-[7px]", entity && "text-[16px] font-semibold")}>
+      {entity ? (node.displayEntity?.name ?? "E").slice(0, 1).toUpperCase() : <ChainIcon chain={node.chain === "solana" ? "solana" : "ethereum"} size={20} />}
     </span>
   );
 }

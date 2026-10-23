@@ -14,6 +14,7 @@ import { TransferTable, type TransferRowActions } from "../panels/TransferTable.
 import { useEntity } from "./api.ts";
 import { nodeTitle } from "./canvas/NodeCard.tsx";
 import { edgesBetween } from "./lib/ops.ts";
+import { ChainIcon } from "../ChainSelect.tsx";
 
 export type InspectorController = {
   readOnly: boolean;
@@ -102,8 +103,8 @@ export function NodeHeading({ node }: { node: TraceNode }) {
   const addr = node.address ?? node.displayAddress?.address;
   return (
     <>
-      <span aria-hidden className={cn("kit-node-tile flex size-7 shrink-0 items-center justify-center rounded-[5px]", node.kind === "entity" ? "text-[12px] font-semibold text-text" : "kit-mono text-[11px] font-semibold tracking-[0.02em]")}>
-        {node.kind === "entity" ? (node.displayEntity?.name ?? "E").slice(0, 1).toUpperCase() : node.chain === "solana" ? "SOL" : "ETH"}
+      <span aria-hidden className={cn("kit-node-tile flex size-7 shrink-0 items-center justify-center rounded-[5px]", node.kind === "entity" && "text-[12px] font-semibold text-text")}>
+        {node.kind === "entity" ? (node.displayEntity?.name ?? "E").slice(0, 1).toUpperCase() : <ChainIcon chain={node.chain === "solana" ? "solana" : "ethereum"} size={15} />}
       </span>
       <span className="flex min-w-0 flex-col">
         <span className={cn("truncate leading-tight", mono && "kit-mono text-[12.5px] font-medium")}>{mono ? shortAddress(title, 8, 6) : title}</span>

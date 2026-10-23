@@ -1,20 +1,11 @@
-import type { TraceEdge, TraceNode, TraceOp } from "@osstrace/contract";
+import type { TraceOp, TracerAgentChatRequest, TracerAgentChatResponse, TracerAgentScratchDoc, TracerAgentStatus, TracerAgentToolCall } from "@osstrace/contract";
 import { api, ApiRequestError } from "../../kit/api.ts";
 
-// Mirrors @osstrace/contract's Tracer agent types (POST /api/tracer-agent/chat, GET .../status).
-export type AgentScratchDoc = { title: string; notes: string; nodes: TraceNode[]; edges: TraceEdge[] };
-export type AgentToolCall = { tool: string; args: Record<string, unknown>; result: Record<string, unknown> };
-export type AgentChatResponse = {
-  reply: string;
-  toolCalls: AgentToolCall[];
-  /** null when signed in (unlimited); otherwise this browser's remaining free messages. */
-  messagesRemaining: number | null;
-  /** Every op the agent applied this turn, in order. */
-  ops: TraceOp[];
-  /** The trace after this turn (server's view). */
-  doc: AgentScratchDoc & { shareable: boolean };
-};
-export type AgentStatus = { configured: boolean; signedIn: boolean; messageLimit: number | null; messagesRemaining: number | null };
+// POST /api/tracer-agent/chat and GET /api/tracer-agent/status -- see @osstrace/contract's api.ts.
+export type AgentScratchDoc = TracerAgentScratchDoc;
+export type AgentToolCall = TracerAgentToolCall;
+type AgentChatResponse = TracerAgentChatResponse;
+export type AgentStatus = TracerAgentStatus;
 
 /** Free messages a visitor without a wallet gets, used only until the server has said its own number. */
 export const ANON_MESSAGE_LIMIT = 5;
@@ -38,7 +29,8 @@ export const getAgentStatus = () => api<AgentStatus>("/tracer-agent/status");
  */
 export async function sendAgentMessage(docId: string, message: string, doc?: AgentScratchDoc): Promise<AgentChatOutcome> {
   try {
-    const r = await api<Partial<AgentChatResponse> | null>("/tracer-agent/chat", { method: "POST", json: doc ? { docId, message, doc } : { docId, message } });
+    const body: TracerAgentChatRequest = doc ? { docId, message, doc } : { docId, message };
+    const r = await api<Partial<AgentChatResponse> | null>("/tracer-agent/chat", { method: "POST", json: body });
     if (!r || typeof r.reply !== "string") return { kind: "error", message: "The agent sent back a response this page can't read." };
     const toolCalls = (Array.isArray(r.toolCalls) ? r.toolCalls : []).filter((c): c is AgentToolCall => !!c && typeof c.tool === "string").map((c) => ({ tool: c.tool, args: obj(c.args), result: obj(c.result) }));
     const ops = Array.isArray(r.ops) ? r.ops.filter((o): o is TraceOp => !!o && typeof o === "object" && typeof (o as { type?: unknown }).type === "string") : [];

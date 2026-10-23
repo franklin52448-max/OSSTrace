@@ -1,8 +1,8 @@
-import { Fragment, lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { Fragment, lazy, Suspense, useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import { BOUNTY_DIFFICULTIES, BOUNTY_TAGS, type Bounty, type BountyDifficulty, type BountySubmission, type BountyTag, type CreateBounty } from "@osstrace/contract";
 import { serverApiCall, useServerSession } from "./serverSession.ts";
 import { EmptyState, Loading, Notice, PageHeader, SignInPrompt } from "./ui.tsx";
-import { Checkbox, cx } from "./prism/components.tsx";
+import { Checkbox, cx, Text } from "./prism/components.tsx";
 import {
   applyQuery,
   assetDescription,
@@ -37,6 +37,8 @@ const STATUS_CLASS: Record<BountyStatus, string> = {
 };
 const STATUS_FILTER_TEXT: Record<StatusFilter, string> = { ...STATUS_TEXT, all: "All" };
 
+const ADR_BASE = "https://github.com/OpenTraceIntelligence/OSSTrace/blob/main/docs/adr";
+
 /** Today's date where the viewer is, as the YYYY-MM-DD a date input uses. */
 function todayDate(): string {
   const now = new Date();
@@ -48,14 +50,21 @@ function short(id: string): string {
 }
 
 type ListState = { status: "loading" } | { status: "error"; message: string } | { status: "done"; bounties: Bounty[] };
+type Tab = "browse" | "create";
 
+/**
+ * Three states, each its own clear screen: Browse (the filterable list), Open a bounty (the
+ * create form, its own tab beside Browse -- signed-in only, same as before), and one bounty's
+ * detail view (reached from Browse, with its own way back).
+ */
 export default function BountiesView() {
   const session = useServerSession();
   const signedIn = session.status === "signed-in";
   const [list, setList] = useState<ListState>({ status: "loading" });
-  const [showOpenForm, setShowOpenForm] = useState(false);
+  const [tab, setTab] = useState<Tab>("browse");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState<BoardQuery>(DEFAULT_QUERY);
+  const [justOpened, setJustOpened] = useState<Bounty | null>(null);
 
   // Once the board has loaded, later refreshes (after a claim, a cancel, a new deposit) swap the
   // data in place instead of blanking the page back to a spinner.
@@ -72,53 +81,41 @@ export default function BountiesView() {
     void load();
   }, [load]);
 
+  // Signing out while on the create tab drops back to Browse (the create tab is signed-in only).
+  const activeTab: Tab = signedIn ? tab : "browse";
   const selected = list.status === "done" ? list.bounties.find((b) => b.id === selectedId) ?? null : null;
+  const openCount = list.status === "done" ? statusCounts(list.bounties).open : null;
+  const tabIds = { browse: useId(), create: useId() };
+
+  function select(id: string): void {
+    setJustOpened(null);
+    setSelectedId(id);
+  }
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-5">
+    <div className="mx-auto w-full max-w-6xl space-y-5">
       <PageHeader
         title="Bounties"
         description={
           <>
             Fund a feature with a spec and your own stated reward. This board tracks the work; rewards are paid off-platform (
-            <a
-              href="https://github.com/OpenTraceIntelligence/OSSTrace/blob/main/docs/adr/0009-bounty-program-v1-is-tracking-only.md"
-              target="_blank"
-              rel="noreferrer"
-              className="underline decoration-line-strong underline-offset-2 hover:text-ink"
-            >
+            <a href={`${ADR_BASE}/0009-bounty-program-v1-is-tracking-only.md`} target="_blank" rel="noreferrer" className="underline decoration-line-strong underline-offset-2 hover:text-ink">
               ADR 0009
             </a>
             ).
           </>
         }
         actions={
-          !selected && (
-            <>
-              <button type="button" onClick={() => void load()} disabled={refreshing} className="btn-outline">
-                {refreshing ? "Refreshing…" : "Refresh"}
-              </button>
-              {signedIn && (
-                <button type="button" onClick={() => setShowOpenForm((v) => !v)} className="btn-accent">
-                  {showOpenForm ? "Cancel" : "Open a bounty"}
-                </button>
-              )}
-            </>
+          !selected &&
+          activeTab === "browse" && (
+            <button type="button" onClick={() => void load()} disabled={refreshing} className="btn-outline">
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
           )
         }
       />
 
       {!signedIn && <SignInPrompt>Log in to open a bounty or submit a PR. Anyone can browse.</SignInPrompt>}
-
-      {showOpenForm && signedIn && (
-        <OpenBountyForm
-          onOpened={() => {
-            setShowOpenForm(false);
-            setQuery(DEFAULT_QUERY); // a fresh bounty is open: make sure the filters don't hide it
-            void load();
-          }}
-        />
-      )}
 
       {selected ? (
         <BountyDetail
@@ -130,37 +127,112 @@ export default function BountiesView() {
           onChanged={load}
         />
       ) : (
-        <BountyList list={list} query={query} onQueryChange={setQuery} onSelect={setSelectedId} />
+        <>
+          {signedIn && (
+            <div role="tablist" aria-label="Bounties" className="flex border-b border-line">
+              <button
+                type="button"
+                role="tab"
+                id={tabIds.browse}
+                aria-selected={activeTab === "browse"}
+                data-state={activeTab === "browse" ? "active" : "inactive"}
+                onClick={() => setTab("browse")}
+                className="kit-ptab"
+              >
+                Browse bounties
+                {openCount !== null && <span className="num font-normal text-ink-faint">{openCount} open</span>}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id={tabIds.create}
+                aria-selected={activeTab === "create"}
+                data-state={activeTab === "create" ? "active" : "inactive"}
+                onClick={() => setTab("create")}
+                className="kit-ptab"
+              >
+                Open a bounty
+              </button>
+            </div>
+          )}
+
+          {/* Kept mounted (just hidden) while browsing, so a half-written bounty survives a look at the list. */}
+          {signedIn && (
+            <div role="tabpanel" aria-labelledby={tabIds.create} hidden={activeTab !== "create"}>
+              <CreateBountyPanel
+                onOpened={(bounty) => {
+                  setJustOpened(bounty);
+                  setQuery(DEFAULT_QUERY); // a fresh bounty is open: make sure the filters don't hide it
+                  setTab("browse");
+                  void load();
+                }}
+              />
+            </div>
+          )}
+          {activeTab === "browse" && (
+            <div role={signedIn ? "tabpanel" : undefined} aria-labelledby={signedIn ? tabIds.browse : undefined} className="space-y-4">
+              {justOpened && (
+                <Notice tone="success" className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    Opened “{justOpened.title}”. Share it, or back it with a verified deposit from its page.
+                  </span>
+                  <button type="button" onClick={() => select(justOpened.id)} className="btn-outline">
+                    View bounty
+                  </button>
+                </Notice>
+              )}
+              <BountyList list={list} query={query} onQueryChange={setQuery} onSelect={select} onCreate={signedIn ? () => setTab("create") : undefined} />
+            </div>
+          )}
+        </>
       )}
     </div>
   );
 }
+
+// --- Browse ----------------------------------------------------------------------------------------
 
 function BountyList({
   list,
   query,
   onQueryChange,
   onSelect,
+  onCreate,
 }: {
   list: ListState;
   query: BoardQuery;
   onQueryChange: (query: BoardQuery) => void;
   onSelect: (id: string) => void;
+  onCreate?: () => void;
 }) {
   if (list.status === "loading") return <Loading />;
   if (list.status === "error") return <Notice tone="danger">{list.message}</Notice>;
   if (list.bounties.length === 0) {
-    return <EmptyState title="No bounties yet">The first one could be yours: describe a feature and what you'd offer for it.</EmptyState>;
+    return (
+      <EmptyState
+        title="No bounties yet"
+        action={
+          onCreate && (
+            <button type="button" onClick={onCreate} className="btn-accent">
+              Open the first one
+            </button>
+          )
+        }
+      >
+        The first one could be yours: describe a feature and what you'd offer for it.
+      </EmptyState>
+    );
   }
   const counts = statusCounts(list.bounties);
   const assets = boardAssets(list.bounties);
   // A "most funded in X" sort whose asset no longer appears anywhere on the board falls back to newest.
   const sort: BountySort = query.sort.startsWith("funded:") && !assets.some((a) => `funded:${a.key}` === query.sort) ? "newest" : query.sort;
   const shown = applyQuery(list.bounties, { ...query, sort });
+  const narrowed = hasNarrowingFilters(query);
 
   return (
     <section aria-label="Bounty list" className="card overflow-hidden">
-      <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-3">
         <div role="group" aria-label="Filter by status" className="inline-flex h-9 items-center rounded-ctl bg-raised p-0.5">
           {STATUS_FILTERS.map((s) => (
             <button
@@ -192,9 +264,9 @@ function BountyList({
           </select>
         </label>
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-4 py-2.5">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-line bg-raised/40 px-5 py-2.5">
         <div role="group" aria-label="Filter by tag" className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-xs text-ink-faint">Tags</span>
+          <span className="section-title mr-1">Tags</span>
           {BOUNTY_TAGS.map((t) => {
             const on = query.tags.includes(t);
             return (
@@ -210,8 +282,8 @@ function BountyList({
             );
           })}
         </div>
-        <label className="flex items-center gap-2 text-xs text-ink-faint">
-          Size
+        <label className="flex items-center gap-2">
+          <span className="section-title">Size</span>
           <select
             aria-label="Filter by difficulty"
             value={query.difficulty}
@@ -226,14 +298,17 @@ function BountyList({
             ))}
           </select>
         </label>
-        {hasNarrowingFilters(query) && (
+        <span className="num ml-auto text-xs text-ink-faint" aria-live="polite">
+          {shown.length} {shown.length === 1 ? "bounty" : "bounties"}
+        </span>
+        {narrowed && (
           <button type="button" onClick={() => onQueryChange({ ...query, tags: [], difficulty: "any" })} className="text-xs text-ink-dim underline-offset-2 hover:text-ink hover:underline">
             Clear filters
           </button>
         )}
       </div>
       {shown.length === 0 ? (
-        <div className="px-4 py-10 text-center text-sm text-ink-faint">No bounties match these filters.</div>
+        <div className="px-5 py-12 text-center text-sm text-ink-faint">No bounties match these filters.</div>
       ) : (
         <div className="divide-y divide-line">
           {shown.map((b) => (
@@ -245,13 +320,21 @@ function BountyList({
   );
 }
 
+function StatusChip({ status }: { status: BountyStatus }) {
+  return (
+    <span aria-label="Status" className={`chip shrink-0 border ${STATUS_CLASS[status]}`}>
+      {STATUS_TEXT[status]}
+    </span>
+  );
+}
+
 /** Verified on-chain deposits summed per asset: a checked fact, kept visually apart from the opener's own reward claim. */
 function FundedChips({ bounty }: { bounty: Bounty }) {
   const totals = fundingTotals(bounty.deposits);
   if (totals.length === 0) return null;
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5" aria-label="Verified funding">
-      <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-ink-faint">Funded</span>{" "}
+      <span className="section-title">Funded</span>{" "}
       {totals.map((t, i) => (
         <Fragment key={t.key}>
           {i > 0 && " "}
@@ -299,25 +382,87 @@ function DeadlineText({ bounty }: { bounty: Bounty }) {
 
 function BountyRow({ bounty: b, onSelect }: { bounty: Bounty; onSelect: () => void }) {
   return (
-    <button type="button" onClick={onSelect} className="flex w-full items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors duration-150 hover:bg-raised">
-      <div className="min-w-0 space-y-1.5">
-        <div className="truncate text-sm font-medium text-ink">{b.title}</div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-ink-faint">
-          <span>
-            Reward <span className="num text-ink-dim">{b.reward}</span>
-          </span>
-          <FundedChips bounty={b} />
-          <span>opened {new Date(b.openedAt).toLocaleDateString()}</span>
-          {b.deadline && <DeadlineText bounty={b} />}
-        </div>
+    <button
+      type="button"
+      onClick={onSelect}
+      className="grid w-full gap-x-8 gap-y-3 px-5 py-4 text-left transition-colors duration-150 hover:bg-raised md:grid-cols-[minmax(0,1fr)_minmax(0,17rem)]"
+    >
+      <div className="min-w-0 space-y-2">
+        <div className="truncate text-[15px] font-medium leading-snug text-ink">{b.title}</div>
         <MetaChips bounty={b} />
+        <p className="line-clamp-2 text-xs leading-relaxed text-ink-faint">{b.description}</p>
       </div>
-      <span className={`chip shrink-0 border ${STATUS_CLASS[b.status]}`}>{STATUS_TEXT[b.status]}</span>
+      <div className="flex min-w-0 flex-col items-start gap-2 text-xs md:items-end md:text-right">
+        <StatusChip status={b.status} />
+        <div className="min-w-0 break-words">
+          <span className="section-title">Reward</span> <span className="num text-ink-dim">{b.reward}</span>
+        </div>
+        <FundedChips bounty={b} />
+        <div className="flex flex-wrap gap-x-3 text-ink-faint md:justify-end">
+          {b.deadline && <DeadlineText bounty={b} />}
+          <span>opened {new Date(b.openedAt).toLocaleDateString()}</span>
+        </div>
+      </div>
     </button>
   );
 }
 
-function OpenBountyForm({ onOpened }: { onOpened: () => void }) {
+// --- Create ----------------------------------------------------------------------------------------
+
+function CreateBountyPanel({ onOpened }: { onOpened: (bounty: Bounty) => void }) {
+  return (
+    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <OpenBountyForm onOpened={onOpened} />
+      <aside aria-label="How bounties work" className="card overflow-hidden">
+        <div className="card-header">
+          <Text variant="subheading" tone="primary" className="!text-[15px] font-medium">
+            How bounties work here
+          </Text>
+        </div>
+        <ol className="space-y-3 px-5 py-4 text-sm text-ink-dim">
+          <HowStep n={1}>
+            <span className="text-ink">Your reward is your own promise.</span> It's shown exactly as you write it, never held, parsed or converted here.
+          </HowStep>
+          <HowStep n={2}>
+            <span className="text-ink">Anyone can back it on-chain.</span> Each deposit is independently verified and shown per asset, beside your reward, never in place of it (
+            <a href={`${ADR_BASE}/0020-bounty-funding-via-verified-on-chain-deposits.md`} target="_blank" rel="noreferrer" className="underline decoration-line-strong underline-offset-2 hover:text-ink">
+              ADR 0020
+            </a>
+            ).
+          </HowStep>
+          <HowStep n={3}>
+            <span className="text-ink">You pick the winning PR</span> and mark it claimed; payout happens off-platform, between you and the claimant.
+          </HowStep>
+        </ol>
+      </aside>
+    </div>
+  );
+}
+
+function HowStep({ n, children }: { n: number; children: ReactNode }) {
+  return (
+    <li className="flex gap-3">
+      <span aria-hidden="true" className="num flex size-5 shrink-0 items-center justify-center rounded-full bg-raised text-[11px] font-semibold text-ink-dim">
+        {n}
+      </span>
+      <span className="leading-relaxed">{children}</span>
+    </li>
+  );
+}
+
+function FormSection({ title, hint, children }: { title: string; hint?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="space-y-3 px-5 py-4">
+      <div>
+        <h3 className="section-title">{title}</h3>
+        {hint && <p className="mt-1 text-xs text-ink-faint">{hint}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function OpenBountyForm({ onOpened }: { onOpened: (bounty: Bounty) => void }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [reward, setReward] = useState("");
@@ -351,75 +496,98 @@ function OpenBountyForm({ onOpened }: { onOpened: () => void }) {
     setTags([]);
     setDifficulty("");
     setDeadline("");
-    onOpened();
+    onOpened(res.body);
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card space-y-3 p-4">
-      <h2 className="text-[15px] font-medium text-ink">Open a bounty</h2>
-      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" maxLength={140} required className="ctl w-full" />
-      <textarea
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        placeholder="The feature, in depth: what it does, how it should behave, what &quot;done&quot; looks like. (at least 40 characters)"
-        maxLength={8000}
-        rows={5}
-        required
-        className="ctl w-full"
-      />
-      <input
-        value={reward}
-        onChange={(e) => setReward(e.target.value)}
-        placeholder="Your reward offer, in your own words (e.g. &quot;100,000 tokens, token TBD&quot;)"
-        maxLength={200}
-        required
-        className="ctl w-full"
-      />
-      <p className="text-xs text-ink-faint">
-        Your own promise, not a balance held here: you pay whichever submission you mark claimed, off-platform.
-      </p>
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium text-ink">Tags</legend>
-        <div className="flex flex-wrap gap-x-4 gap-y-2">
-          {BOUNTY_TAGS.map((t) => (
-            <Checkbox key={t} aria-label={`Tag: ${TAG_TEXT[t]}`} checked={tags.includes(t)} onCheckedChange={(on) => setTags((prev) => (on ? [...prev, t] : prev.filter((x) => x !== t)))}>
-              {TAG_TEXT[t]}
-            </Checkbox>
-          ))}
-        </div>
-      </fieldset>
-      <div className="flex flex-wrap items-end gap-4">
-        <label className="space-y-1.5">
-          <span className="block text-sm font-medium text-ink">Size</span>
-          <select aria-label="Difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value as BountyDifficulty)} required className="ctl h-10 py-0">
-            <option value="" disabled>
-              Choose…
-            </option>
-            {BOUNTY_DIFFICULTIES.map((d) => (
-              <option key={d} value={d}>
-                {DIFFICULTY_TEXT[d]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="space-y-1.5">
-          <span className="block text-sm font-medium text-ink">
-            Deadline <span className="font-normal text-ink-faint">(optional)</span>
-          </span>
-          <input type="date" aria-label="Deadline" value={deadline} min={todayDate()} onChange={(e) => setDeadline(e.target.value)} className="ctl h-10 py-0" />
-        </label>
-        {deadline && (
-          <button type="button" onClick={() => setDeadline("")} className="btn-outline h-10">
-            No deadline
-          </button>
-        )}
+    <form onSubmit={handleSubmit} aria-label="Open a bounty" className="card divide-y divide-line overflow-hidden">
+      <div className="card-header">
+        <Text variant="subheading" tag="h2" tone="primary" className="!text-[15px] font-medium">
+          Open a bounty
+        </Text>
       </div>
-      <p className="text-xs text-ink-faint">Leave the deadline empty for an open-ended bounty. It's shown on the board; it never closes the bounty by itself.</p>
-      {error && <Notice tone="danger">{error}</Notice>}
-      <button type="submit" disabled={submitting} className="btn-accent">
-        {submitting ? "Opening…" : "Open bounty"}
-      </button>
+
+      <FormSection title="The work">
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" maxLength={140} required className="ctl w-full" />
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="The feature, in depth: what it does, how it should behave, what &quot;done&quot; looks like. (at least 40 characters)"
+          maxLength={8000}
+          rows={7}
+          required
+          className="ctl w-full"
+        />
+      </FormSection>
+
+      <FormSection title="Reward" hint="Your own promise, not a balance held here: you pay whichever submission you mark claimed, off-platform.">
+        <input
+          value={reward}
+          onChange={(e) => setReward(e.target.value)}
+          placeholder="Your reward offer, in your own words (e.g. &quot;100,000 tokens, token TBD&quot;)"
+          maxLength={200}
+          required
+          className="ctl w-full"
+        />
+      </FormSection>
+
+      <FormSection title="Details" hint="Tags and size help people find work that fits them. Leave the deadline empty for an open-ended bounty; a deadline is shown on the board but never closes the bounty by itself.">
+        <fieldset className="space-y-2">
+          <legend className="mb-2 text-sm font-medium text-ink">Tags</legend>
+          <div className="flex flex-wrap gap-x-5 gap-y-2">
+            {BOUNTY_TAGS.map((t) => (
+              <Checkbox key={t} aria-label={`Tag: ${TAG_TEXT[t]}`} checked={tags.includes(t)} onCheckedChange={(on) => setTags((prev) => (on ? [...prev, t] : prev.filter((x) => x !== t)))}>
+                {TAG_TEXT[t]}
+              </Checkbox>
+            ))}
+          </div>
+        </fieldset>
+        <div className="flex flex-wrap items-end gap-4">
+          <label className="space-y-1.5">
+            <span className="block text-sm font-medium text-ink">Size</span>
+            <select aria-label="Difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value as BountyDifficulty)} required className="ctl h-10 py-0">
+              <option value="" disabled>
+                Choose…
+              </option>
+              {BOUNTY_DIFFICULTIES.map((d) => (
+                <option key={d} value={d}>
+                  {DIFFICULTY_TEXT[d]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1.5">
+            <span className="block text-sm font-medium text-ink">
+              Deadline <span className="font-normal text-ink-faint">(optional)</span>
+            </span>
+            <input type="date" aria-label="Deadline" value={deadline} min={todayDate()} onChange={(e) => setDeadline(e.target.value)} className="ctl h-10 py-0" />
+          </label>
+          {deadline && (
+            <button type="button" onClick={() => setDeadline("")} className="btn-outline h-10">
+              No deadline
+            </button>
+          )}
+        </div>
+      </FormSection>
+
+      <div className="space-y-3 px-5 py-4">
+        {error && <Notice tone="danger">{error}</Notice>}
+        <button type="submit" disabled={submitting} className="btn-accent">
+          {submitting ? "Opening…" : "Open bounty"}
+        </button>
+      </div>
     </form>
+  );
+}
+
+// --- Detail ----------------------------------------------------------------------------------------
+
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0 space-y-1">
+      <dt className="section-title">{label}</dt>
+      <dd className="min-w-0 break-words text-sm text-ink-dim">{children}</dd>
+    </div>
   );
 }
 
@@ -461,94 +629,103 @@ function BountyDetail({ bounty, onBack, onChanged }: { bounty: Bounty; onBack: (
         ← All bounties
       </button>
 
-      <section className="card overflow-hidden">
-        <div className="card-header">
-          <h2 className="truncate text-lg font-semibold tracking-tight text-ink">{bounty.title}</h2>
-          <span className={`chip shrink-0 border ${STATUS_CLASS[bounty.status]}`}>{STATUS_TEXT[bounty.status]}</span>
-        </div>
-        <div className="space-y-3 px-4 py-3 text-sm">
-          <MetaChips bounty={bounty} />
-          {bounty.deadline ? (
-            <div className="text-xs text-ink-faint">
-              <DeadlineText bounty={bounty} />
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="min-w-0 space-y-4">
+          <section aria-label="Bounty" className="card overflow-hidden">
+            <div className="space-y-3 border-b border-line px-5 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <Text variant="heading" tag="h2" tone="primary" className="min-w-0 break-words !text-xl font-semibold tracking-tight">
+                  {bounty.title}
+                </Text>
+                <StatusChip status={bounty.status} />
+              </div>
+              <MetaChips bounty={bounty} />
             </div>
-          ) : (
-            <div className="text-xs text-ink-faint">No deadline: open-ended.</div>
-          )}
-          <p className="whitespace-pre-wrap text-ink-dim">{bounty.description}</p>
-          <div className="text-xs text-ink-faint">
-            Reward <span className="num font-medium text-ink">{bounty.reward}</span> · the poster's own claim, not escrowed
-          </div>
-          <div className="hash text-xs text-ink-faint">
-            opened by {short(bounty.openedBy)} · {new Date(bounty.openedAt).toLocaleString()}
-          </div>
-          {bounty.status === "claimed" && (
-            <div className="rounded-ctl border border-signal/30 bg-signal/10 px-3 py-2 text-xs text-ink">
-              Claimed by <span className="hash">{short(bounty.claimedBy ?? "")}</span> — recorded by the opener on{" "}
-              {bounty.claimedAt && new Date(bounty.claimedAt).toLocaleString()}.
-            </div>
-          )}
-          {bounty.status === "cancelled" && (
-            <div className="rounded-ctl border border-line bg-raised px-3 py-2 text-xs text-ink-dim">Cancelled: {bounty.cancellationReason}</div>
-          )}
-          {bounty.status === "open" && isOpener && (
-            <button type="button" onClick={() => void cancel()} className="btn-outline">
-              Cancel this bounty
-            </button>
-          )}
-        </div>
-      </section>
-
-      {notice && <Notice>{notice}</Notice>}
-      {error && <Notice tone="danger">{error}</Notice>}
-
-      <Suspense fallback={<Loading label="Loading funding…" />}>
-        <DepositPanel bountyId={bounty.id} signedIn={signedIn} />
-      </Suspense>
-
-      {bounty.status === "open" && signedIn && <SubmitPrForm bountyId={bounty.id} onSubmitted={onChanged} />}
-
-      <section className="card overflow-hidden">
-        <div className="card-header">
-          <h2 className="text-[15px] font-medium text-ink">Submissions</h2>
-          <span className="text-xs text-ink-faint">
-            <span className="num">{submissions?.length ?? 0}</span>
-          </span>
-        </div>
-        {submissions === null ? (
-          <div className="px-4 py-3 text-sm text-ink-faint">Loading…</div>
-        ) : submissions.length === 0 ? (
-          <div className="px-4 py-6 text-center text-sm text-ink-faint">No submissions yet.</div>
-        ) : (
-          <ul className="divide-y divide-line px-4">
-            {submissions.map((s) => (
-              <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
-                <div className="min-w-0">
-                  <a href={s.prUrl} target="_blank" rel="noreferrer" className="hash block truncate text-ink hover:underline">
-                    {s.prUrl}
-                  </a>
-                  {s.note && <div className="mt-0.5 truncate text-xs text-ink-faint">{s.note}</div>}
-                  <div className="hash mt-0.5 text-xs text-ink-faint">
-                    {short(s.submittedBy)} · {new Date(s.submittedAt).toLocaleString()}
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span
-                    className={`chip border ${s.outcome === "accepted" ? "border-signal/35 bg-signal/10 text-signal" : s.outcome === "rejected" ? "border-line bg-raised text-ink-faint" : "border-line-strong bg-raised text-ink-dim"}`}
-                  >
-                    {s.outcome}
+            <div className="space-y-4 px-5 py-4 text-sm">
+              <p className="whitespace-pre-wrap leading-relaxed text-ink-dim">{bounty.description}</p>
+              <dl className="grid gap-4 border-t border-line pt-4 sm:grid-cols-2">
+                <Fact label="Reward">
+                  <span className="num font-medium text-ink">{bounty.reward}</span>
+                  <span className="mt-0.5 block text-xs text-ink-faint">The poster's own claim, not escrowed</span>
+                </Fact>
+                <Fact label="Deadline">{bounty.deadline ? <DeadlineText bounty={bounty} /> : "No deadline: open-ended."}</Fact>
+                <Fact label="Opened">
+                  <span className="hash text-xs">
+                    by {short(bounty.openedBy)} · {new Date(bounty.openedAt).toLocaleString()}
                   </span>
-                  {bounty.status === "open" && isOpener && s.outcome === "pending" && (
-                    <button type="button" onClick={() => void claim(s.id)} className="btn-outline">
-                      Mark claimed
-                    </button>
-                  )}
+                </Fact>
+              </dl>
+              {bounty.status === "claimed" && (
+                <div className="rounded-ctl border border-signal/30 bg-signal/10 px-3 py-2 text-xs text-ink">
+                  Claimed by <span className="hash">{short(bounty.claimedBy ?? "")}</span> — recorded by the opener on{" "}
+                  {bounty.claimedAt && new Date(bounty.claimedAt).toLocaleString()}.
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+              )}
+              {bounty.status === "cancelled" && (
+                <div className="rounded-ctl border border-line bg-raised px-3 py-2 text-xs text-ink-dim">Cancelled: {bounty.cancellationReason}</div>
+              )}
+              {bounty.status === "open" && isOpener && (
+                <button type="button" onClick={() => void cancel()} className="btn-outline">
+                  Cancel this bounty
+                </button>
+              )}
+            </div>
+          </section>
+
+          {notice && <Notice>{notice}</Notice>}
+          {error && <Notice tone="danger">{error}</Notice>}
+
+          {bounty.status === "open" && signedIn && <SubmitPrForm bountyId={bounty.id} onSubmitted={onChanged} />}
+
+          <section className="card overflow-hidden">
+            <div className="card-header">
+              <h2 className="text-[15px] font-medium text-ink">Submissions</h2>
+              <span className="text-xs text-ink-faint">
+                <span className="num">{submissions?.length ?? 0}</span>
+              </span>
+            </div>
+            {submissions === null ? (
+              <div className="px-4 py-3 text-sm text-ink-faint">Loading…</div>
+            ) : submissions.length === 0 ? (
+              <div className="px-4 py-6 text-center text-sm text-ink-faint">No submissions yet.</div>
+            ) : (
+              <ul className="divide-y divide-line px-4">
+                {submissions.map((s) => (
+                  <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
+                    <div className="min-w-0">
+                      <a href={s.prUrl} target="_blank" rel="noreferrer" className="hash block truncate text-ink hover:underline">
+                        {s.prUrl}
+                      </a>
+                      {s.note && <div className="mt-0.5 truncate text-xs text-ink-faint">{s.note}</div>}
+                      <div className="hash mt-0.5 text-xs text-ink-faint">
+                        {short(s.submittedBy)} · {new Date(s.submittedAt).toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span
+                        className={`chip border ${s.outcome === "accepted" ? "border-signal/35 bg-signal/10 text-signal" : s.outcome === "rejected" ? "border-line bg-raised text-ink-faint" : "border-line-strong bg-raised text-ink-dim"}`}
+                      >
+                        {s.outcome}
+                      </span>
+                      {bounty.status === "open" && isOpener && s.outcome === "pending" && (
+                        <button type="button" onClick={() => void claim(s.id)} className="btn-outline">
+                          Mark claimed
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+
+        <aside aria-label="Funding" className="min-w-0 space-y-4">
+          <Suspense fallback={<Loading label="Loading funding…" />}>
+            <DepositPanel bountyId={bounty.id} signedIn={signedIn} />
+          </Suspense>
+        </aside>
+      </div>
     </div>
   );
 }

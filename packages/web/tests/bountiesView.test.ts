@@ -5,7 +5,7 @@ import nacl from "tweetnacl";
 import bs58 from "bs58";
 import { act, createElement, type ComponentType } from "react";
 import { window } from "./harness/env.ts";
-import { choose, fill, getByPlaceholder, getControl } from "./harness/forms.ts";
+import { choose, fill, getByPlaceholder, getControl, queryRegion } from "./harness/forms.ts";
 import { cleanup, click, consoleErrors, getButton, render, text, waitFor } from "./harness/render.ts";
 import { startNewServer, type RunningNewServer } from "./harness/newServer.ts";
 
@@ -127,6 +127,13 @@ function row(title: string): HTMLButtonElement | null {
   return [...document.querySelectorAll("button")].find((b) => text(b).trim().startsWith(title)) ?? null;
 }
 
+/** The status chip's text on a board row. */
+function statusOf(r: Element): string {
+  const chip = r.querySelector('[aria-label="Status"]');
+  if (!chip) throw new Error("row has no status chip");
+  return text(chip).trim();
+}
+
 async function openRow(title: string): Promise<void> {
   await click(await waitFor(() => row(title), `the "${title}" row on the board`));
   await waitFor(() => text().includes("← All bounties"), `the "${title}" detail view`);
@@ -201,7 +208,7 @@ test("open two bounties, submit PRs, the opener (not a moderator -- there is no 
   const rows = [row(BETA.title), row(ALPHA.title)];
   assert.ok(rows[0] && rows[1]);
   assert.ok(rows[0].compareDocumentPosition(rows[1]) & window.Node.DOCUMENT_POSITION_FOLLOWING, "Beta (newer) is listed first");
-  assert.ok(text(rows[1]).includes(ALPHA.reward) && text(rows[1]).includes("Open"));
+  assert.ok(text(rows[1]).includes(ALPHA.reward) && statusOf(rows[1]) === "Open");
 
   // 2. Two other wallets submit PRs against Alpha. Neither can claim or cancel.
   await logInAs("solver");
@@ -266,8 +273,8 @@ test("open two bounties, submit PRs, the opener (not a moderator -- there is no 
   await waitFor(() => !row(ALPHA.title) && !row(BETA.title), "both resolved bounties hidden under the default Open filter");
   await showStatus("All");
   // The board shows both outcomes, and the API agrees.
-  assert.match(text(await waitFor(() => row(ALPHA.title), "Alpha's row")).trim(), /Claimed$/);
-  assert.match(text(await waitFor(() => row(BETA.title), "Beta's row")).trim(), /Cancelled$/);
+  assert.equal(statusOf(await waitFor(() => row(ALPHA.title), "Alpha's row")), "Claimed");
+  assert.equal(statusOf(await waitFor(() => row(BETA.title), "Beta's row")), "Cancelled");
   const bounties = (await (await fetch(`${server.url}/api/bounties`)).json()) as { title: string; status: string; cancellationReason?: string }[];
   assert.deepEqual(
     bounties.map((b) => [b.title, b.status]),
@@ -479,7 +486,56 @@ test("Sort by funded amount: ranks by verified SOL deposits only (never the free
   assert.deepEqual(rowOrder(titles), [BIG, NONE]);
   await showStatus("Cancelled");
   assert.deepEqual(rowOrder(titles), [SMALL]);
-  assert.match(text(row(SMALL)!).trim(), /Cancelled$/);
+  assert.equal(statusOf(row(SMALL)!), "Cancelled");
+  assert.deepEqual(consoleErrors, []);
+});
+
+// --- Layout: browse vs. create -------------------------------------------------------------------
+
+function selectedTab(): string | null {
+  const tab = document.querySelector('[role="tab"][aria-selected="true"]');
+  return tab ? text(tab).trim() : null;
+}
+
+test("Layout: browsing and opening a bounty are separate tabs; opening one lands back on Browse with a link straight to it", async () => {
+  await render(createElement(BountiesView));
+  await waitFor(() => queryRegion("Bounty list"), "the board");
+  assert.equal(document.querySelector('[role="tablist"]'), null, "signed out: no create tab at all, just the board");
+
+  await logInAs("layout-opener");
+  await waitFor(() => document.querySelector('[role="tablist"]'), "the tabs once signed in");
+  assert.match(selectedTab() ?? "", /^Browse bounties/);
+
+  // The create tab replaces the list with the form and its explainer -- not a form stacked above the list.
+  await click(getButton("Open a bounty"));
+  assert.equal(selectedTab(), "Open a bounty");
+  assert.equal(queryRegion("Bounty list"), null, "the list isn't on screen while creating");
+  assert.ok(queryRegion("How bounties work"), "the explainer beside the form");
+  assert.ok(document.querySelector('form[aria-label="Open a bounty"]'));
+  assert.equal([...document.querySelectorAll("button")].some((b) => text(b).trim() === "Refresh"), false, "Refresh belongs to Browse");
+
+  // Switching back keeps what was typed (it's the same page, not a reset).
+  await fill(getByPlaceholder("Title"), "Layout check");
+  await click(await waitFor(() => [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((t) => text(t).startsWith("Browse")) ?? null, "the Browse tab"));
+  assert.ok(queryRegion("Bounty list"));
+  await click(getButton("Open a bounty"));
+  assert.equal((getByPlaceholder("Title") as HTMLInputElement).value, "Layout check");
+
+  await fill(getByPlaceholder("The feature, in depth"), ALPHA.description);
+  await fill(getByPlaceholder("Your reward offer"), "R");
+  await click(getControl<HTMLInputElement>("Tag: Other"));
+  await choose(getControl<HTMLSelectElement>("Difficulty"), "small");
+  await click(getButton("Open bounty"));
+  await waitFor(() => row("Layout check"), "the new bounty on the board");
+  assert.match(selectedTab() ?? "", /^Browse bounties/);
+  assert.ok(text().includes("Opened “Layout check”."));
+
+  await click(getButton("View bounty"));
+  await waitFor(() => text().includes("← All bounties"), "the new bounty's own page");
+  assert.equal(document.querySelector('[role="tablist"]'), null, "the detail view is its own state, without the tabs");
+  assert.ok(queryRegion("Funding"), "funding sits in its own column");
+  await backToBoard();
+  assert.ok(!text().includes("Opened “Layout check”."), "the one-time notice is gone once acted on");
   assert.deepEqual(consoleErrors, []);
 });
 

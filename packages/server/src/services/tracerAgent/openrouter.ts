@@ -91,6 +91,10 @@ export function parseCompletion(body: unknown): ChatCompletion {
     | undefined;
   const msg = choice?.message;
   if (!msg || typeof msg !== "object") throw new ProviderError(PROVIDER_ID, "The AI model provider returned no message", 5);
+  // OpenRouter answers HTTP 200 when the upstream model fails mid-generation, and says so in the
+  // choice itself (finish_reason "error", an `error` object, usually empty content). That's a
+  // provider failure, not the model choosing to say nothing.
+  if (choice?.finish_reason === "error" || (choice as { error?: unknown }).error) throw new ProviderError(PROVIDER_ID, "The AI model failed while answering", 5);
   const content = typeof msg.content === "string" ? msg.content : null;
   const toolCalls: ToolCallMsg[] = [];
   if (Array.isArray(msg.tool_calls)) {

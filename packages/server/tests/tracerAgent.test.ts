@@ -649,6 +649,21 @@ describe("tracer agent", () => {
     expect(ok.json().messagesRemaining).toBe(4); // the failed one wasn't counted
   });
 
+  it("an HTTP 200 whose choice says the model failed mid-answer (finish_reason \"error\") is a provider failure: 502 and the anon message refunded, not an empty reply", async () => {
+    const failed = { status: 200, body: { id: "gen-x", choices: [{ index: 0, finish_reason: "error", error: { code: 502, message: "upstream detail" }, message: { role: "assistant", content: "" } }] } };
+    await setup([failed, { tools: [{ name: "add_node", args: { chain: "ethereum", address: ETH_A } }] }, failed]);
+    const anon = new Browser(t.app);
+    const r = await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "hi", doc: emptyScratch() });
+    expect(r.statusCode).toBe(502);
+    expect(r.json().error.code).toBe("provider_error");
+    expect(r.body).not.toContain("upstream detail");
+    expect((await anon.req("GET", "/api/tracer-agent/status")).json()).toMatchObject({ messagesRemaining: 5 });
+    // Mid-turn, after a tool already ran: an honest stop that names what ran, not "couldn't produce an answer".
+    const mid = (await anon.req("POST", "/api/tracer-agent/chat", { docId: "scratch", message: "add A", doc: emptyScratch() })).json() as TracerAgentChatResponse;
+    expect(mid.reply).toMatch(/^The AI model failed while answering\. Ran 1 action/);
+    expect(mid.doc.nodes).toHaveLength(1);
+  });
+
   it("remembers the conversation per doc, and forgets it on DELETE", async () => {
     const seen: Seen[] = [];
     await setup([{ tools: [{ name: "add_node", args: { chain: "ethereum", address: ETH_A } }] }, { content: "Added A." }, { content: "It was A." }, { content: "fresh" }], seen);

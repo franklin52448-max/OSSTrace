@@ -197,5 +197,6 @@ function honestStop(calls: AgentToolCall[], reason: string | null): string {
   const ok = calls.filter((c) => (c.result as { ok?: boolean }).ok !== false).length;
   const failed = calls.length - ok;
   const did = calls.length ? `Ran ${calls.length} action${calls.length === 1 ? "" : "s"} (${ok} succeeded${failed ? `, ${failed} failed` : ""}): ${[...new Set(calls.map((c) => c.tool))].join(", ")}.` : "No actions were run.";
-  return [reason, did, "Check the canvas for what changed."].filter(Boolean).join(" ");
+  const why = reason && !/[.!?]$/.test(reason) ? `${reason}.` : reason; // provider error messages carry no full stop
+  return [why, did, "Check the canvas for what changed."].filter(Boolean).join(" ");
 }

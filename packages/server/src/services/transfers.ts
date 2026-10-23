@@ -1,4 +1,4 @@
-import { detectChain, normalizeAddress, type Chain, type Counterparty, type SyncStatus, type TransfersResponse } from "@osstrace/contract";
+import { chainForAddress, isAddressOnChain, isChain, normalizeAddress, type Chain, type Counterparty, type SyncStatus, type TransfersResponse } from "@osstrace/contract";
 import type { Ctx } from "../context.ts";
 import { budgetMs, HttpClient } from "../lib/http.ts";
 import { badRequest } from "../lib/errors.ts";
@@ -20,16 +20,20 @@ export function parseAddrRef(ctx: Ctx, userId: string | null, ref: string, fallb
     const id = s.slice(7);
     return ctx.db.all<AddrKey>("SELECT chain, address FROM labels WHERE user_id = ? AND entity_id = ?", userId, id);
   }
-  const m = /^(solana|ethereum):(.+)$/.exec(s);
-  const chain = (m?.[1] as Chain | undefined) ?? detectChain(s) ?? fallbackChain ?? null;
-  const addr = m ? m[2]! : s;
-  if (!chain || detectChain(addr) !== chain) throw badRequest(`Not a valid address: ${s.slice(0, 80)}`);
+  const i = s.indexOf(":");
+  const prefix = i > 0 ? s.slice(0, i) : null;
+  const m = prefix !== null && isChain(prefix);
+  // A bare 0x address with no `chain:` prefix means the caller's own chain when it gave one (a BNB
+  // query's own refs), and only otherwise the shape's default.
+  const chain = m ? (prefix as Chain) : chainForAddress(s, fallbackChain);
+  const addr = m ? s.slice(i + 1) : s;
+  if (!chain || !isAddressOnChain(chain, addr)) throw badRequest(`Not a valid address: ${s.slice(0, 80)}`);
   return [{ chain, address: normalizeAddress(chain, addr) }];
 }
 
 export function parseAddress(chainParam: string, address: string): AddrKey {
-  if (chainParam !== "solana" && chainParam !== "ethereum") throw badRequest("Unknown chain");
-  if (detectChain(address) !== chainParam) throw badRequest("Not a valid address for this chain");
+  if (!isChain(chainParam)) throw badRequest("Unknown chain");
+  if (!isAddressOnChain(chainParam, address)) throw badRequest("Not a valid address for this chain");
   return { chain: chainParam, address: normalizeAddress(chainParam, address) };
 }
 

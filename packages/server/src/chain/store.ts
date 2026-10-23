@@ -3,6 +3,7 @@ import type { Db } from "../db/index.ts";
 import type { LabelIndex } from "../services/labelIndex.ts";
 import { secToIso } from "../lib/time.ts";
 import { formatUnits } from "./amount.ts";
+import { NATIVE_COIN, tokenCoin } from "./prices.ts";
 import type { RawTransfer } from "./types.ts";
 
 export type TransferRow = {
@@ -103,8 +104,8 @@ export class TransferStore {
 
   static coinFor(r: Pick<TransferRow, "chain" | "token_id" | "token_standard">): string | null {
     if (r.token_standard === "erc721" || r.token_standard === "erc1155") return null;
-    if (r.token_id === "native") return r.chain === "ethereum" ? "coingecko:ethereum" : "coingecko:solana";
-    return `${r.chain}:${r.token_id}`;
+    if (r.token_id === "native") return NATIVE_COIN[r.chain];
+    return tokenCoin(r.chain, r.token_id);
   }
 }
 

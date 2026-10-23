@@ -19,6 +19,14 @@ Listens on `127.0.0.1:5320` by default (`PORT`/`HOST`). A SQLite file at `./data
 prices via DefiLlama (`DEFILLAMA_URL`), Bitcoin bounty-deposit checks via a public Esplora
 explorer (`ESPLORA_URL`, Blockstream.info by default). See `src/config.ts` for every variable.
 
+**BNB Chain is the one chain that needs a key.** There's no free hosted indexer for BNB Smart Chain
+the way Blockscout is for Ethereum, so its history and token discovery come from Etherscan's
+multichain V2 API (`ETHERSCAN_API_KEY`, `chainid=56`, `src/chain/bnb.ts`); native balances,
+`balanceOf` reads and BNB deposit checks use BNB Chain's free public RPC (`BNB_RPC_URL`, default
+`https://bsc-dataseed.bnbchain.org`). Etherscan's **free** plan refuses chain 56 ("Free API access is
+not supported for this chain"), so with a free key BNB lookups report exactly that, as a provider
+error -- never as an empty wallet. A plan that covers BNB makes them work with no code change.
+
 **`DEV_SKIP_AUTH=1`**: local dev only, treats every request as signed in as a fixed fake user
 (no wallet, no cookie needed) so every feature can be driven without going through the real
 Phantom/MetaMask flow. Refused outright when `NODE_ENV=production`, so it can never activate on a

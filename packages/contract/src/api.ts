@@ -252,7 +252,8 @@ export type BountyAsset = "native" | { contract: string };
  *  trace Bitcoin addresses, so it must never leak into `Chain`. A Bitcoin deposit has no
  *  sender-ownership check (no BTC wallet-connect standard to sign in with, no single clean
  *  "sender" per tx) -- its `fromAddress` is display-only, see server chain/deposits.ts. */
-export type DepositChain = Chain | "bitcoin";
+// BNB deposits land separately (they need their own verification wiring); until then it's excluded here.
+export type DepositChain = Exclude<Chain, "bnb"> | "bitcoin";
 export type BountyDeposit = {
   id: string;
   chain: DepositChain;

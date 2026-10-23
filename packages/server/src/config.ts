@@ -25,6 +25,17 @@ export type Config = {
    *  mode's Budget.preferIndexed); unset means that path just stays on the free RPC merge-cursor. */
   solscanApiKey: string | null;
   ethBlockscoutUrl: string;
+  /** Never logged. Etherscan's V2 API is multichain (one key, a `chainid` param per request), and it
+   *  is BNB Chain's history/token-discovery source (chain/bnb.ts) -- there's no free keyless indexer
+   *  for BNB the way Blockscout is for Ethereum. Null leaves BNB lookups reporting that it's missing,
+   *  never empty. Etherscan's plans decide which chains a key covers: as of 2026 its free tier
+   *  refuses BNB Smart Chain outright ("Free API access is not supported for this chain"). */
+  etherscanApiKey: string | null;
+  etherscanUrl: string;
+  /** Never logged. BNB Smart Chain JSON-RPC: native balance, token `balanceOf`, and bounty-deposit
+   *  verification. Unlike Ethereum, BNB Chain runs a free public RPC reliable enough to default to,
+   *  so this has the same zero-config-with-override shape as solanaRpcUrl. */
+  bnbRpcUrl: string;
   /** Bitcoin bounty-deposit verification source (an Esplora-API block explorer, no key needed) --
    *  Blockstream.info by default; mempool.space speaks the same API and can be swapped in via
    *  ESPLORA_URL. Bitcoin is deposit-only here: nothing else in this server reads Bitcoin. */
@@ -48,6 +59,8 @@ export type Config = {
 };
 
 export const DEFAULT_SOLANA_RPC = "https://api.mainnet-beta.solana.com";
+/** BNB Chain's own public dataseed endpoint (no key). */
+export const DEFAULT_BNB_RPC = "https://bsc-dataseed.bnbchain.org";
 
 const bool = (v: string | undefined, dflt: boolean) => {
   if (v === undefined || v === "") return dflt;
@@ -83,7 +96,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ethRpcUrl = env.ETH_RPC_URL.trim();
   }
 
+  let bnbRpcUrl = DEFAULT_BNB_RPC;
+  if (env.BNB_RPC_URL_FILE) {
+    const raw = readFileSync(expandHome(env.BNB_RPC_URL_FILE), "utf8").trim();
+    if (!/^https?:\/\//.test(raw)) throw new Error("BNB_RPC_URL_FILE does not contain an http(s) URL");
+    bnbRpcUrl = raw;
+  } else if (env.BNB_RPC_URL) {
+    bnbRpcUrl = env.BNB_RPC_URL.trim();
+  }
+
   const solscanApiKey = env.SOLSCAN_API_KEY?.trim() || null;
+  const etherscanApiKey = env.ETHERSCAN_API_KEY?.trim() || null;
 
   const origins = (env.ALLOWED_ORIGINS ?? "http://127.0.0.1:5301,http://localhost:5301")
     .split(",")
@@ -107,6 +130,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ethRpcUrl,
     solscanApiKey,
     ethBlockscoutUrl: (env.ETH_BLOCKSCOUT_URL ?? "https://eth.blockscout.com").replace(/\/$/, ""),
+    etherscanApiKey,
+    etherscanUrl: env.ETHERSCAN_API_URL?.trim() || "https://api.etherscan.io/v2/api",
+    bnbRpcUrl,
     esploraUrl: (env.ESPLORA_URL ?? "https://blockstream.info").replace(/\/$/, ""),
     defillamaUrl: (env.DEFILLAMA_URL ?? "https://coins.llama.fi").replace(/\/$/, ""),
     jupiterTokensUrl: (env.JUPITER_TOKENS_URL ?? "https://lite-api.jup.ag/tokens/v2").replace(/\/$/, ""),

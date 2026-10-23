@@ -1,7 +1,18 @@
 // Core domain types shared by the server and the web UI.
 
-export type Chain = "solana" | "ethereum";
-export const CHAINS: readonly Chain[] = ["solana", "ethereum"] as const;
+// "bnb" is BNB Smart Chain (EVM chain id 56). It shares Ethereum's address format and signature
+// scheme, so one 0x address is the same account on both -- but its history, balances and labels are
+// a separate chain's, so it's a separate `Chain`, never folded into "ethereum". Sign-in is a
+// different question (see api.ts's `User.chain`): an Ethereum wallet signs in as "ethereum" and that
+// same address is simply valid on BNB too, so there is deliberately no "bnb" login method.
+export type Chain = "solana" | "ethereum" | "bnb";
+export const CHAINS: readonly Chain[] = ["solana", "ethereum", "bnb"] as const;
+export const isChain = (v: unknown): v is Chain => typeof v === "string" && (CHAINS as readonly string[]).includes(v);
+
+/** Display name per chain -- one place, so a new chain can't end up as "Solana" in a two-way ternary. */
+export const CHAIN_NAMES: Record<Chain, string> = { solana: "Solana", ethereum: "Ethereum", bnb: "BNB Chain" };
+/** Each chain's native unit, known without a successful balance call. */
+export const NATIVE_SYMBOLS: Record<Chain, string> = { solana: "SOL", ethereum: "ETH", bnb: "BNB" };
 
 export type XY = { x: number; y: number };
 

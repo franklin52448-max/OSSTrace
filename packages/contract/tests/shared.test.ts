@@ -5,7 +5,10 @@ import {
   applyTraceOps,
   applyVisualizerOps,
   DEFAULT_VISUALIZER_STATE,
+  chainForAddress,
   detectChain,
+  isAddressOnChain,
+  isEvmChain,
   normalizeAddress,
   toChecksumAddress,
   transferEdgeId,
@@ -43,6 +46,19 @@ describe("chain detection", () => {
   it("normalizes only EVM case", () => {
     expect(normalizeAddress("ethereum", "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed")).toBe("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed");
     expect(normalizeAddress("solana", " So11111111111111111111111111111111111111112 ")).toBe("So11111111111111111111111111111111111111112");
+  });
+  it("treats bnb as EVM: same checksum form, same address shape, never detected as the default", () => {
+    expect(normalizeAddress("bnb", "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed")).toBe("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed");
+    expect(isAddressOnChain("bnb", "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed")).toBe(true);
+    expect(isAddressOnChain("bnb", "So11111111111111111111111111111111111111112")).toBe(false);
+    expect(isAddressOnChain("solana", "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed")).toBe(false);
+    // A bare 0x paste still defaults to ethereum -- bnb is only ever chosen explicitly.
+    expect(detectChain("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed")).toBe("ethereum");
+    expect(isEvmChain("bnb") && isEvmChain("ethereum") && !isEvmChain("solana")).toBe(true);
+    // A picker already on BNB keeps a pasted 0x address there; one on Solana follows the shape.
+    expect(chainForAddress("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", "bnb")).toBe("bnb");
+    expect(chainForAddress("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", "solana")).toBe("ethereum");
+    expect(chainForAddress("So11111111111111111111111111111111111111112", "bnb")).toBe("solana");
   });
 });
 

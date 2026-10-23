@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Chain } from "@osstrace/contract";
 import { badRequest } from "./lib/errors.ts";
 
 export function parse<S extends z.ZodTypeAny>(schema: S, data: unknown): z.output<S> {
@@ -9,7 +10,7 @@ export function parse<S extends z.ZodTypeAny>(schema: S, data: unknown): z.outpu
   throw badRequest(`${path}${first?.message ?? "invalid request"}`);
 }
 
-export const chain = z.enum(["solana", "ethereum"]);
+export const chain = z.enum(["solana", "ethereum", "bnb"]) satisfies z.ZodType<Chain>;
 /** Bounty deposits only (contract's `DepositChain`): Bitcoin is accepted as a deposit payment but is
  *  never an address/trace/label chain, so it must not widen the shared `chain` enum above. */
 export const depositChain = z.enum(["solana", "ethereum", "bitcoin"]);

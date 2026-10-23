@@ -1,11 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { CHAINS, detectChain, normalizeAddress, type BalancesResponse, type ChainStatus, type HealthResponse, type SearchHit, type TokenBalance } from "@osstrace/contract";
+import { CHAIN_NAMES, CHAINS, detectChain, EVM_CHAINS, isEvmChain, normalizeAddress, type BalancesResponse, type Chain, type ChainStatus, type HealthResponse, type SearchHit, type TokenBalance } from "@osstrace/contract";
 import { requireUser, type Ctx } from "../context.ts";
 import { budgetMs } from "../lib/http.ts";
 import { formatUnits } from "../chain/amount.ts";
 import type { RawBalance } from "../chain/types.ts";
-import { parse } from "../schemas.ts";
+import { chain as chainSchema, parse } from "../schemas.ts";
 import { LabelIndex } from "../services/labelIndex.ts";
 import { counterpartiesFor, parseAddress, queryTransfers, syncAll, windowOf } from "../services/transfers.ts";
 
@@ -23,7 +23,7 @@ const transfersQuery = z.object({
   valueGte: numQ.optional(),
   valueLte: numQ.optional(),
   tokens: listQ,
-  chain: z.enum(["solana", "ethereum"]).optional(),
+  chain: chainSchema.optional(),
   timeLast: z.string().max(10).optional(),
   timeGte: z.string().max(40).optional(),
   timeLte: z.string().max(40).optional(),
@@ -54,7 +54,7 @@ export function registerChainRoutes(app: FastifyInstance, ctx: Ctx) {
       CHAINS.map(async (c): Promise<ChainStatus> => {
         const p = ctx.providers[c];
         const r = await p.ping();
-        return { id: c, name: c === "ethereum" ? "Ethereum" : "Solana", provider: p.name, ok: r.ok, ...(r.note ? { note: r.note } : {}) };
+        return { id: c, name: CHAIN_NAMES[c], provider: p.name, ok: r.ok, ...(r.note ? { note: r.note } : {}) };
       }),
     );
     statusCache = { at: Date.now(), value };
@@ -77,13 +77,17 @@ export function registerChainRoutes(app: FastifyInstance, ctx: Ctx) {
     const s = q.trim();
     const hits: SearchHit[] = [];
     if (!s) return { hits };
-    const chain = detectChain(s);
-    if (chain) {
-      const address = normalizeAddress(chain, s);
-      hits.push({ type: "address", chain, address, info: LabelIndex.load(db, u?.id ?? null, [{ chain, address }]).info(chain, address) });
+    const detected = detectChain(s);
+    if (detected) {
+      // A 0x address is the same account on every EVM chain, and a paste doesn't say which one the
+      // user means -- offer each (Ethereum first, the shape's default), never silently just one.
+      const chains: readonly Chain[] = isEvmChain(detected) ? EVM_CHAINS : [detected];
+      const keys = chains.map((chain) => ({ chain, address: normalizeAddress(chain, s) }));
+      const ix = LabelIndex.load(db, u?.id ?? null, keys);
+      for (const k of keys) hits.push({ type: "address", ...k, info: ix.info(k.chain, k.address) });
     }
     const like = `%${s.replace(/[\\%_]/g, (m) => "\\" + m)}%`;
-    let labels: { id: string; chain: "solana" | "ethereum"; address: string; name: string }[] = [];
+    let labels: { id: string; chain: Chain; address: string; name: string }[] = [];
     if (u) {
       const ents = db.all<{ id: string; name: string; n: number }>(
         `SELECT e.id, e.name, (SELECT COUNT(*) FROM labels l WHERE l.entity_id = e.id) AS n FROM entities e
@@ -93,7 +97,7 @@ export function registerChainRoutes(app: FastifyInstance, ctx: Ctx) {
         limit,
       );
       for (const e of ents) hits.push({ type: "entity", id: e.id, name: e.name, addressCount: Number(e.n) });
-      labels = db.all<{ id: string; chain: "solana" | "ethereum"; address: string; name: string }>(
+      labels = db.all<{ id: string; chain: Chain; address: string; name: string }>(
         `SELECT id, chain, address, name FROM labels WHERE user_id = ? AND (name LIKE ? ESCAPE '\\' OR address LIKE ? ESCAPE '\\') ORDER BY name LIMIT ?`,
         u.id,
         like,

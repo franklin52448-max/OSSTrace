@@ -3,17 +3,35 @@
 //
 // Marks: Simple Icons (https://simpleicons.org, CC0-1.0), filled in each project's brand colours.
 import { useEffect, useId, useRef, useState } from "react";
-import type { ChainId } from "@osstrace/core";
+import { CHAIN_NAMES, type Chain } from "@osstrace/contract";
 import { cx } from "./prism/components.tsx";
 import { IconCheck, IconChevronDown } from "./prism/icons.tsx";
 
-export const CHAIN_OPTIONS: readonly { value: ChainId; label: string }[] = [
-  { value: "ethereum", label: "Ethereum" },
-  { value: "solana", label: "Solana" },
+export const CHAIN_OPTIONS: readonly { value: Chain; label: string }[] = [
+  { value: "ethereum", label: CHAIN_NAMES.ethereum },
+  { value: "solana", label: CHAIN_NAMES.solana },
+  { value: "bnb", label: CHAIN_NAMES.bnb },
 ];
 
-export function ChainIcon({ chain, size = 18, className }: { chain: ChainId; size?: number; className?: string }) {
+/** The chains the older standalone feature services (pathfinder, cases...) were built for. Their
+ *  own backends only know these two, so their pickers must not offer a chain they'd reject. */
+export const LEGACY_SERVICE_CHAINS = ["ethereum", "solana"] as const satisfies readonly Chain[];
+
+export function ChainIcon({ chain, size = 18, className }: { chain: Chain; size?: number; className?: string }) {
   const gradientId = useId();
+  if (chain === "bnb") {
+    // The BNB mark (a diamond of diamonds) is the same Simple Icons path the home page already uses
+    // for Binance, here in BNB's own brand yellow on no disc -- copied from that vetted CC0 path
+    // rather than redrawn from memory.
+    return (
+      <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" className={cx("shrink-0", className)}>
+        <path
+          fill="#F0B90B"
+          d="M16.624 13.9202l2.7175 2.7154-7.353 7.353-7.353-7.352 2.7175-2.7164 4.6355 4.6595 4.6356-4.6595zm4.6366-4.6366L24 12l-2.7154 2.7164L18.5682 12l2.6924-2.7164zm-9.272.001l2.7163 2.6914-2.7164 2.7174v-.001L9.2721 12l2.7164-2.7154zm-9.2722-.001L5.4088 12l-2.6914 2.6924L0 12l2.7164-2.7164zM11.9885.0115l7.353 7.329-2.7174 2.7154-4.6356-4.6356-4.6355 4.6595-2.7174-2.7154 7.353-7.353z"
+        />
+      </svg>
+    );
+  }
   if (chain === "ethereum") {
     return (
       <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" className={cx("shrink-0", className)}>
@@ -40,16 +58,19 @@ export function ChainIcon({ chain, size = 18, className }: { chain: ChainId; siz
   );
 }
 
-export function ChainSelect({
+export function ChainSelect<C extends Chain = Chain>({
   value,
   onChange,
+  chains,
   small,
   fullWidth,
   label = "Chain",
   className,
 }: {
-  value: ChainId;
-  onChange: (chain: ChainId) => void;
+  value: C;
+  onChange: (chain: C) => void;
+  /** Only offer these (e.g. LEGACY_SERVICE_CHAINS for a backend that doesn't know every chain). */
+  chains?: readonly C[];
   small?: boolean;
   /** Fill the parent's width (form fields), chevron at the far end. */
   fullWidth?: boolean;
@@ -63,7 +84,8 @@ export function ChainSelect({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const listId = useId();
-  const current = CHAIN_OPTIONS.find((o) => o.value === value) ?? CHAIN_OPTIONS[0]!;
+  const options = (chains ? CHAIN_OPTIONS.filter((o) => (chains as readonly Chain[]).includes(o.value)) : CHAIN_OPTIONS) as readonly { value: C; label: string }[];
+  const current = options.find((o) => o.value === value) ?? options[0]!;
 
   // Close on an outside click.
   useEffect(() => {
@@ -80,19 +102,19 @@ export function ChainSelect({
   }, [open]);
 
   function openList(): void {
-    setActive(Math.max(0, CHAIN_OPTIONS.findIndex((o) => o.value === value)));
+    setActive(Math.max(0, options.findIndex((o) => o.value === value)));
     setOpen(true);
   }
 
   function choose(index: number): void {
-    const option = CHAIN_OPTIONS[index];
+    const option = options[index];
     if (option) onChange(option.value);
     setOpen(false);
     buttonRef.current?.focus();
   }
 
   function onListKeyDown(e: React.KeyboardEvent): void {
-    const last = CHAIN_OPTIONS.length - 1;
+    const last = options.length - 1;
     const moves: Record<string, () => void> = {
       ArrowDown: () => setActive((i) => Math.min(last, i + 1)),
       ArrowUp: () => setActive((i) => Math.max(0, i - 1)),
@@ -151,7 +173,7 @@ export function ChainSelect({
           onKeyDown={onListKeyDown}
           className="card absolute left-0 top-[calc(100%+6px)] z-40 min-w-full p-1 outline-none"
         >
-          {CHAIN_OPTIONS.map((option, index) => (
+          {options.map((option, index) => (
             <li
               key={option.value}
               id={`${listId}-${index}`}

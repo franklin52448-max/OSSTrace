@@ -33,8 +33,8 @@ afterEach(async () => {
   opened.length = 0;
 });
 
-test("explorers.ts: only the two chains this project actually has data for", () => {
-  assert.deepEqual(Object.keys(explorers.EXPLORERS).sort(), ["ethereum", "solana"]);
+test("explorers.ts: only the chains this project actually has data for", () => {
+  assert.deepEqual(Object.keys(explorers.EXPLORERS).sort(), ["bnb", "ethereum", "solana"]);
 });
 
 test("explorers.ts: builds the real Etherscan/Solscan address and tx URLs", () => {
@@ -44,6 +44,9 @@ test("explorers.ts: builds the real Etherscan/Solscan address and tx URLs", () =
   assert.equal(explorers.explorerAddressUrl("solana", "9Wz"), "https://solscan.io/account/9Wz");
   assert.equal(explorers.explorerTxUrl("ethereum", "0xdef"), "https://etherscan.io/tx/0xdef");
   assert.equal(explorers.explorerTxUrl("solana", "5sig"), "https://solscan.io/tx/5sig");
+  assert.equal(explorers.explorerName("bnb"), "BscScan");
+  assert.equal(explorers.explorerAddressUrl("bnb", "0xabc"), "https://bscscan.com/address/0xabc");
+  assert.equal(explorers.explorerTxUrl("bnb", "0xdef"), "https://bscscan.com/tx/0xdef");
 });
 
 test("AddressChip: copy-address and view-on-explorer buttons exist and the explorer one opens the right URL, per chain", async () => {

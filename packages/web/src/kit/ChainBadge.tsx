@@ -1,8 +1,5 @@
-import type { Chain } from "@osstrace/contract";
+import { CHAIN_NAMES as NAME, NATIVE_SYMBOLS as SHORT, type Chain } from "@osstrace/contract";
 import { cn } from "./cn.ts";
-
-const SHORT: Record<Chain, string> = { ethereum: "ETH", solana: "SOL" };
-const NAME: Record<Chain, string> = { ethereum: "Ethereum", solana: "Solana" };
 
 /** Text badge for a chain (no third-party logos). */
 export function ChainBadge({ chain, className, long }: { chain: Chain; className?: string; long?: boolean }) {

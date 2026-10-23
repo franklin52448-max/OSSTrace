@@ -1,11 +1,12 @@
 import type { Chain } from "@osstrace/contract";
 
-/** This project only has real data for these two chains (see @osstrace/contract's Chain type) --
- * no entry here for anything else, rather than fabricate a link to data we don't have. Adding a
- * real third chain later is a one-line addition. */
+/** One entry per chain this project has real data for (see @osstrace/contract's Chain type) -- no
+ * entry for anything else, rather than fabricate a link to data we don't have. BscScan is BNB
+ * Smart Chain's own explorer (Etherscan's, for chain 56), same /address/ and /tx/ paths. */
 export const EXPLORERS: Record<Chain, { name: string; address: string; tx: string }> = {
   ethereum: { name: "Etherscan", address: "https://etherscan.io/address/", tx: "https://etherscan.io/tx/" },
   solana: { name: "Solscan", address: "https://solscan.io/account/", tx: "https://solscan.io/tx/" },
+  bnb: { name: "BscScan", address: "https://bscscan.com/address/", tx: "https://bscscan.com/tx/" },
 };
 
 export function explorerName(chain: Chain): string {

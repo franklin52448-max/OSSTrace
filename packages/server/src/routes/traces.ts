@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { applyTraceOps, detectChain, normalizeAddress, type AggregateSummaryResponse, type BatchResult, type TraceOp } from "@osstrace/contract";
+import { applyTraceOps, detectChain, isAddressOnChain, normalizeAddress, type AggregateSummaryResponse, type BatchResult, type TraceOp } from "@osstrace/contract";
 import { requireUser, type Ctx } from "../context.ts";
 import { badRequest, notFound } from "../lib/errors.ts";
 import { nextAfter, nowIso } from "../lib/time.ts";
@@ -34,7 +34,7 @@ export function registerTraces(app: FastifyInstance, ctx: Ctx) {
     let root = null;
     if (body.initialAddress) {
       const c = body.initialChain ?? detectChain(body.initialAddress);
-      if (!c || detectChain(body.initialAddress) !== c) throw badRequest("initialAddress is not a valid address for the chain");
+      if (!c || !isAddressOnChain(c, body.initialAddress)) throw badRequest("initialAddress is not a valid address for the chain");
       root = { chain: c, address: normalizeAddress(c, body.initialAddress) };
     }
     const count = db.get<{ n: number }>("SELECT COUNT(*) AS n FROM traces WHERE user_id = ?", u.id)!;

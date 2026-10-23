@@ -1,3 +1,4 @@
+import type { Chain } from "@osstrace/contract";
 import type { Db } from "../db/index.ts";
 import { HttpClient, type Budget } from "../lib/http.ts";
 import { nowIso } from "../lib/time.ts";
@@ -11,6 +12,14 @@ export const SOURCE = "defillama";
 const HOUR = 3600;
 const CURRENT_TTL_MS = 5 * 60_000;
 export const bucketOf = (t: number) => Math.floor(t / HOUR) * HOUR;
+
+/** DefiLlama's own chain prefix for a token coin key (`<prefix>:<contract|mint>`). Not always this
+ *  project's chain id: DefiLlama calls BNB Smart Chain "bsc", and a `bnb:0x...` key just prices as
+ *  unknown (silently null USD), so every token key must go through this map, never `${chain}:`. */
+export const LLAMA_CHAIN_PREFIX: Record<Chain, string> = { ethereum: "ethereum", solana: "solana", bnb: "bsc" };
+/** Native coins are keyed by their CoinGecko id on DefiLlama (BNB's is "binancecoin", not "bnb"). */
+export const NATIVE_COIN: Record<Chain, string> = { ethereum: "coingecko:ethereum", solana: "coingecko:solana", bnb: "coingecko:binancecoin" };
+export const tokenCoin = (chain: Chain, tokenId: string) => `${LLAMA_CHAIN_PREFIX[chain]}:${tokenId}`;
 
 /**
  * USD prices from the DefiLlama coins API, cached in `prices`. A missing price is stored as NULL and

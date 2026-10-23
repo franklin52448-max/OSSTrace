@@ -1,6 +1,7 @@
 import cookie from "@fastify/cookie";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import type { Chain } from "@osstrace/contract";
+import { EtherscanBnbProvider } from "./chain/bnb.ts";
 import { BlockscoutProvider } from "./chain/ethereum.ts";
 import { PriceService } from "./chain/prices.ts";
 import { TokenLogoService } from "./chain/tokenLogos.ts";
@@ -65,6 +66,7 @@ export async function buildApp(config: Config, o: AppOverrides = {}): Promise<{ 
   if (config.devSkipAuth) ensureDevUser(db); // local dev only -- config.ts refuses this when production is true
   const providers: Record<Chain, ChainProvider> = {
     ethereum: o.providers?.ethereum ?? new BlockscoutProvider(config.ethBlockscoutUrl, o.fetchImpl),
+    bnb: o.providers?.bnb ?? new EtherscanBnbProvider({ apiUrl: config.etherscanUrl, apiKey: config.etherscanApiKey, rpcUrl: config.bnbRpcUrl }, o.fetchImpl),
     solana:
       o.providers?.solana ??
       new SolanaRpcProvider(config.solanaRpcUrl, config.solanaRpcCustom, o.fetchImpl, {

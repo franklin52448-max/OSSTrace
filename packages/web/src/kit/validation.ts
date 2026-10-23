@@ -1,4 +1,4 @@
-import type { Chain } from "@osstrace/contract";
+import { CHAIN_NAMES, isEvmChain, type Chain } from "@osstrace/contract";
 
 export const USERNAME_RE = /^[a-z0-9_.-]{3,32}$/;
 export const PASSWORD_MIN = 10;
@@ -24,7 +24,7 @@ export const SOL_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 export function validateAddress(chain: Chain, raw: string): string | null {
   const v = raw.trim();
   if (!v) return "Enter an address.";
-  if (chain === "ethereum" && !ETH_ADDRESS_RE.test(v)) return "Not an Ethereum address (0x followed by 40 hex characters).";
+  if (isEvmChain(chain) && !ETH_ADDRESS_RE.test(v)) return `Not ${chain === "ethereum" ? "an" : "a"} ${CHAIN_NAMES[chain]} address (0x followed by 40 hex characters).`;
   if (chain === "solana" && !SOL_ADDRESS_RE.test(v)) return "Not a Solana address (32 to 44 base58 characters).";
   return null;
 }
@@ -42,4 +42,4 @@ export function validateWebhookUrl(raw: string): string | null {
   return null;
 }
 
-export const CHAIN_NAMES: Record<Chain, string> = { ethereum: "Ethereum", solana: "Solana" };
+export { CHAIN_NAMES };

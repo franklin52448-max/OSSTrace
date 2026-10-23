@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { parse as parseCsv } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
-import { detectChain, normalizeAddress, type Chain, type Entity, type ImportResult, type Label, type Tag } from "@osstrace/contract";
+import { CHAINS, isAddressOnChain, isChain, normalizeAddress, type Chain, type Entity, type ImportResult, type Label, type Tag } from "@osstrace/contract";
 import type { Db } from "../db/index.ts";
 import { badRequest, conflict, notFound } from "../lib/errors.ts";
 import { nowIso } from "../lib/time.ts";
@@ -13,7 +13,7 @@ type EntityRow = { id: string; name: string; type: string | null; note: string |
 
 export function canonical(chain: Chain, address: string): string {
   const a = address.trim();
-  if (detectChain(a) !== chain) throw badRequest(`Not a valid ${chain} address`);
+  if (!isAddressOnChain(chain, a)) throw badRequest(`Not a valid ${chain} address`);
   return normalizeAddress(chain, a);
 }
 
@@ -184,12 +184,12 @@ export function importLabels(db: Db, userId: string, format: "csv" | "json", dat
   db.tx(() => {
     for (const { row, r } of rows) {
       const chain = str(r.chain).toLowerCase();
-      if (chain !== "solana" && chain !== "ethereum") {
-        result.skipped.push({ row, reason: "chain must be solana or ethereum" });
+      if (!isChain(chain)) {
+        result.skipped.push({ row, reason: `chain must be one of ${CHAINS.join(", ")}` });
         continue;
       }
       const rawAddr = str(r.address);
-      if (detectChain(rawAddr) !== chain) {
+      if (!isAddressOnChain(chain, rawAddr)) {
         result.skipped.push({ row, reason: `not a valid ${chain} address` });
         continue;
       }

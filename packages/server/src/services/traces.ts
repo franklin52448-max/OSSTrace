@@ -2,6 +2,7 @@ import {
   addressNodeId,
   aggregateEdgeId,
   detectChain,
+  isAddressOnChain,
   entityNodeId,
   normalizeAddress,
   transactionNodeId,
@@ -212,7 +213,7 @@ export function sanitizeTraceOps(traceId: string, ops: TraceOp[], commitAt: stri
         if (n.kind === "address") {
           if (!n.address) throw badRequest("address node needs an address");
           const chain = n.chain ?? detectChain(n.address);
-          if (!chain || detectChain(n.address) !== chain) throw badRequest("address node has an invalid address/chain");
+          if (!chain || !isAddressOnChain(chain, n.address)) throw badRequest("address node has an invalid address/chain");
           const address = normalizeAddress(chain, n.address);
           if (n.id !== addressNodeId(traceId, chain, address)) throw badRequest("node id does not match the deterministic id for this address");
           return { type: "create_node", node: { ...base, kind: "address", chain, address } };
